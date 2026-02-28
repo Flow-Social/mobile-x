@@ -3,6 +3,7 @@ package me.floow.uikit.util.state
 enum class ValidationErrorType {
     ShouldNotBeEmpty,
     TextTooLong,
+    UsernameAlreadyExists,
     Other
 }
 

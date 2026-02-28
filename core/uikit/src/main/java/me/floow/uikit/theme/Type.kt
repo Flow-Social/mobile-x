@@ -20,3 +20,12 @@ val roboto = FontFamily(
     Font(R.font.roboto_thin, FontWeight.Thin),
     Font(R.font.roboto_thin_italic, FontWeight.Thin, FontStyle.Italic)
 )
+
+val montserrat = FontFamily(
+    Font(R.font.montserrat_regular, FontWeight.Normal),
+    Font(R.font.montserrat_italic, FontWeight.Normal, FontStyle.Italic),
+    Font(R.font.montserrat_black, FontWeight.Black),
+    Font(R.font.montserrat_black_italic, FontWeight.Black, FontStyle.Italic),
+    Font(R.font.montserrat_semibold, FontWeight.SemiBold),
+    Font(R.font.montserrat_semibolditalic, FontWeight.SemiBold, FontStyle.Italic)
+)

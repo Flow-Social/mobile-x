@@ -2,6 +2,7 @@ package me.floow.uikit.theme
 
 import android.app.Activity
 import android.content.Context
+import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
@@ -23,6 +24,11 @@ data class FlowTypography(
         fontSize = 20.sp,
         lineHeight = 24.sp,
         letterSpacing = 0.38.sp
+    ),
+    val profileName: TextStyle = TextStyle(
+        fontFamily = montserrat,
+        fontWeight = FontWeight.Black,
+        fontSize = 24.sp
     ),
     val titleMedium: TextStyle = TextStyle(
         fontFamily = roboto,
@@ -66,12 +72,23 @@ data class FlowColorScheme(
     val statusBarColor: Color = Color.White,
 )
 
+data class SystemBarStyle(
+    val statusBarColor: Color? = null,
+    val useDarkStatusBarIcons: Boolean? = null,
+    val navigationBarColor: Color? = null,
+    val useDarkNavigationBarIcons: Boolean? = null
+)
+
 val LocalTypography = staticCompositionLocalOf {
     FlowTypography()
 }
 
 val LocalColorScheme = staticCompositionLocalOf {
     FlowColorScheme()
+}
+
+val LocalSystemBarStyle = staticCompositionLocalOf<MutableState<SystemBarStyle>> {
+    error("LocalSystemBarStyle not provided")
 }
 
 object FlowCustomTheme {
@@ -342,17 +359,23 @@ fun FlowTheme(
 
     val flowColorScheme = if (darkTheme) DarkFlowColorScheme else LightFlowColorScheme
     val flowTypography = FlowTypography()
+    val systemBarStyleState = remember { mutableStateOf(SystemBarStyle()) }
+    val systemBarStyle = systemBarStyleState.value
 
     val view = LocalView.current
 
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.background.toArgb()
+			window.setBackgroundDrawable(ColorDrawable(colorScheme.surfaceContainer.toArgb()))
+            window.statusBarColor = (systemBarStyle.statusBarColor ?: colorScheme.background).toArgb()
             val navigationBarElevation = NavigationBarDefaults.Elevation
-            window.navigationBarColor = colorScheme.surfaceColorAtElevation(navigationBarElevation).toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
-            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !darkTheme
+            window.navigationBarColor = (systemBarStyle.navigationBarColor
+                ?: colorScheme.surfaceColorAtElevation(navigationBarElevation)).toArgb()
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars =
+                systemBarStyle.useDarkStatusBarIcons ?: !darkTheme
+            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars =
+                systemBarStyle.useDarkNavigationBarIcons ?: !darkTheme
         }
     }
 
@@ -365,7 +388,8 @@ fun FlowTheme(
             CompositionLocalProvider(
                 LocalTypography provides flowTypography,
                 LocalColorScheme provides flowColorScheme,
-                LocalRippleConfiguration provides flowRippleTheme
+                LocalRippleConfiguration provides flowRippleTheme,
+                LocalSystemBarStyle provides systemBarStyleState
             ) {
                 content()
             }

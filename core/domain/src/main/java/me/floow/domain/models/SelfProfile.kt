@@ -8,5 +8,8 @@ data class SelfProfile(
 	val name: ProfileName?,
 	val username: ProfileUsername?,
 	val avatarUrl: String?,
+	val backgroundUrl: String?,
+	val backgroundUpdatedAt: Long?,
 	val description: ProfileDescription?,
+	val totalLikesReceived: Int = 0,
 )

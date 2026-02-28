@@ -1,5 +1,6 @@
 package me.floow.uikit.components.topbar
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -16,6 +18,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -30,6 +33,10 @@ fun TitleTopBarWithActionButtonWithNavBack(
 	onBackClick: () -> Unit,
 	onActionButtonClick: () -> Unit,
 	icon: @Composable () -> Unit,
+    showActionButton: Boolean = true,
+    useOutlinedActionButton: Boolean = true,
+    wrapActionInIconButton: Boolean = true,
+    showDivider: Boolean = true,
 	modifier: Modifier = Modifier
 ) {
 	Column(modifier) {
@@ -60,15 +67,36 @@ fun TitleTopBarWithActionButtonWithNavBack(
 
 			Spacer(Modifier.weight(1f))
 
-			WideOutlinedIconButton(
-				onClick = onActionButtonClick,
-				modifier = Modifier
-			) {
-				icon()
-			}
+            if (showActionButton) {
+                if (useOutlinedActionButton) {
+                    WideOutlinedIconButton(
+                        onClick = onActionButtonClick,
+                        modifier = Modifier
+                    ) {
+                        icon()
+                    }
+                } else {
+                    if (wrapActionInIconButton) {
+                        IconButton(onClick = onActionButtonClick) {
+                            icon()
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                                .clickable(onClick = onActionButtonClick),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            icon()
+                        }
+                    }
+                }
+            }
 		}
 
-		HorizontalDivider()
+		if (showDivider) {
+			HorizontalDivider()
+		}
 	}
 }
 

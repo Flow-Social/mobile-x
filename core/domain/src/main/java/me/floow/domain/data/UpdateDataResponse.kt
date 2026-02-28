@@ -1,7 +1,8 @@
 package me.floow.domain.data
 
 enum class FailureError {
-	Other
+	Other,
+	UsernameAlreadyExists
 }
 
 sealed interface UpdateDataResponse {

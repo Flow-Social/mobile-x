@@ -5,5 +5,5 @@ import me.floow.auth.models.GoogleOAuthInfo
 
 val googleOAuthInfoConfig = GoogleOAuthInfo(
     clientId = BuildConfig.GOOGLE_CLIENT_ID,
-    redirectUri = "com.flowme.flow:/"
+    redirectUri = "com.googleusercontent.apps.291755427997-hjaabnfaa435ikjlsocejeg5p9elraj8:/"
 )

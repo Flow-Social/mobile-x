@@ -1,12 +1,15 @@
 package me.floow.uikit.components.topbar
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -21,6 +24,10 @@ fun TitleTopBarWithActionButton(
     titleText: String,
     onActionButtonClick: () -> Unit,
     icon: @Composable () -> Unit,
+    showActionButton: Boolean = true,
+    useOutlinedActionButton: Boolean = true,
+    wrapActionInIconButton: Boolean = true,
+    showDivider: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     Column(modifier) {
@@ -39,15 +46,36 @@ fun TitleTopBarWithActionButton(
                 modifier = Modifier.weight(1f)
             )
 
-            WideOutlinedIconButton(
-                onClick = onActionButtonClick,
-                modifier = Modifier
-            ) {
-                icon()
+            if (showActionButton) {
+                if (useOutlinedActionButton) {
+                    WideOutlinedIconButton(
+                        onClick = onActionButtonClick,
+                        modifier = Modifier
+                    ) {
+                        icon()
+                    }
+                } else {
+                    if (wrapActionInIconButton) {
+                        IconButton(onClick = onActionButtonClick) {
+                            icon()
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                                .clickable(onClick = onActionButtonClick),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            icon()
+                        }
+                    }
+                }
             }
         }
 
-        HorizontalDivider()
+        if (showDivider) {
+            HorizontalDivider()
+        }
     }
 }
 

@@ -5,7 +5,10 @@ sealed interface GetSelfResponse {
 		val name: String?,
 		val username: String?,
 		val avatarUrl: String?,
+		val backgroundUrl: String?,
+		val backgroundUpdatedAt: Long?,
 		val biography: String?,
+		val totalLikesReceived: Int = 0,
 	) : GetSelfResponse
 
 	data object Error : GetSelfResponse

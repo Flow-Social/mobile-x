@@ -2,7 +2,8 @@ package me.floow.domain.api.models
 
 enum class EditProfileResponseStatus {
 	SUCCESS,
-	ERROR
+	ERROR,
+	USERNAME_ALREADY_EXISTS
 }
 
 data class EditProfileResponse(

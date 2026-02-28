@@ -10,5 +10,5 @@ val authModule = module {
 }
 
 val mockAuthModule = module {
-    single<AuthenticationManager> { MockAuthenticationManager() }
+    single<AuthenticationManager> { MockAuthenticationManager(get()) }
 }

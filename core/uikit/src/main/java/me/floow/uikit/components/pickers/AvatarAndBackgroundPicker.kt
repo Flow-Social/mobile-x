@@ -95,11 +95,12 @@ private fun Modifier.setAvatarBoxImage(avatarImagePainter: Painter?): Modifier {
 				.background(Color.LightGray)
 		)
 	} else {
-		Modifier
-			.paint(
+		this.then(
+			Modifier.paint(
 				painter = avatarImagePainter,
 				contentScale = ContentScale.FillBounds
 			)
+		)
 	}
 }
 
@@ -111,11 +112,12 @@ private fun Modifier.setBackgroundBoxImage(backgroundImagePainter: Painter?): Mo
 				.background(MaterialTheme.colorScheme.primaryContainer)
 		)
 	} else {
-		Modifier
-			.paint(
+		this.then(
+			Modifier.paint(
 				painter = backgroundImagePainter,
 				contentScale = ContentScale.FillBounds
 			)
+		)
 	}
 }
 

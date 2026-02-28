@@ -30,18 +30,15 @@ private val ninehedron = RoundedPolygon.star(
 fun RoundedPolygon.getBounds() = calculateBounds().let { Rect(it[0], it[1], it[2], it[3]) }
 
 class RoundedPolygonShape(
-    private val polygon: RoundedPolygon,
-    private var matrix: Matrix = Matrix()
+    private val polygon: RoundedPolygon
 ) : Shape {
-    private var path = Path()
     override fun createOutline(
         size: Size,
         layoutDirection: LayoutDirection,
         density: Density
     ): Outline {
-        path.rewind()
-        path = polygon.toPath().asComposePath()
-        matrix.reset()
+        val path = polygon.toPath().asComposePath()
+        val matrix = Matrix()
         val bounds = polygon.getBounds()
         val maxDimension = max(bounds.width, bounds.height)
         matrix.scale(size.width / maxDimension, size.height / maxDimension)
