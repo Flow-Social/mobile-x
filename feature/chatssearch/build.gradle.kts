@@ -6,7 +6,7 @@ plugins {
 
 android {
 	namespace = "me.floow.chatssearch"
-	compileSdk = 34
+	compileSdk = 35
 
 	defaultConfig {
 		minSdk = 28

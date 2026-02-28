@@ -14,6 +14,18 @@ android {
     namespace = "me.floow.app"
     compileSdk = 35
 
+    val localProps = Properties().apply {
+        val file = rootProject.file("local.properties")
+        if (file.exists()) {
+            file.inputStream().use { load(it) }
+        }
+    }
+
+    val releaseStoreFile = localProps.getProperty("RELEASE_STORE_FILE")
+    val releaseStorePassword = localProps.getProperty("RELEASE_STORE_PASSWORD")
+    val releaseKeyAlias = localProps.getProperty("RELEASE_KEY_ALIAS")
+    val releaseKeyPassword = localProps.getProperty("RELEASE_KEY_PASSWORD")
+
     defaultConfig {
         applicationId = "me.floow.app"
         minSdk = 28
@@ -34,7 +46,7 @@ android {
         buildConfigField(
             type = "String",
             name = "GOOGLE_CLIENT_ID",
-            value = "BUILD_TYPE" // mock
+            value = "\"291755427997-hjaabnfaa435ikjlsocejeg5p9elraj8.apps.googleusercontent.com\""
         )
     }
 
@@ -62,11 +74,23 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            if (!releaseStoreFile.isNullOrBlank()) {
+                storeFile = file(releaseStoreFile)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
     buildTypes {
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.getByName("debug")
+            if (!releaseStoreFile.isNullOrBlank()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
     compileOptions {
@@ -101,6 +125,8 @@ dependencies {
     implementation(project(":feature:explore"))
     implementation(project(":feature:profile"))
     implementation(project(":feature:chatssearch"))
+    implementation(project(":feature:post"))
+    implementation(project(":feature:comments"))
 
     implementation(libs.androidx.core.splashscreen)
 
@@ -113,6 +139,8 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.appcompat)
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
 
     implementation(platform(libs.koin.bom))
     implementation(libs.koin.core)

@@ -1,3 +1,4 @@
+@Suppress("DSL_SCOPE_VIOLATION") // TODO: Remove once KTIJ-19369 is fixed
 plugins {
 	alias(libs.plugins.androidLibrary)
 	alias(libs.plugins.kotlinAndroid)
@@ -5,7 +6,7 @@ plugins {
 }
 
 android {
-	namespace = "me.floow.shared"
+	namespace = "me.floow.comments"
 	compileSdk = 35
 
 	defaultConfig {
@@ -18,10 +19,15 @@ android {
 	buildTypes {
 		release {
 			isMinifyEnabled = false
-			proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+			proguardFiles(
+				getDefaultProguardFile("proguard-android-optimize.txt"),
+				"proguard-rules.pro"
+			)
 		}
 	}
-	buildFeatures { compose = true }
+	buildFeatures {
+		compose = true
+	}
 	compileOptions {
 		sourceCompatibility = JavaVersion.VERSION_1_8
 		targetCompatibility = JavaVersion.VERSION_1_8
@@ -36,10 +42,13 @@ dependencies {
 	implementation(project(":core:domain"))
 
 	implementation(libs.appcompat)
+	implementation(libs.activity.compose)
+	implementation(libs.lifecycle.runtime.compose)
 
 	api(platform(libs.koin.bom))
 	api(libs.koin.core)
 	api(libs.koin.android)
+	implementation(libs.koin.androidx.compose)
 
 	testImplementation(libs.junit)
 

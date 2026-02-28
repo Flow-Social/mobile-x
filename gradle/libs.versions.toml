@@ -10,6 +10,8 @@ espresso-core = "3.6.1"
 lifecycle-runtime-ktx = "2.9.0"
 activity-compose = "1.10.1"
 compose-bom = "2025.05.00"
+material3 = "1.5.0-alpha15"
+compose-ui-alpha = "1.11.0-alpha06"
 org-jetbrains-kotlin-jvm = "2.0.20"
 appcompat = "1.7.0"
 androidx-navigation-compose = "2.9.0"
@@ -27,6 +29,8 @@ room = "2.7.1"
 ksp = "2.1.20-1.0.31"
 coil = "2.7.0"
 textflow = "1.2.1"
+composeSwipeableCards = "1.1.4"
+reorderable = "3.0.0"
 
 [libraries]
 androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "androidx-browser" }
@@ -37,15 +41,18 @@ junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidx-test-ext-junit" }
 espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espresso-core" }
 lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycle-runtime-ktx" }
+lifecycle-runtime-compose = { group = "androidx.lifecycle", name = "lifecycle-runtime-compose", version.ref = "lifecycle-runtime-ktx" }
 activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activity-compose" }
 compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "compose-bom" }
 ui = { group = "androidx.compose.ui", name = "ui" }
+ui-geometry = { group = "androidx.compose.ui", name = "ui-geometry", version.ref = "compose-ui-alpha" }
 ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
 ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
 ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
 ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
-material3 = { group = "androidx.compose.material3", name = "material3" }
+material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "material3" }
+material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
 appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "androidx-navigation-compose" }
 kotlinx-coroutines = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines"}
@@ -75,8 +82,12 @@ room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 
 coil = { group = "io.coil-kt", name = "coil", version.ref = "coil" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
+coil-gif = { group = "io.coil-kt", name = "coil-gif", version.ref = "coil" }
 
 textflow-material3 = { group = "io.github.oleksandrbalan", name = "textflow-material3", version.ref = "textflow" }
+
+smartword-compose-swipeable-cards = { module = "com.github.smartword-app:compose-swipeable-cards", version.ref = "composeSwipeableCards" }
+reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

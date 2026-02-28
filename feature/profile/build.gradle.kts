@@ -6,7 +6,7 @@ plugins {
 
 android {
 	namespace = "me.floow.profile"
-	compileSdk = 34
+	compileSdk = 35
 
 	defaultConfig {
 		minSdk = 28
@@ -36,6 +36,9 @@ dependencies {
 	implementation(project(":core:domain"))
 
 	implementation(libs.appcompat)
+	implementation(libs.activity.compose)
+	implementation(libs.lifecycle.runtime.compose)
+	implementation(libs.reorderable)
 
 	api(platform(libs.koin.bom))
 	api(libs.koin.core)

@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "me.flowme.login"
+    namespace = "me.floow.post"
     compileSdk = 35
 
     defaultConfig {
@@ -36,10 +36,9 @@ dependencies {
     implementation(project(":core:domain"))
 
     implementation(libs.appcompat)
-
-    api(platform(libs.koin.bom))
-    api(libs.koin.core)
-    api(libs.koin.android)
+    implementation(libs.coil.compose)
+    implementation(platform(libs.koin.bom))
+    implementation(libs.koin.compose)
 
     testImplementation(libs.junit)
 

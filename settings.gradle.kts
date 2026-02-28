@@ -14,6 +14,7 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         gradlePluginPortal()
+        maven { url = uri("https://jitpack.io") }
     }
 }
 
@@ -36,3 +37,5 @@ include(":feature:login")
 include(":feature:profile")
 include(":feature:chatssearch")
 include(":feature:shared")
+include(":feature:post")
+include(":feature:comments")

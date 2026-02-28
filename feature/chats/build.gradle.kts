@@ -25,7 +25,10 @@ android {
 			)
 		}
 	}
-	buildFeatures { compose = true }
+	buildFeatures {
+		compose = true
+		buildConfig = true
+	}
 	compileOptions {
 		sourceCompatibility = JavaVersion.VERSION_1_8
 		targetCompatibility = JavaVersion.VERSION_1_8
@@ -40,10 +43,12 @@ dependencies {
 	implementation(project(":core:domain"))
 
 	implementation(libs.appcompat)
+	implementation(libs.activity.compose)
 
 	api(platform(libs.koin.bom))
 	api(libs.koin.core)
 	api(libs.koin.android)
+	implementation(libs.koin.androidx.compose)
 
 	testImplementation(libs.junit)
 

@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "me.flowme.feed"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         minSdk = 28
@@ -23,19 +23,28 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
     }
     buildFeatures { compose = true }
     kotlinOptions {
-        jvmTarget = "1.8"
+        jvmTarget = "11"
     }
 }
 
 dependencies {
     implementation(project(":core:uikit"))
+    implementation(project(":core:domain"))
 
     implementation(libs.appcompat)
+    implementation(libs.lifecycle.runtime.compose)
+    
+    // Koin для ViewModel
+    implementation(platform(libs.koin.bom))
+    implementation(libs.koin.androidx.compose)
+    
+    // Coil для загрузки картинок
+    implementation(libs.coil.compose)
 
     testImplementation(libs.junit)
 

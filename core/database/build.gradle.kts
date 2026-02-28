@@ -3,11 +3,12 @@ plugins {
     alias(libs.plugins.androidLibrary)
     alias(libs.plugins.kotlinAndroid)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.serialization)
 }
 
 android {
     namespace = "me.floow.database"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         minSdk = 28
@@ -40,6 +41,10 @@ dependencies {
     implementation(libs.room.ktx)
     implementation(project(":core:domain"))
     ksp(libs.room.compiler)
+    
+    // Serialization
+    implementation(libs.kotlinx.serialization.core)
+    implementation(libs.kotlinx.serialization.json)
 
     testImplementation(libs.junit)
 
