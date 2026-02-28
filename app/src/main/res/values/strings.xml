@@ -1,6 +1,7 @@
 <resources>
     <string name="app_name">Flow</string>
     <string name="feed_bottom_nav_label">Feed</string>
+    <string name="feed_bottom_nav_back_label">Back</string>
     <string name="profile_bottom_nav_label">Profile</string>
     <string name="chats_bottom_nav_label">Chats</string>
 </resources>

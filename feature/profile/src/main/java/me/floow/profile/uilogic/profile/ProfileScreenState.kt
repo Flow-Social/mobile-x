@@ -1,6 +1,7 @@
 package me.floow.profile.uilogic.profile
 
 import android.net.Uri
+import me.floow.domain.models.Post
 
 sealed interface ProfileScreenState {
 	data object Loading : ProfileScreenState
@@ -8,10 +9,18 @@ sealed interface ProfileScreenState {
 	data object Error : ProfileScreenState
 
 	data class Success(
+		val id: String,
 		val shortUsername: String?,
 		val avatarUri: Uri?,
+		val backgroundUri: Uri?,
 		val displayName: String?,
 		val description: String?,
-		val subscribers: ProfileSubscribers,
+		val totalLikesReceived: Int,
+		val isSelf: Boolean,
+		val posts: List<Post>,
+		val arePostsLoading: Boolean,
+		val arePostsError: Boolean,
+		val canLoadMorePosts: Boolean,
+		val isLoadingMorePosts: Boolean,
 	) : ProfileScreenState
 }

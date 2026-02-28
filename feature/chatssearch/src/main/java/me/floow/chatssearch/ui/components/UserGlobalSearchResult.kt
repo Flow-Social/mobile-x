@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -28,6 +29,7 @@ import me.floow.chatssearch.uilogic.UserSearchResult
 import me.floow.domain.values.ProfileName
 import me.floow.domain.values.ProfileUsername
 import me.floow.uikit.R
+import me.floow.uikit.components.avatar.NetworkAvatar
 import me.floow.uikit.theme.LocalTypography
 import me.floow.uikit.util.ComponentPreviewBox
 
@@ -43,11 +45,15 @@ fun UserGlobalSearchResult(
 			.padding(horizontal = 20.dp, vertical = 4.dp),
 		verticalAlignment = Alignment.CenterVertically
 	) {
-		Box(
-			Modifier
-				.size(50.dp)
+		NetworkAvatar(
+			name = userSearchResult.name.value,
+			avatarModel = userSearchResult.avatarUrl,
+			contentDescription = null,
+			size = 50.dp,
+			modifier = Modifier
 				.clip(CircleShape)
-				.background(Color.LightGray)
+				.background(Color.LightGray),
+			contentScale = ContentScale.Crop
 		)
 
 		Spacer(Modifier.width(9.dp))
@@ -78,10 +84,12 @@ private fun UserGlobalSearchResultPreview() {
 	ComponentPreviewBox(Modifier.fillMaxWidth()) {
 		UserGlobalSearchResult(
 			userSearchResult = UserSearchResult(
+				id = "1",
 				ProfileName.create("Demn"),
 				ProfileUsername.create(
 					"demndevel"
 				),
+				avatarUrl = null,
 				isOnline = false
 			),
 			onClick = {},

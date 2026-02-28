@@ -2,6 +2,7 @@
 <resources>
     <string name="app_name">Flow</string>
     <string name="feed_bottom_nav_label">Лента</string>
+    <string name="feed_bottom_nav_back_label">Назад</string>
     <string name="profile_bottom_nav_label">Профиль</string>
     <string name="chats_bottom_nav_label">Чаты</string>
 </resources>

@@ -1,6 +1,4 @@
 package me.floow.chatssearch.ui.states
-
-import android.widget.Toast
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,7 +11,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import me.floow.chatssearch.ui.components.globalSearchUsersList
@@ -27,9 +24,9 @@ import me.floow.domain.values.ProfileUsername
 @Composable
 fun SearchResultsState(
 	state: SearchUsersScreenUiState.HasResults,
+	onUserClick: (UserSearchResult) -> Unit,
 	modifier: Modifier = Modifier
 ) {
-	val context = LocalContext.current
 	var isGlobalUsersSearchExpanded by remember { mutableStateOf(false) }
 
 	Column(modifier = modifier) {
@@ -43,9 +40,7 @@ fun SearchResultsState(
 						isGlobalUsersSearchExpanded = !isGlobalUsersSearchExpanded
 					},
 					results = state.userResults,
-					onClick = { result ->
-						Toast.makeText(context, result.toString(), Toast.LENGTH_SHORT).show()
-					}
+					onClick = onUserClick
 				)
 
 				item {
@@ -55,12 +50,12 @@ fun SearchResultsState(
 				}
 			}
 
-			messageResultsList(
-				results = state.messageResults,
-				onClick = { result ->
-					Toast.makeText(context, result.toString(), Toast.LENGTH_SHORT).show()
-				}
-			)
+			if (state.messageResults.isNotEmpty()) {
+				messageResultsList(
+					results = state.messageResults,
+					onClick = { }
+				)
+			}
 		}
 	}
 }
@@ -73,8 +68,10 @@ private fun SearchResultsStatePreview() {
 			searchField = "test",
 			userResults = listOf(
 				UserSearchResult(
+					id = "1",
 					name = ProfileName.create("Demn"),
 					username = ProfileUsername.create("demndevel"),
+					avatarUrl = null,
 					isOnline = false
 				)
 			),
@@ -101,6 +98,7 @@ private fun SearchResultsStatePreview() {
 				)
 			)
 		),
+		onUserClick = { },
 		Modifier.fillMaxSize()
 	)
 }

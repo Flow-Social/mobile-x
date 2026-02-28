@@ -2,9 +2,9 @@ package me.floow.profile.ui.edit
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
@@ -12,9 +12,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import me.floow.profile.R
 import me.floow.profile.uilogic.edit.EditProfileState
+import me.floow.uikit.components.loading.FlowLoadingIndicator
 import me.floow.uikit.components.topbar.TitleTopBarWithActionButtonWithNavBack
 
 @Composable
@@ -23,6 +23,7 @@ internal fun EditProfileScreen(
 	onBackClick: () -> Unit,
 	onDoneClick: () -> Unit,
 	onAvatarPickerClick: () -> Unit,
+	onBackgroundPickerClick: () -> Unit,
 	onNameChange: (String) -> Unit,
 	onUsernameChange: (String) -> Unit,
 	onBiographyChange: (String) -> Unit,
@@ -30,10 +31,12 @@ internal fun EditProfileScreen(
 ) {
 	Scaffold(
 		topBar = {
-			EditProfileScreenTopBar(
-				onBackClick = onBackClick,
-				onDoneClick = onDoneClick
-			)
+			if (state is EditProfileState.Edit) {
+				EditProfileScreenTopBar(
+					onBackClick = onBackClick,
+					onDoneClick = onDoneClick
+				)
+			}
 		},
 		modifier = modifier
 	) { innerPadding ->
@@ -41,12 +44,12 @@ internal fun EditProfileScreen(
 			modifier = Modifier
 				.padding(innerPadding)
 				.fillMaxSize()
+				.navigationBarsPadding()
 		) {
 			when (state) {
 				is EditProfileState.Uploading -> {
-					CircularProgressIndicator(
+					FlowLoadingIndicator(
 						Modifier
-							.size(32.dp)
 							.align(Alignment.Center)
 					)
 				}
@@ -54,6 +57,7 @@ internal fun EditProfileScreen(
 				is EditProfileState.Edit -> {
 					EditState(
 						onAvatarPickerClick,
+						onBackgroundPickerClick,
 						state,
 						onNameChange,
 						onUsernameChange,
@@ -81,6 +85,6 @@ fun EditProfileScreenTopBar(
 				null
 			)
 		},
-		modifier = modifier
+		modifier = modifier.statusBarsPadding()
 	)
 }

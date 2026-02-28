@@ -4,8 +4,10 @@ import me.floow.domain.values.ProfileName
 import me.floow.domain.values.ProfileUsername
 
 data class UserSearchResult(
+	val id: String,
 	val name: ProfileName,
 	val username: ProfileUsername,
+	val avatarUrl: String?,
 	val isOnline: Boolean
 )
 

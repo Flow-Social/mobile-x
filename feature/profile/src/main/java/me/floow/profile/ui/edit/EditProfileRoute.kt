@@ -1,5 +1,8 @@
 package me.floow.profile.ui.edit
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import android.widget.Toast
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBarDefaults
@@ -23,12 +26,14 @@ data class EditProfileRouteInitialData(
 	val name: String,
 	val username: String,
 	val description: String,
+	val avatarUrl: String? = null,
+	val backgroundUrl: String? = null,
 )
 
 @Composable
 fun EditProfileRoute(
-	initialData: EditProfileRouteInitialData,
-	onBackClick: () -> Unit,
+	initialData: EditProfileRouteInitialData? = null,
+	onBackClick: () -> Unit = {},
 	onDoneClick: () -> Unit,
 	vm: EditProfileViewModel,
 	modifier: Modifier = Modifier
@@ -37,9 +42,23 @@ fun EditProfileRoute(
 	val context = LocalContext.current
 	val hapticFeedback = LocalHapticFeedback.current
 	val lifecycle = LocalLifecycleOwner.current.lifecycle
+	val pickAvatarLauncher = rememberLauncherForActivityResult(
+		contract = ActivityResultContracts.PickVisualMedia()
+	) { uri ->
+		vm.setAvatarFromPicker(uri?.toString())
+	}
+	val pickBackgroundLauncher = rememberLauncherForActivityResult(
+		contract = ActivityResultContracts.PickVisualMedia()
+	) { uri ->
+		vm.setBackgroundFromPicker(uri?.toString())
+	}
 
 	LaunchedEffect(Unit) {
-		vm.setInitialData(initialData)
+		if (initialData != null) {
+			vm.setInitialData(initialData)
+		} else {
+			vm.loadData()
+		}
 
 		lifecycle.repeatOnLifecycle(state = Lifecycle.State.STARTED) {
 			launch {
@@ -63,7 +82,14 @@ fun EditProfileRoute(
 			)
 		},
 		onAvatarPickerClick = {
-			Toast.makeText(context, "Фича ещё разрабатывается…", Toast.LENGTH_SHORT).show()
+			pickAvatarLauncher.launch(
+				PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+			)
+		},
+		onBackgroundPickerClick = {
+			pickBackgroundLauncher.launch(
+				PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+			)
 		},
 		onNameChange = vm::updateName,
 		onUsernameChange = vm::updateUsername,

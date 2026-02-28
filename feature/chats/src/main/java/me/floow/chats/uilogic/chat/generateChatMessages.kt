@@ -2,6 +2,11 @@ package me.floow.chats.uilogic.chat
 
 import java.time.LocalDateTime
 import kotlin.random.Random
+import me.floow.uikit.chat.model.ChatMessage
+import me.floow.uikit.chat.model.PrimaryInMessage
+import me.floow.uikit.chat.model.PrimaryOutMessage
+import me.floow.uikit.chat.model.ReplyInMessage
+import me.floow.uikit.chat.model.ReplyOutMessage
 
 fun generateChatMessages(): List<ChatMessage> {
     val messageTexts = listOf(

@@ -1,10 +1,16 @@
 package me.floow.login.ui.login.components
 
-import androidx.compose.foundation.text.ClickableText
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextAlign
@@ -44,15 +50,37 @@ internal fun TermsAndPolicyText(
         }
     }
 
-    ClickableText(
-        annotatedString,
+    var textLayout by rememberTextLayoutState()
+    Text(
+        text = annotatedString,
         style = FlowCustomTheme.typography.labelMedium.copy(textAlign = TextAlign.Center),
-        modifier = modifier
-    ) { offset ->
-        annotatedString.getStringAnnotations(tag = "terms_and_conditions", start = offset, end = offset).firstOrNull()
-            ?.let { onTermsClick() }
+        modifier = modifier.pointerInput(annotatedString) {
+            detectTapGestures { tapOffset ->
+                val layout = textLayout ?: return@detectTapGestures
+                val offset = layout.getOffsetForPosition(tapOffset)
+                annotatedString.getStringAnnotations(
+                    tag = "terms_and_conditions",
+                    start = offset,
+                    end = offset
+                ).firstOrNull()?.let {
+                    onTermsClick()
+                    return@detectTapGestures
+                }
 
-        annotatedString.getStringAnnotations(tag = "privacy_policy", start = offset, end = offset).firstOrNull()
-            ?.let { onPrivacyClick() }
-    }
+                annotatedString.getStringAnnotations(
+                    tag = "privacy_policy",
+                    start = offset,
+                    end = offset
+                ).firstOrNull()?.let {
+                    onPrivacyClick()
+                }
+            }
+        },
+        onTextLayout = { textLayout = it }
+    )
+}
+
+@Composable
+private fun rememberTextLayoutState(): androidx.compose.runtime.MutableState<TextLayoutResult?> {
+	return androidx.compose.runtime.remember { mutableStateOf(null) }
 }

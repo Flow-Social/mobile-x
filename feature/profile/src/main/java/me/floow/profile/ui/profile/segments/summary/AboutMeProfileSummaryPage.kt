@@ -16,7 +16,7 @@ import me.floow.uikit.theme.LocalTypography
 internal fun AboutMeProfileSummaryPage(description: String?, modifier: Modifier = Modifier) {
 	Column(
 		modifier = modifier
-			.padding(horizontal = 24.dp),
+			.padding(start = 24.dp, end = 24.dp),
 		verticalArrangement = Arrangement.Center,
 		horizontalAlignment = Alignment.CenterHorizontally
 	) {

@@ -1,3 +1,5 @@
 package me.floow.app.navigation
 
-const val profileDeeplinkUri = "https://floow.me/"
+import me.floow.domain.deeplink.DeepLinkUrls
+
+const val profileDeeplinkUri = DeepLinkUrls.BASE_URL

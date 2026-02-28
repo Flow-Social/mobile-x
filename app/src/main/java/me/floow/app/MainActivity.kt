@@ -15,9 +15,11 @@ import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import me.floow.app.BuildConfig.*
+import me.floow.app.deeplink.DeepLinkDispatcher
 import me.floow.app.di.apiModule
 import me.floow.app.di.appModule
 import me.floow.app.di.authModule
+import me.floow.app.di.createAppControllerModule
 import me.floow.app.di.dataModule
 import me.floow.app.di.databaseModule
 import me.floow.app.di.domainModule
@@ -28,7 +30,9 @@ import me.floow.app.navigation.AuthDestinationsCluster
 import me.floow.app.navigation.MainDestinationsCluster
 import me.floow.app.ui.App
 import me.floow.chats.di.chatsModule
+import me.floow.comments.di.commentsModule
 import me.floow.domain.auth.AuthenticationManager
+import me.floow.feed.di.feedModule
 import me.floow.login.di.loginModule
 import me.floow.profile.di.profileModule
 import me.floow.uikit.theme.FlowTheme
@@ -54,6 +58,7 @@ class MainActivity : ComponentActivity() {
 				if (USE_MOCK_DATA) {
 					modules(
 						appModule,
+						createAppControllerModule(this@MainActivity),
 						apiModule,
 						mockAuthModule,
 						databaseModule,
@@ -63,11 +68,14 @@ class MainActivity : ComponentActivity() {
 						loginModule,
 						profileModule,
 						usersearchModule,
-						chatsModule
+						chatsModule,
+						commentsModule,
+						feedModule
 					)
 				} else {
 					modules(
 						appModule,
+						createAppControllerModule(this@MainActivity),
 						apiModule,
 						authModule,
 						databaseModule,
@@ -77,7 +85,9 @@ class MainActivity : ComponentActivity() {
 						loginModule,
 						profileModule,
 						usersearchModule,
-						chatsModule
+						chatsModule,
+						commentsModule,
+						feedModule
 					)
 				}
 			}
@@ -101,6 +111,8 @@ class MainActivity : ComponentActivity() {
 				)
 			}
 		}
+
+		pushDeepLinkIntent(intent)
 	}
 
 	override fun onNewIntent(intent: Intent) {
@@ -112,7 +124,19 @@ class MainActivity : ComponentActivity() {
 			}
 		}
 
+		pushDeepLinkIntent(intent)
 		super.onNewIntent(intent)
+	}
+
+	private fun pushDeepLinkIntent(intent: Intent) {
+		val data = intent.data ?: return
+		val isHttpsFloow = data.scheme == "https" && data.host == "floow.me"
+		val isHttpsFlowSocial = data.scheme == "https" && data.host == "flow-social.github.io"
+		val isCustomScheme = data.scheme == "me.floow.app"
+		if (!isHttpsFloow && !isHttpsFlowSocial && !isCustomScheme) return
+
+		val dispatcher: DeepLinkDispatcher = getKoin().get()
+		dispatcher.push(intent)
 	}
 
 	override fun attachBaseContext(newBase: Context?) {

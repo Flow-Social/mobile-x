@@ -25,7 +25,7 @@ data object FeedScreen : NavigationRoute
 
 @Serializable
 data class ChatScreen(
-    val interlocutorId: Long = 0L,
+    val interlocutorId: String = "",
     val interlocutorName: String = "",
     val interlocutorAvatarUri: String? = null,
 ) : NavigationRoute
@@ -37,7 +37,7 @@ data object ChatsScreen : NavigationRoute
 data object SearchUsersScreen : NavigationRoute
 
 @Serializable
-data class ProfileScreen(val username: String) : NavigationRoute
+data class ProfileScreen(val userId: String) : NavigationRoute
 
 @Serializable
 data object SelfProfileScreen : NavigationRoute
@@ -46,7 +46,33 @@ data object SelfProfileScreen : NavigationRoute
 data class EditProfileScreen(
     val name: String = "",
     val username: String = "",
-    val description: String = ""
+    val description: String = "",
+    val avatarUrl: String? = null,
+    val backgroundUrl: String? = null,
+) : NavigationRoute
+
+@Serializable
+data class PostScreen(
+	val postId: String,
+	val imageUrls: List<String>,
+	val description: String? = null,
+	val mediaTransferToken: String? = null,
+	val authorId: String,
+	val authorName: String? = null,
+	val authorUsername: String? = null,
+	val authorAvatarUrl: String? = null,
+	val category: String,
+	val createdAt: Long,
+	val likesCount: Int = 0,
+	val commentsCount: Int = 0,
+	val commentersPreview: List<String> = emptyList(),
+	val isSelf: Boolean = false
+) : NavigationRoute
+
+@Serializable
+data class PostDeepLinkScreen(
+	val postId: String,
+	val username: String? = null
 ) : NavigationRoute
 
 val bottomNavigationItems = listOf(

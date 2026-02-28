@@ -1,5 +1,6 @@
 package me.floow.chats.ui.chats
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -12,6 +13,7 @@ import me.floow.chats.ui.chats.states.HasDataState
 import me.floow.chats.uilogic.chats.Chat
 import me.floow.chats.uilogic.chats.ChatsScreenUiState
 import me.floow.uikit.R
+import me.floow.uikit.components.loading.FlowLoadingIndicator
 import me.floow.uikit.components.topbar.TitleTopBarWithActionButton
 
 @Composable
@@ -44,7 +46,7 @@ internal fun ChatsScreen(
 		when (state) {
 			is ChatsScreenUiState.Loading -> {
 				Box(commonModifier, Alignment.Center) {
-					CircularProgressIndicator()
+					FlowLoadingIndicator()
 				}
 			}
 
@@ -56,7 +58,15 @@ internal fun ChatsScreen(
 
 			is ChatsScreenUiState.NoChats -> {
 				Box(commonModifier, Alignment.Center) {
-					Text(text = "no chats sorry")
+					Column(horizontalAlignment = Alignment.CenterHorizontally) {
+						Image(
+							painter = painterResource(R.drawable.egirl_error),
+							contentDescription = null,
+							modifier = Modifier.size(260.dp)
+						)
+						Spacer(modifier = Modifier.height(22.dp))
+						Text(text = "пока в разработке!")
+					}
 				}
 			}
 

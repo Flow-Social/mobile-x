@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="new_post">New post</string>
+    <string name="message">Message</string>
     <string name="share">Share</string>
     <string name="edit">Edit</string>
+    <string name="no_likes_yet">No likes yet</string>
     <string name="information">Information</string>
     <string name="name">name</string>
     <string name="your_name">Your name</string>
@@ -14,4 +16,18 @@
     <string name="no_username_topbar_title">No username</string>
     <string name="no_profile_description">no description</string>
     <string name="no_display_name">No name</string>
+    <string name="create_post_close">Закрыть</string>
+    <string name="create_post_category">Категория</string>
+    <string name="create_post_categories_loading">Категории</string>
+    <string name="create_post_retry_category">Повторить</string>
+    <string name="create_post_whats_new">Что нового?</string>
+    <string name="create_post_cd_selected_image">Выбранное изображение %1$d</string>
+    <string name="create_post_cd_remove_image">Удалить изображение</string>
+    <string name="create_post_cd_add_image">Добавить изображение</string>
+    <string name="create_post_cd_publish">Отправить</string>
+
+    <plurals name="likes_count">
+        <item quantity="one">%1$s like</item>
+        <item quantity="other">%1$s likes</item>
+    </plurals>
 </resources>

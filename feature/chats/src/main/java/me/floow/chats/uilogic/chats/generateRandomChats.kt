@@ -55,7 +55,7 @@ fun generateRandomChats(n: Int): List<Chat> {
 			if (Random.nextBoolean()) LastSentMessageState.entries.toTypedArray().random() else null
 
 		val chat = Chat(
-			id = Random.nextLong(1L, 100L),
+			id = Random.nextLong(1L, 100L).toString(),
 			name = profileName,
 			lastMessageText = lastMessageText,
 			lastMessageDateTime = lastMessageDateTime,

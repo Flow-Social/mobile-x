@@ -10,7 +10,7 @@ enum class LastSentMessageState {
 }
 
 data class Chat(
-	val id: Long,
+	val id: String,
 	val name: ProfileName,
 	val lastMessageText: String,
 	val lastMessageDateTime: LocalDateTime,

@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import coil.compose.rememberAsyncImagePainter
 import me.floow.profile.R
 import me.floow.profile.uilogic.edit.EditProfileState
 import me.floow.uikit.components.input.TextFieldWithAdditionalText
@@ -22,6 +23,7 @@ import me.floow.uikit.util.state.ValidatedField
 @Composable
 internal fun EditState(
 	onAvatarPickerClick: () -> Unit,
+	onBackgroundPickerClick: () -> Unit,
 	state: EditProfileState.Edit,
 	onNameChange: (String) -> Unit,
 	onUsernameChange: (String) -> Unit,
@@ -32,15 +34,38 @@ internal fun EditState(
 			.fillMaxSize()
 			.padding(14.dp)
 	) {
+		val avatarModel = state.avatarPreviewUri ?: state.avatarRemoteUrl
+		val avatarPainter = avatarModel?.let { rememberAsyncImagePainter(model = it) }
+		val backgroundModel = state.backgroundPreviewUri ?: state.backgroundRemoteUrl
+		val backgroundPainter = backgroundModel?.let { rememberAsyncImagePainter(model = it) }
+
 		AvatarAndBackgroundPicker(
-			avatarImagePainter = null,
-			backgroundImagePainter = null,
+			avatarImagePainter = avatarPainter,
+			backgroundImagePainter = backgroundPainter,
 			onAvatarPickerClick = onAvatarPickerClick,
-			onBackgroundPickerClick = {},
+			onBackgroundPickerClick = onBackgroundPickerClick,
 			modifier = Modifier.fillMaxWidth()
 		)
 
 		Spacer(Modifier.height(24.dp))
+
+		state.avatarErrorMessage?.takeIf { it.isNotBlank() }?.let { errorMessage ->
+			Text(
+				text = errorMessage,
+				style = LocalTypography.current.labelMedium,
+				color = MaterialTheme.colorScheme.error,
+			)
+			Spacer(Modifier.height(16.dp))
+		}
+
+		state.backgroundErrorMessage?.takeIf { it.isNotBlank() }?.let { errorMessage ->
+			Text(
+				text = errorMessage,
+				style = LocalTypography.current.labelMedium,
+				color = MaterialTheme.colorScheme.error,
+			)
+			Spacer(Modifier.height(16.dp))
+		}
 
 		Text(
 			text = stringResource(R.string.information).uppercase(),

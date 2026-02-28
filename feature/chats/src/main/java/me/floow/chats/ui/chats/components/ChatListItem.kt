@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import me.floow.chats.uilogic.chats.Chat
 import me.floow.chats.uilogic.chats.LastSentMessageState
 import me.floow.domain.values.ProfileName
+import me.floow.uikit.components.avatar.NetworkAvatar
 import me.floow.uikit.theme.LocalTypography
 import me.floow.uikit.util.ComponentPreviewBox
 import me.flowme.chats.R
@@ -50,6 +51,7 @@ internal fun ChatListItem(
 		verticalAlignment = Alignment.CenterVertically
 	) {
 		AvatarBox(
+			name = chat.name.value,
 			avatarUrl = chat.avatarUrl,
 			isOnline = chat.isOnline,
 			modifier = Modifier
@@ -143,13 +145,14 @@ internal fun ChatListItem(
 }
 
 @Composable
-private fun AvatarBox(avatarUrl: Uri?, isOnline: Boolean, modifier: Modifier.Companion) {
+private fun AvatarBox(name: String, avatarUrl: Uri?, isOnline: Boolean, modifier: Modifier.Companion) {
 	Box(modifier = modifier) {
-		Box(
-			Modifier
-				.size(56.dp)
-				.clip(CircleShape)
-				.background(Color.LightGray)
+		NetworkAvatar(
+			name = name,
+			avatarModel = avatarUrl,
+			size = 56.dp,
+			modifier = Modifier,
+			shape = CircleShape
 		)
 
 		if (isOnline) {
@@ -173,7 +176,7 @@ private fun ChatListItemPreview() {
 	ComponentPreviewBox(Modifier.fillMaxSize()) {
 		ChatListItem(
 			chat = Chat(
-				id = 2L,
+				id = "2",
 				name = ProfileName.create("Demn"),
 				lastMessageText = "Some message text idk",
 				isOnline = true,

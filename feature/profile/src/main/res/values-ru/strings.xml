@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="new_post">Новый пост</string>
+    <string name="message">Сообщение</string>
     <string name="share">Поделиться</string>
     <string name="edit">Редактировать</string>
+    <string name="no_likes_yet">Пока нет лайков</string>
     <string name="information">Information</string>
     <string name="name">name</string>
     <string name="your_name">Your name</string>
@@ -13,4 +15,11 @@
     <string name="no_username_topbar_title">Нет юзернейма</string>
     <string name="no_profile_description">тут пусто :(</string>
     <string name="no_display_name">ноунейм</string>
+
+    <plurals name="likes_count">
+        <item quantity="one">%1$s лайк</item>
+        <item quantity="few">%1$s лайка</item>
+        <item quantity="many">%1$s лайков</item>
+        <item quantity="other">%1$s лайка</item>
+    </plurals>
 </resources>

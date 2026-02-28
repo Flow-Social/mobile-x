@@ -11,24 +11,39 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import me.floow.chatssearch.uilogic.RecentUser
 import me.floow.uikit.theme.LocalTypography
+import me.floow.uikit.util.overlayHorizontalSwipeZone
 
 @Composable
 fun RecentUsersList(
 	recentUsers: List<RecentUser>,
 	modifier: Modifier = Modifier
 ) {
+	val recentUsersListState = rememberLazyListState()
+	val recentUsersAtStart =
+		recentUsersListState.firstVisibleItemIndex == 0 &&
+			recentUsersListState.firstVisibleItemScrollOffset == 0
+	val recentUsersZoneKey = remember { "search_recent_users_row_zone" }
 	LazyRow(
-		modifier = modifier,
+		state = recentUsersListState,
+		modifier = modifier
+			.testTag("search_recent_users_row")
+			.overlayHorizontalSwipeZone(
+				zoneKey = recentUsersZoneKey,
+				atStart = recentUsersAtStart
+			),
 		horizontalArrangement = Arrangement.spacedBy(12.dp)
 	) {
 		item {

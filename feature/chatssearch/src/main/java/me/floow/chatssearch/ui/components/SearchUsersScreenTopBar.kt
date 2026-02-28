@@ -3,6 +3,7 @@ package me.floow.chatssearch.ui.components
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.foundation.layout.statusBarsPadding
 import me.floow.uikit.components.topbar.SearchTopBar
 import me.floow.chatssearch.R
 
@@ -18,6 +19,7 @@ fun SearchUsersScreenTopBar(
 		searchFieldValue = searchFieldValue,
 		placeholder = stringResource(R.string.search_field_placeholder),
 		onSearchFieldUpdate = onSearchFieldUpdate,
-		modifier = modifier
+		autoFocusOnStart = true,
+		modifier = modifier.statusBarsPadding()
 	)
 }

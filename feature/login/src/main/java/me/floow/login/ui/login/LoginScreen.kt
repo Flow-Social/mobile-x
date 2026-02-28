@@ -18,6 +18,7 @@ import me.floow.login.ui.login.components.GoogleLoginButton
 import me.floow.login.ui.login.components.TermsAndPolicyText
 import me.floow.login.uilogic.LoginState
 import me.floow.uikit.R
+import me.floow.uikit.components.loading.FlowLoadingIndicator
 import me.floow.uikit.theme.FlowTheme
 
 @Composable
@@ -69,7 +70,7 @@ internal fun LoginScreen(
             }
 
             is LoginState.Loading -> {
-                CircularProgressIndicator()
+                FlowLoadingIndicator()
             }
         }
 

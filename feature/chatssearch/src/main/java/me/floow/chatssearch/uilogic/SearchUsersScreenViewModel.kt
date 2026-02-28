@@ -2,17 +2,23 @@ package me.floow.chatssearch.uilogic
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import me.floow.domain.data.GetDataResponse
+import me.floow.domain.data.repos.UsersRepository
 import me.floow.domain.values.ProfileName
 import me.floow.domain.values.ProfileUsername
-import kotlin.random.Random
+import me.floow.domain.values.util.RawValueObjectCreate
+import java.util.LinkedHashMap
 
 private data class SearchUsersScreenVmState(
 	val searchField: String = "",
@@ -41,8 +47,25 @@ private data class SearchUsersScreenVmState(
 	}
 }
 
-class SearchUsersScreenViewModel : ViewModel() {
+@OptIn(FlowPreview::class)
+class SearchUsersScreenViewModel(
+	private val usersRepository: UsersRepository,
+) : ViewModel() {
+	private companion object {
+		private const val SEARCH_DEBOUNCE_MS = 300L
+		private const val QUERY_CACHE_MAX_SIZE = 20
+	}
+
 	private val _state = MutableStateFlow(SearchUsersScreenVmState())
+	private val queryResultsCache = object : LinkedHashMap<String, List<UserSearchResult>>(
+		QUERY_CACHE_MAX_SIZE,
+		0.75f,
+		true
+	) {
+		override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<UserSearchResult>>): Boolean {
+			return size > QUERY_CACHE_MAX_SIZE
+		}
+	}
 
 	val state: StateFlow<SearchUsersScreenUiState> = _state
 		.map(SearchUsersScreenVmState::toUiState)
@@ -52,20 +75,24 @@ class SearchUsersScreenViewModel : ViewModel() {
 			SearchUsersScreenUiState.NoSearchInput("", emptyList())
 		)
 
+	init {
+		viewModelScope.launch {
+			_state
+				.map { it.searchField }
+				.debounce(SEARCH_DEBOUNCE_MS)
+				.distinctUntilChanged()
+				.collectLatest { query ->
+					handleSearch(query)
+				}
+		}
+	}
+
 	fun loadInitialData() {
 		viewModelScope.launch {
 			_state.update {
 				it.copy(
-					isLoading = true
-				)
-			}
-
-			delay(100L)
-
-			_state.update {
-				it.copy(
-					recentUsers = generateRandomRecentUsers(),
-					isLoading = false
+					recentUsers = emptyList(),
+					isLoading = false,
 				)
 			}
 		}
@@ -77,131 +104,69 @@ class SearchUsersScreenViewModel : ViewModel() {
 				searchField = newValue
 			)
 		}
+	}
 
-		viewModelScope.launch {
+	@OptIn(RawValueObjectCreate::class)
+	private suspend fun handleSearch(query: String) {
+		val normalizedQuery = query.trim()
+		if (normalizedQuery.isBlank()) {
 			_state.update {
 				it.copy(
-					isLoading = true
+					isLoading = false,
+					globalSearchResults = null,
+					messageSearchResults = null,
 				)
 			}
+			return
+		}
 
-			delay(300L)
-
+		val cacheKey = normalizedQuery.lowercase()
+		val cachedResults = queryResultsCache[cacheKey]
+		if (cachedResults != null) {
 			_state.update {
 				it.copy(
-					globalSearchResults = generateRandomUserSearchResults(),
-					messageSearchResults = generateRandomMessageSearchResults(),
-					isLoading = false
+					isLoading = false,
+					globalSearchResults = cachedResults,
+					messageSearchResults = emptyList(),
 				)
 			}
+			return
 		}
-	}
 
-	private fun generateRandomMessageSearchResults(): List<MessageResult> {
-		val names = listOf(
-			"Alice",
-			"Bob",
-			"Charlie",
-			"David",
-			"Eve",
-			"Frank",
-			"Grace",
-			"Heidi",
-			"Ivan",
-			"Judy"
-		)
-		val messages = listOf(
-			"Привет, как дела?",
-			"Что нового?",
-			"Можем встретиться завтра?",
-			"Извините, я опаздываю!",
-			"Видел новый фильм?",
-			"Давай перекусим вместе.",
-			"Мне нужна твоя помощь.",
-			"Как прошли выходные?",
-			"Есть планы на вечер?",
-			"Нашел отличный новый ресторан.",
-			"Можешь прислать отчет?",
-			"Следующую неделю уезжаю в отпуск.",
-			"Хочешь присоединиться к нам на ужин?",
-			"Застрял в пробке, скоро буду.",
-			"Пробовал новую кофейню?",
-			"Нужно перенести нашу встречу.",
-			"Получил мое письмо?",
-			"Давай встретимся как-нибудь.",
-			"С нетерпением жду поездки!",
-			"Есть рекомендации по книгам?"
-		)
-
-		return List(Random.nextInt(200)) {
-			val randomName = names[Random.nextInt(names.size)]
-			val randomMessage = messages[Random.nextInt(messages.size)]
-
-			MessageResult(
-				name = ProfileName.create(randomName),
-				messageText = randomMessage
+		_state.update {
+			it.copy(
+				isLoading = true,
+				globalSearchResults = it.globalSearchResults ?: emptyList(),
+				messageSearchResults = it.messageSearchResults ?: emptyList(),
 			)
 		}
-	}
 
-	private fun generateRandomUserSearchResults(): List<UserSearchResult> {
-		val names = listOf(
-			"Alice",
-			"Bob",
-			"Charlie",
-			"David",
-			"Eve",
-			"Frank",
-			"Grace",
-			"Heidi",
-			"Ivan",
-			"Judy"
-		)
-		val usernames = listOf(
-			"user1",
-			"user2",
-			"user3",
-			"user4",
-			"user5",
-			"user6",
-			"user7",
-			"user8",
-			"user9",
-			"user10"
-		)
+		val userResults = when (val response = usersRepository.searchUsers(normalizedQuery)) {
+			is GetDataResponse.Success -> {
+				response.data.map { user ->
+					val name = user.name ?: ProfileName.createRaw(user.username?.value ?: "Unknown")
+					val username = user.username ?: ProfileUsername.createRaw("unknown")
 
-		return List(Random.nextInt(10)) {
-			val randomName = names[Random.nextInt(names.size)]
-			val randomUsername = usernames[Random.nextInt(usernames.size)]
-			val isOnline = Random.nextBoolean()
+					UserSearchResult(
+						id = user.id,
+						name = name,
+						username = username,
+						avatarUrl = user.avatarUrl,
+						isOnline = false,
+					)
+				}
+					.distinctBy { result -> result.id }
+			}
 
-			UserSearchResult(
-				name = ProfileName.create(randomName),
-				username = ProfileUsername.create(randomUsername),
-				isOnline = isOnline
-			)
+			is GetDataResponse.Error -> emptyList()
 		}
-	}
 
-	private fun generateRandomRecentUsers(): List<RecentUser> {
-		val names = listOf(
-			"Alice",
-			"Bob",
-			"Charlie",
-			"David",
-			"Eve",
-			"Frank",
-			"Grace",
-			"Heidi",
-			"Ivan",
-			"Judy"
-		)
-
-		return List(Random.nextInt(15)) {
-			val randomName = names[Random.nextInt(names.size)]
-
-			RecentUser(
-				name = ProfileName.create(randomName),
+		queryResultsCache[cacheKey] = userResults
+		_state.update {
+			it.copy(
+				isLoading = false,
+				globalSearchResults = userResults,
+				messageSearchResults = emptyList(),
 			)
 		}
 	}

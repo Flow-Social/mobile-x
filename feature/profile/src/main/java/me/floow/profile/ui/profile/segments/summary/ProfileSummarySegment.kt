@@ -13,41 +13,45 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import me.floow.profile.uilogic.profile.ProfileSubscribers
+import me.floow.uikit.util.overlayHorizontalSwipeZone
 
 @Composable
 fun ProfileSummarySegment(
 	profileAvatarUri: Uri?,
 	displayName: String?,
 	description: String?,
-	subscribers: ProfileSubscribers,
+	totalLikesReceived: Int,
 	modifier: Modifier = Modifier
 ) {
 	val pageCount = 2
 	val pagerState = rememberPagerState(initialPage = 0, pageCount = { pageCount })
+	val pagerZoneKey = remember { "profile_summary_pager_zone" }
 
 	Box(modifier) {
-		HorizontalPager(
+	HorizontalPager(
 			state = pagerState,
 			modifier = Modifier
-				.height(330.dp)
+				.height(360.dp)
+				.testTag("profile_summary_pager")
+				.overlayHorizontalSwipeZone(
+					zoneKey = pagerZoneKey,
+					atStart = pagerState.currentPage == 0
+				)
 		) { page ->
-			Box(
-				modifier = Modifier
-					.background(Color.DarkGray)
-					.fillMaxSize()
-			) {
+			Box(modifier = Modifier.fillMaxSize()) {
 				when (page) {
 					0 -> {
 						AvatarUsernameProfileSummaryPage(
 							profileAvatarUri = profileAvatarUri,
 							displayName = displayName,
-							subscribers = subscribers,
+							totalLikesReceived = totalLikesReceived,
 							modifier = Modifier.fillMaxSize()
 						)
 					}

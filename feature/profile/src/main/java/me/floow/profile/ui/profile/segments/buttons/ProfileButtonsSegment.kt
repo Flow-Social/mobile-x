@@ -24,13 +24,16 @@ import me.floow.uikit.theme.LocalTypography
 
 @Composable
 internal fun ProfileButtonsSegment(
+	isSelf: Boolean,
 	onAddPostButtonClick: () -> Unit,
+	onMessageButtonClick: () -> Unit,
+	onEditButtonClick: () -> Unit,
 	onShareButtonClick: () -> Unit,
 	modifier: Modifier = Modifier
 ) {
 	Row(
 		modifier = modifier
-			.padding(vertical = 16.dp),
+			.padding(vertical = 24.dp),
 		verticalAlignment = Alignment.CenterVertically
 	) {
 		Column(
@@ -38,21 +41,40 @@ internal fun ProfileButtonsSegment(
 				.padding(horizontal = 16.dp)
 				.weight(1f)
 				.clip(RoundedCornerShape(4.dp))
-				.clickable { onAddPostButtonClick() },
+				.clickable { if (isSelf) onAddPostButtonClick() else onMessageButtonClick() },
 			horizontalAlignment = Alignment.CenterHorizontally
 		) {
-			Icon(
-				painter = painterResource(R.drawable.add_post_outline_icon),
-				contentDescription = null,
-				modifier = Modifier.size(27.dp)
-			)
+			if (isSelf) {
+				Icon(
+					painter = painterResource(R.drawable.add_post_outline_icon),
+					contentDescription = null,
+					modifier = Modifier.size(27.dp),
+					tint = androidx.compose.ui.graphics.Color.White
+				)
 
-			Spacer(Modifier.height(8.dp))
+				Spacer(Modifier.height(8.dp))
 
-			Text(
-				text = stringResource(me.floow.profile.R.string.new_post),
-				style = LocalTypography.current.labelMedium
-			)
+				Text(
+					text = stringResource(me.floow.profile.R.string.new_post),
+					style = LocalTypography.current.labelMedium,
+					color = androidx.compose.ui.graphics.Color.White
+				)
+			} else {
+				Icon(
+					painter = painterResource(me.floow.uikit.R.drawable.chats_icon),
+					contentDescription = null,
+					modifier = Modifier.size(27.dp),
+					tint = androidx.compose.ui.graphics.Color.White
+				)
+
+				Spacer(Modifier.height(8.dp))
+
+				Text(
+					text = stringResource(me.floow.profile.R.string.message),
+					style = LocalTypography.current.labelMedium,
+					color = androidx.compose.ui.graphics.Color.White
+				)
+			}
 		}
 
 		VerticalDivider(Modifier.height(18.dp))
@@ -62,21 +84,26 @@ internal fun ProfileButtonsSegment(
 				.padding(horizontal = 16.dp)
 				.weight(1f)
 				.clip(RoundedCornerShape(4.dp))
-				.clickable { onShareButtonClick() },
-//				.padding(end = 16.dp),
+				.clickable { if (isSelf) onEditButtonClick() else onShareButtonClick() },
 			horizontalAlignment = Alignment.CenterHorizontally
 		) {
 			Icon(
-				painter = painterResource(R.drawable.share_icon),
+				painter = painterResource(
+					if (isSelf) R.drawable.edit_icon else R.drawable.share_icon
+				),
 				contentDescription = null,
-				modifier = Modifier.size(27.dp)
+				modifier = Modifier.size(27.dp),
+				tint = androidx.compose.ui.graphics.Color.White
 			)
 
 			Spacer(Modifier.height(8.dp))
 
 			Text(
-				text = stringResource(me.floow.profile.R.string.share),
-				style = LocalTypography.current.labelMedium
+				text = stringResource(
+					if (isSelf) me.floow.profile.R.string.edit else me.floow.profile.R.string.share
+				),
+				style = LocalTypography.current.labelMedium,
+				color = androidx.compose.ui.graphics.Color.White
 			)
 		}
 	}

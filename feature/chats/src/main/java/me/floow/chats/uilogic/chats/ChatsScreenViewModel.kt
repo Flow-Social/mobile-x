@@ -10,7 +10,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-
 private data class ChatsScreenVmState(
 	val isLoading: Boolean = false,
 	val isError: Boolean = false,
@@ -20,7 +19,11 @@ private data class ChatsScreenVmState(
 		if (isLoading) return ChatsScreenUiState.Loading
 
 		return if (chats != null && !isError) {
-			ChatsScreenUiState.HasData(chats)
+			if (chats.isEmpty()) {
+				ChatsScreenUiState.NoChats
+			} else {
+				ChatsScreenUiState.HasData(chats)
+			}
 		} else {
 			ChatsScreenUiState.Error
 		}
@@ -28,11 +31,16 @@ private data class ChatsScreenVmState(
 }
 
 class ChatsScreenViewModel : ViewModel() {
+	private var useMockData: Boolean = false
 	private val _state = MutableStateFlow(ChatsScreenVmState())
 
 	val state: StateFlow<ChatsScreenUiState> = _state
 		.map(ChatsScreenVmState::toUiState)
 		.stateIn(viewModelScope, SharingStarted.Eagerly, ChatsScreenUiState.Loading)
+
+	fun setUseMockData(flag: Boolean) {
+		useMockData = flag
+	}
 
 	fun load() {
 		viewModelScope.launch {
@@ -50,7 +58,11 @@ class ChatsScreenViewModel : ViewModel() {
 				it.copy(
 					isLoading = false,
 					isError = false,
-					chats = generateRandomChats(50)
+					chats = if (useMockData) {
+						generateRandomChats(50)
+					} else {
+						emptyList()
+					}
 				)
 			}
 		}

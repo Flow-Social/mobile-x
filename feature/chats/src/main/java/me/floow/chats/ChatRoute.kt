@@ -3,19 +3,19 @@ package me.floow.chats
 import android.content.Context
 import android.net.Uri
 import android.widget.Toast
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import me.floow.chats.ui.chat.ChatScreen
+import me.floow.uikit.chat.ChatScreen
+import me.floow.uikit.chat.model.ChatReplyMessage
 import me.floow.chats.uilogic.chat.ChatScreenViewModel
-import me.floow.uikit.util.SetNavigationBarColor
+import me.floow.uikit.chat.model.ChatScreenUiState
 
 data class ChatRouteInitialData(
-	val chatInterlocutorId: Long,
+	val chatInterlocutorId: String,
 	val chatInterlocutorName: String,
 	val chatInterlocutorAvatarUrl: Uri?
 )
@@ -23,6 +23,9 @@ data class ChatRouteInitialData(
 @Composable
 fun ChatRoute(
 	initialData: ChatRouteInitialData,
+	onBackClick: () -> Unit,
+	onProfileClick: (String) -> Unit = {},
+	isMockBuild: Boolean = false,
 	vm: ChatScreenViewModel,
 	modifier: Modifier = Modifier
 ) {
@@ -30,6 +33,7 @@ fun ChatRoute(
 	val context = LocalContext.current
 
 	LaunchedEffect(Unit) {
+		vm.setUseMockData(isMockBuild)
 		vm.setInitialData(
 			initialData.chatInterlocutorId,
 			initialData.chatInterlocutorName,
@@ -40,23 +44,51 @@ fun ChatRoute(
 	}
 
 	ChatScreen(
-		onProfileClick = {},
+		onBackClick = onBackClick,
+		onProfileClick = {
+			onProfileClick(state.chatInterlocutorId)
+		},
 		onTopBarDropdownClick = {},
 		onChatBubbleClick = {},
+		onJumpToMessage = vm::jumpToMessage,
 		onReply = vm::addCurrentReply,
-		onReplyClick = {},
+		onReplyClick = {
+			val targetId = if (it is ChatReplyMessage) it.replyMessageId else it.id
+			vm.jumpToMessage(targetId)
+		},
 		onCurrentReplyClose = vm::closeCurrentReply,
-		onCurrentReplyClick = { showTodoToast(context) },
+		onCurrentReplyClick = {
+			vm.state.value.messageFieldReply?.replyId?.let { vm.jumpToMessage(it) }
+		},
+		onCancelEdit = vm::cancelEditing,
 		onMessageInputFieldValueChange = vm::updateMessageInputField,
-		onEmojiPickerClick = { showTodoToast(context) },
-		onSendClick = vm::sendMessage,
+		onEmojiPickerClick = {
+			showTodoToast(context)
+			vm.simulateTyping()
+		},
+		onSendClick = {
+			val currentState = state
+			val messageToEditId = if (currentState is ChatScreenUiState.HasData) currentState.messageToEditId else null
+			
+			if (messageToEditId != null) {
+				vm.editMessage(messageToEditId, currentState.messageFieldValue)
+			} else {
+				vm.sendMessage()
+			}
+		},
+		onRequestScrollToBottom = vm::requestScrollToBottom,
+		onPostImageClick = { _, _ -> },
+		onPinMessage = vm::togglePinMessage,
+		onUnpinMessage = vm::togglePinMessage,
+		onDeleteMessage = vm::deleteMessage,
+		onEditMessage = { id, text ->
+			vm.startEditingMessage(id, text)
+		},
+		onUndoDelete = vm::undoDeleteMessage,
 		state = state,
 		modifier = modifier,
 	)
 
-	SetNavigationBarColor(
-		MaterialTheme.colorScheme.background
-	)
 }
 
 private fun showTodoToast(context: Context) {
