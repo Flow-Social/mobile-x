@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="comments_title">Комментарии</string>
+    <string name="comments_photo_subtitle">Фото</string>
+</resources>

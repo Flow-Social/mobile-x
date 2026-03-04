@@ -6,18 +6,24 @@ import androidx.lifecycle.viewModelScope
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import me.floow.domain.auth.AuthenticationManager
+import me.floow.domain.models.CommentId
+import me.floow.domain.models.resolveCommentTargetCandidates as resolveTargetCandidates
 import me.floow.domain.data.GetDataResponse
 import me.floow.domain.data.UpdateDataResponse
+import me.floow.domain.data.repos.CommentsReadCursorStore
 import me.floow.domain.data.repos.CommentsRepository
 import me.floow.domain.models.Comment
 import me.floow.domain.models.CommentAuthor
@@ -37,14 +43,48 @@ import me.floow.uikit.chat.model.ReplyInMessage
 import me.floow.uikit.chat.model.ReplyOutMessage
 
 private const val COMMENTS_PAGE_SIZE = 30
+private const val COMMENTS_ANCHOR_WINDOW_BEFORE = 20
+private const val COMMENTS_ANCHOR_WINDOW_AFTER = 40
+private const val INITIAL_TARGET_AUTOLOAD_MAX_PAGES = 200
 private const val COMMENT_MAX_LENGTH = 2256
 private const val UNDO_DELETE_TIMEOUT_MS = 4000L
 private const val COMMENT_SEND_TAG = "CommentsViewModel.sendComment"
+
+private data class AnchorWindowParams(
+	val before: Int?,
+	val after: Int?
+)
+
+internal data class InitialTargetSearchState(
+	val candidates: List<Long> = emptyList(),
+	val activeIndex: Int = 0,
+	val loadAttempts: Int = 0,
+	val isResolved: Boolean = true
+) {
+	val activeTarget: Long?
+		get() = candidates.getOrNull(activeIndex)
+
+	val hasFallback: Boolean
+		get() = activeIndex < candidates.lastIndex
+}
+
+internal data class InitialTargetSearchSnapshot(
+	val canLoadMore: Boolean,
+	val isLoadingMore: Boolean,
+	val isTargetPresent: Boolean
+)
+
+internal sealed interface InitialTargetSearchAction {
+	data object NoOp : InitialTargetSearchAction
+	data object LoadMore : InitialTargetSearchAction
+	data class ReloadWithAnchor(val anchorCommentId: Long) : InitialTargetSearchAction
+}
 
 private data class CommentsVmState(
 	val postId: String = "",
 	val postAuthorId: String = "",
 	val postAuthorName: String = "",
+	val defaultTitle: String = "",
 	val postAuthorAvatarUrl: Uri? = null,
 	val postAuthorUsername: String? = null,
 	val postImageUrls: List<String> = emptyList(),
@@ -68,7 +108,7 @@ private data class CommentsVmState(
 	val scrollToBottomRequestToken: Long = 0L
 ) {
 	fun toUiState(groupedMessages: List<DatedChatMessages>): ChatScreenUiState {
-		val title = postAuthorName.ifBlank { "Комментарии" }
+		val title = postAuthorName.ifBlank { defaultTitle.ifBlank { "Comments" } }
 		return when {
 			isLoading && comments.isEmpty() -> {
 				ChatScreenUiState.Loading(
@@ -123,13 +163,21 @@ private data class CommentsVmState(
 
 class CommentsViewModel(
 	private val commentsRepository: CommentsRepository,
+	private val commentsReadCursorStore: CommentsReadCursorStore,
 	private val authenticationManager: AuthenticationManager,
 	private val logger: Logger
 ) : ViewModel() {
 	private val _state = MutableStateFlow(CommentsVmState())
+	private val _isInitialTargetResolved = MutableStateFlow(true)
+	private var initialTargetSearchState = InitialTargetSearchState()
 	private var pendingDelete: Comment? = null
 	private var pendingDeleteOrder: Long? = null
 	private var pendingDeleteJob: Job? = null
+	private var pendingReadUpToSeq: Long? = null
+	private var lastQueuedReadUpToSeq: Long = 0L
+	private var enqueuePendingReadJob: Job? = null
+	private var initialTargetStartedAtMs: Long? = null
+	private var initialTargetResolutionLogged: Boolean = false
 	private var nextOptimisticCommentIdValue: Long = 0L
 	private var cachedGroupedSelfUserId: String? = null
 	private var cachedGroupedCommentsRef: List<Comment>? = null
@@ -150,6 +198,7 @@ class CommentsViewModel(
 			val groupedMessages = computeGroupedMessages(vmState, selfUserId)
 			vmState.toUiState(groupedMessages)
 		}
+		.flowOn(Dispatchers.Default)
 		.stateIn(
 			viewModelScope,
 			SharingStarted.Eagerly,
@@ -161,6 +210,8 @@ class CommentsViewModel(
 				messageFieldReply = null
 			)
 		)
+
+	val isInitialTargetResolved: StateFlow<Boolean> = _isInitialTargetResolved.asStateFlow()
 
 	private fun computeGroupedMessages(
 		state: CommentsVmState,
@@ -220,13 +271,15 @@ class CommentsViewModel(
 		postImageVariants: List<PostImageVariant>,
 		postDescription: String?,
 		postCreatedAt: Long,
-		postLikesCount: Int
+		postLikesCount: Int,
+		defaultTitle: String
 	) {
 		_state.update {
 			it.copy(
 				postId = postId,
 				postAuthorId = postAuthorId,
 				postAuthorName = postAuthorName,
+				defaultTitle = defaultTitle,
 				postAuthorAvatarUrl = postAuthorAvatarUrl,
 				postAuthorUsername = postAuthorUsername,
 				postImageUrls = postImageUrls,
@@ -253,18 +306,120 @@ class CommentsViewModel(
 		pendingDeleteJob = null
 		pendingDelete = null
 		pendingDeleteOrder = null
+		initialTargetSearchState = InitialTargetSearchState()
+		_isInitialTargetResolved.value = true
+		initialTargetStartedAtMs = null
+		initialTargetResolutionLogged = false
+		pendingReadUpToSeq = null
+		lastQueuedReadUpToSeq = 0L
+		enqueuePendingReadJob?.cancel()
+		enqueuePendingReadJob = null
 		resetGroupedMessagesCache()
+		viewModelScope.launch {
+			lastQueuedReadUpToSeq = commentsReadCursorStore.getLocalLastReadSeq(postId)
+		}
 	}
 
-	fun loadInitial() {
+	fun startInitialLoad(
+		primaryTargetCommentId: CommentId?,
+		fallbackTargetCommentId: CommentId?
+	) {
+		val candidates = buildInitialTargetCandidates(
+			primaryTargetCommentId = primaryTargetCommentId,
+			fallbackTargetCommentId = fallbackTargetCommentId
+		)
+		val initialState = InitialTargetSearchState(
+			candidates = candidates,
+			activeIndex = 0,
+			loadAttempts = 0,
+			isResolved = candidates.isEmpty()
+		)
+		initialTargetSearchState = initialState
+		initialTargetStartedAtMs = if (candidates.isNotEmpty()) System.currentTimeMillis() else null
+		initialTargetResolutionLogged = false
+		_isInitialTargetResolved.value = initialState.isResolved
+		loadInitial(anchorCommentId = initialState.activeTarget?.let(::CommentId))
+	}
+
+	fun onInitialTargetSearchStateChanged(uiState: ChatScreenUiState) {
+		val currentSearchState = initialTargetSearchState
+		if (currentSearchState.isResolved) return
+		val targetCommentIdValue = currentSearchState.activeTarget ?: run {
+			resolveInitialTargetSearch()
+			return
+		}
+		val targetCommentId = CommentId(targetCommentIdValue)
+		val hasDataState = uiState as? ChatScreenUiState.HasData ?: return
+
+		if (tryJumpToCommentId(targetCommentId)) {
+			reportInitialTargetResolution(found = true)
+			resolveInitialTargetSearch()
+			return
+		}
+
+		val snapshot = InitialTargetSearchSnapshot(
+			canLoadMore = hasDataState.canLoadMore,
+			isLoadingMore = hasDataState.isLoadingMore,
+			isTargetPresent = false
+		)
+		val (nextState, action) = advanceInitialTargetSearch(
+			state = currentSearchState,
+			snapshot = snapshot
+		)
+		if (nextState != currentSearchState) {
+			initialTargetSearchState = nextState
+			_isInitialTargetResolved.value = nextState.isResolved
+		}
+		when (action) {
+			InitialTargetSearchAction.NoOp -> Unit
+			InitialTargetSearchAction.LoadMore -> loadMore()
+			is InitialTargetSearchAction.ReloadWithAnchor -> {
+				loadInitial(anchorCommentId = CommentId(action.anchorCommentId))
+			}
+		}
+	}
+
+	fun loadInitial(anchorCommentId: CommentId? = null) {
 		val current = _state.value
 		if (current.postId.isBlank()) return
 		if (current.isLoading) return
+		val anchorWindow = resolveAnchorWindow(anchorCommentId)
 
 		_state.update { it.copy(isLoading = true, isError = false) }
 		viewModelScope.launch {
-			when (val result = commentsRepository.getComments(current.postId, null, COMMENTS_PAGE_SIZE)) {
-				is GetDataResponse.Success -> {
+			when (
+				val result = if (anchorCommentId != null) {
+					val contextResult = commentsRepository.getCommentsContext(
+						postId = current.postId,
+						targetCommentId = anchorCommentId.value,
+						anchorBefore = anchorWindow.before,
+						anchorAfter = anchorWindow.after
+					)
+					if (contextResult is GetDataResponse.Success) {
+						contextResult
+					} else {
+						commentsRepository.getComments(
+							postId = current.postId,
+							cursor = null,
+							limit = COMMENTS_PAGE_SIZE,
+							anchorCommentId = anchorCommentId.value,
+							anchorBefore = anchorWindow.before,
+							anchorAfter = anchorWindow.after
+						)
+					}
+				} else {
+					commentsRepository.getComments(
+						postId = current.postId,
+						cursor = null,
+						limit = COMMENTS_PAGE_SIZE,
+						anchorCommentId = null,
+						anchorBefore = null,
+						anchorAfter = null
+					)
+				}
+			) {
+					is GetDataResponse.Success -> {
+						lastQueuedReadUpToSeq = maxOf(lastQueuedReadUpToSeq, result.data.lastReadSeq)
 					val orderState = createInitialCommentOrder(result.data.items.map { it.id })
 					val orderedComments = sortCommentsByOrder(
 						comments = result.data.items,
@@ -317,18 +472,14 @@ class CommentsViewModel(
 
 		_state.update { it.copy(isLoadingMore = true) }
 		viewModelScope.launch {
-			when (val result = commentsRepository.getComments(current.postId, current.nextCursor, COMMENTS_PAGE_SIZE)) {
-				is GetDataResponse.Success -> {
+				when (val result = commentsRepository.getComments(current.postId, current.nextCursor, COMMENTS_PAGE_SIZE)) {
+					is GetDataResponse.Success -> {
+						lastQueuedReadUpToSeq = maxOf(lastQueuedReadUpToSeq, result.data.lastReadSeq)
 					_state.update { state ->
-						val incomingById = result.data.items.associateBy { it.id }
-						val merged = buildList(state.comments.size + result.data.items.size) {
-							addAll(state.comments.map { existing ->
-								incomingById[existing.id] ?: existing
-							})
-							addAll(result.data.items.filterNot { incoming ->
-								state.comments.any { existing -> existing.id == incoming.id }
-							})
-						}.distinctBy { it.id }
+						val merged = mergeCommentsById(
+							existing = state.comments,
+							incoming = result.data.items
+						)
 
 						val orderState = appendMissingOrderForComments(
 							state = CommentOrderState(
@@ -626,8 +777,30 @@ class CommentsViewModel(
 		}
 	}
 
+	fun tryJumpToCommentId(commentId: CommentId): Boolean {
+		val messageId = _state.value.messageIdByCommentId[commentId.value] ?: return false
+		jumpToComment(messageId)
+		return true
+	}
+
 	fun requestScrollToBottom() {
 		_state.update { it.copy(scrollToBottomRequestToken = System.currentTimeMillis()) }
+	}
+
+	fun onVisibleMessageIdsChanged(visibleMessageIds: Set<Long>) {
+		if (visibleMessageIds.isEmpty()) return
+		val current = _state.value
+		if (current.postId.isBlank()) return
+
+		val readUpToSeq = current.comments
+			.asSequence()
+			.map { comment -> commentToMessageId(comment) to comment.seq }
+			.filter { (messageId, _) -> visibleMessageIds.contains(messageId) }
+			.map { (_, seq) -> seq }
+			.maxOrNull()
+			?: return
+
+		enqueueReadUpToSeq(current.postId, readUpToSeq)
 	}
 
 	fun getAuthorIdByMessageId(messageId: Long): String? {
@@ -643,6 +816,12 @@ class CommentsViewModel(
 			?.takeIf { authorId -> authorId.isNotBlank() && authorId != selfUserId }
 	}
 
+	private fun resolveInitialTargetSearch() {
+		reportInitialTargetResolution(found = false)
+		initialTargetSearchState = initialTargetSearchState.copy(isResolved = true)
+		_isInitialTargetResolved.value = true
+	}
+
 	private fun finalizePendingDelete() {
 		val comment = pendingDelete ?: return
 		pendingDeleteJob?.cancel()
@@ -651,6 +830,38 @@ class CommentsViewModel(
 		pendingDeleteOrder = null
 		viewModelScope.launch {
 			commentsRepository.deleteComment(comment.id)
+		}
+	}
+
+	private fun enqueueReadUpToSeq(postId: String, readUpToSeq: Long) {
+		if (postId.isBlank() || readUpToSeq <= 0L) return
+		if (readUpToSeq <= lastQueuedReadUpToSeq) return
+		pendingReadUpToSeq = maxOf(pendingReadUpToSeq ?: 0L, readUpToSeq)
+		enqueuePendingReadJob?.cancel()
+		enqueuePendingReadJob = viewModelScope.launch {
+			delay(350L)
+			flushPendingReadToQueue(postId)
+		}
+	}
+
+	private suspend fun flushPendingReadToQueue(postId: String) {
+		val seqToFlush = pendingReadUpToSeq ?: return
+		pendingReadUpToSeq = null
+		if (seqToFlush <= lastQueuedReadUpToSeq) return
+		lastQueuedReadUpToSeq = seqToFlush
+		commentsReadCursorStore.enqueueReadUpTo(postId = postId, readUpToSeq = seqToFlush)
+	}
+
+	private fun reportInitialTargetResolution(found: Boolean) {
+		if (initialTargetResolutionLogged) return
+		val startedAt = initialTargetStartedAtMs ?: return
+		initialTargetResolutionLogged = true
+		val latencyMs = (System.currentTimeMillis() - startedAt).coerceAtLeast(0L)
+		if (found) {
+			logger.d("CommentsMetrics.open_to_anchor_ms", latencyMs.toString())
+		} else {
+			logger.d("CommentsMetrics.anchor_miss_rate", "1")
+			logger.d("CommentsMetrics.open_to_anchor_ms", latencyMs.toString())
 		}
 	}
 
@@ -701,6 +912,80 @@ class CommentsViewModel(
 		return nextOptimisticCommentIdValue.toString()
 	}
 
+}
+
+internal fun <T> mergeByStableId(
+	existing: List<T>,
+	incoming: List<T>,
+	idSelector: (T) -> String
+): List<T> {
+	val mergedById = LinkedHashMap<String, T>(existing.size + incoming.size)
+	existing.forEach { item ->
+		mergedById[idSelector(item)] = item
+	}
+	incoming.forEach { item ->
+		mergedById[idSelector(item)] = item
+	}
+	return mergedById.values.toList()
+}
+
+internal fun mergeCommentsById(existing: List<Comment>, incoming: List<Comment>): List<Comment> {
+	return mergeByStableId(existing = existing, incoming = incoming, idSelector = { it.id })
+}
+
+internal fun buildInitialTargetCandidates(
+	primaryTargetCommentId: CommentId?,
+	fallbackTargetCommentId: CommentId?
+): List<Long> {
+	return resolveTargetCandidates(primaryTargetCommentId, fallbackTargetCommentId)
+		.map(CommentId::value)
+}
+
+internal fun advanceInitialTargetSearch(
+	state: InitialTargetSearchState,
+	snapshot: InitialTargetSearchSnapshot
+): Pair<InitialTargetSearchState, InitialTargetSearchAction> {
+	if (state.isResolved) return state to InitialTargetSearchAction.NoOp
+	if (snapshot.isTargetPresent) {
+		return state.copy(isResolved = true) to InitialTargetSearchAction.NoOp
+	}
+
+	if (state.activeTarget == null) {
+		return state.copy(isResolved = true) to InitialTargetSearchAction.NoOp
+	}
+	val canAutoPage = snapshot.canLoadMore && !snapshot.isLoadingMore
+	if (canAutoPage && state.loadAttempts < INITIAL_TARGET_AUTOLOAD_MAX_PAGES) {
+		return state.copy(loadAttempts = state.loadAttempts + 1) to InitialTargetSearchAction.LoadMore
+	}
+
+	if (!snapshot.canLoadMore && state.hasFallback) {
+		val nextIndex = state.activeIndex + 1
+		val nextTarget = state.candidates.getOrNull(nextIndex)
+		if (nextTarget == null) {
+			return state.copy(isResolved = true) to InitialTargetSearchAction.NoOp
+		}
+		return state.copy(
+			activeIndex = nextIndex,
+			loadAttempts = 0,
+			isResolved = false
+		) to InitialTargetSearchAction.ReloadWithAnchor(nextTarget)
+	}
+
+	if (!snapshot.canLoadMore || state.loadAttempts >= INITIAL_TARGET_AUTOLOAD_MAX_PAGES) {
+		return state.copy(isResolved = true) to InitialTargetSearchAction.NoOp
+	}
+
+	return state to InitialTargetSearchAction.NoOp
+}
+
+private fun resolveAnchorWindow(anchorCommentId: CommentId?): AnchorWindowParams {
+	if (anchorCommentId == null) {
+		return AnchorWindowParams(before = null, after = null)
+	}
+	return AnchorWindowParams(
+		before = COMMENTS_ANCHOR_WINDOW_BEFORE,
+		after = COMMENTS_ANCHOR_WINDOW_AFTER
+	)
 }
 
 private fun buildOptimisticComment(
