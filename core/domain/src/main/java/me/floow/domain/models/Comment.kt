@@ -20,9 +20,11 @@ data class CommentReply(
 
 data class Comment(
 	val id: String,
+	val seq: Long = 0L,
 	val postId: String,
 	val author: CommentAuthor,
 	val text: String,
+	val isRead: Boolean = true,
 	val createdAt: Long,
 	val updatedAt: Long,
 	val replyTo: CommentReply? = null
@@ -30,5 +32,9 @@ data class Comment(
 
 data class CommentsPage(
 	val items: List<Comment>,
-	val nextCursor: String? = null
+	val nextCursor: String? = null,
+	val unreadCount: Int = 0,
+	val lastReadSeq: Long = 0L,
+	val firstUnreadSeq: Long? = null,
+	val maxSeq: Long = 0L
 )
