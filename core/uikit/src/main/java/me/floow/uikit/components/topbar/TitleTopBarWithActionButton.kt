@@ -11,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -24,6 +25,7 @@ fun TitleTopBarWithActionButton(
     titleText: String,
     onActionButtonClick: () -> Unit,
     icon: @Composable () -> Unit,
+    titleTextStyle: TextStyle? = null,
     showActionButton: Boolean = true,
     useOutlinedActionButton: Boolean = true,
     wrapActionInIconButton: Boolean = true,
@@ -41,7 +43,7 @@ fun TitleTopBarWithActionButton(
             Text(
                 text = titleText,
                 overflow = TextOverflow.Ellipsis,
-                style = LocalTypography.current.titleLarge,
+                style = titleTextStyle ?: LocalTypography.current.titleLarge,
                 maxLines = 1,
                 modifier = Modifier.weight(1f)
             )
@@ -50,6 +52,7 @@ fun TitleTopBarWithActionButton(
                 if (useOutlinedActionButton) {
                     WideOutlinedIconButton(
                         onClick = onActionButtonClick,
+                        buttonWidth = 60.dp,
                         modifier = Modifier
                     ) {
                         icon()

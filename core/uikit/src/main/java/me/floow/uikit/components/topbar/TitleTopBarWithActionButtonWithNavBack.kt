@@ -71,6 +71,7 @@ fun TitleTopBarWithActionButtonWithNavBack(
                 if (useOutlinedActionButton) {
                     WideOutlinedIconButton(
                         onClick = onActionButtonClick,
+                        buttonWidth = 60.dp,
                         modifier = Modifier
                     ) {
                         icon()

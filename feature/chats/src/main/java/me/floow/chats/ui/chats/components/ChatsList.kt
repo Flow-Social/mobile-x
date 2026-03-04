@@ -24,7 +24,10 @@ internal fun ChatsList(
 			Spacer(Modifier.height(8.dp))
 		}
 
-		items(chats) { chat ->
+		items(
+			items = chats,
+			key = { chat -> chat.id }
+		) { chat ->
 			ChatListItem(
 				chat = chat,
 				onClick = onChatClick,

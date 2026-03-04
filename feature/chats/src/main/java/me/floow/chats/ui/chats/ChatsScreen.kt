@@ -7,8 +7,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import me.floow.chats.ui.chats.states.HasDataState
 import me.floow.chats.uilogic.chats.Chat
 import me.floow.chats.uilogic.chats.ChatsScreenUiState
@@ -27,6 +29,10 @@ internal fun ChatsScreen(
 		topBar = {
 			TitleTopBarWithActionButton(
 				titleText = "Чаты",
+				titleTextStyle = MaterialTheme.typography.titleMedium.copy(
+					fontSize = 18.sp,
+					fontWeight = FontWeight.Medium
+				),
 				onActionButtonClick = onSearchClick,
 				icon = {
 					Icon(

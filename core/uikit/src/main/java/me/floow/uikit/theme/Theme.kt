@@ -108,6 +108,9 @@ private val LightFlowColorScheme = FlowColorScheme(
     statusBarColor = Color.White,
 )
 
+private val UnifiedOutlineLight = Color.Black.copy(alpha = 0.10f)
+private val UnifiedOutlineDark = Color.White.copy(alpha = 0.10f)
+
 private val lightScheme = lightColorScheme(
     primary = primaryLight,
     onPrimary = onPrimaryLight,
@@ -412,7 +415,15 @@ private fun generateColorScheme(
     darkTheme -> darkScheme
 
     else -> lightScheme
-}.let(::overrideColors)
+}.let { overrideColors(it, darkTheme) }
 
-private fun overrideColors(colorScheme: ColorScheme): ColorScheme =
-    colorScheme.copy(outline = colorScheme.outline.copy(alpha = 0.5f))
+private fun overrideColors(
+    colorScheme: ColorScheme,
+    darkTheme: Boolean
+): ColorScheme {
+    val unifiedOutline = if (darkTheme) UnifiedOutlineDark else UnifiedOutlineLight
+    return colorScheme.copy(
+        outline = unifiedOutline,
+        outlineVariant = unifiedOutline
+    )
+}

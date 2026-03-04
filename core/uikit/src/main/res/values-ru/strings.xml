@@ -20,4 +20,19 @@
     <string name="in_reply_to">В ответ</string>
     <string name="message_input_field_placeholder">Сообщение</string>
     <string name="today">Сегодня</string>
+    <string name="chat_delete_message_title">Удалить сообщение?</string>
+    <string name="chat_delete_message_text">Вы уверены, что хотите удалить это сообщение?</string>
+    <string name="chat_delete_message_confirm">Удалить</string>
+    <string name="chat_delete_message_cancel">Отмена</string>
+    <string name="chat_message_deleted">Сообщение удалено</string>
+    <string name="chat_undo_action">Отменить</string>
+    <string name="chat_editing_title">Редактирование</string>
+    <string name="chat_open_thread">Открыть тред</string>
+    <string name="chat_menu_pin">Закрепить</string>
+    <string name="chat_menu_unpin">Открепить</string>
+    <string name="chat_menu_edit">Редактировать</string>
+    <string name="chat_menu_delete">Удалить</string>
+    <string name="chat_pinned">Закреплено</string>
+    <string name="chat_unread_boundary">Непрочитанные</string>
+    <string name="chat_typing">Печатает…</string>
 </resources>

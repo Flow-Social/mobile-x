@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="replies_inbox_title">Ответы</string>
+    <string name="replies_fallback_actor_name">Пользователь</string>
+    <string name="replies_fallback_message_text">Новый ответ</string>
+</resources>

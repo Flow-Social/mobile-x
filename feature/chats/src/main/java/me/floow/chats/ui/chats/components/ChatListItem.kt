@@ -3,6 +3,7 @@ package me.floow.chats.ui.chats.components
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -24,11 +26,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import me.floow.chats.uilogic.chats.Chat
 import me.floow.chats.uilogic.chats.LastSentMessageState
+import me.floow.chats.uilogic.chats.isRepliesInboxChat
 import me.floow.domain.values.ProfileName
 import me.floow.uikit.components.avatar.NetworkAvatar
 import me.floow.uikit.theme.LocalTypography
@@ -53,6 +58,7 @@ internal fun ChatListItem(
 		AvatarBox(
 			name = chat.name.value,
 			avatarUrl = chat.avatarUrl,
+			isRepliesInbox = chat.isRepliesInboxChat(),
 			isOnline = chat.isOnline,
 			modifier = Modifier
 		)
@@ -68,7 +74,10 @@ internal fun ChatListItem(
 			) {
 				Text(
 					text = chat.name.value,
-					style = LocalTypography.current.titleMedium
+					style = LocalTypography.current.titleMedium.copy(
+						fontSize = 18.sp,
+						fontWeight = FontWeight.Medium
+					)
 				)
 
 				if (chat.chatMuted) {
@@ -124,20 +133,16 @@ internal fun ChatListItem(
 
 				Text(
 					text = chat.lastMessageText,
+					modifier = Modifier.weight(1f),
 					style = LocalTypography.current.bodyMedium,
 					maxLines = 1,
 					overflow = TextOverflow.Ellipsis,
 					color = MaterialTheme.colorScheme.secondary
 				)
 
-				Spacer(Modifier.weight(1f))
-
-				if (chat.hasMention) {
-					Icon(
-						painter = painterResource(R.drawable.chat_mention_icon),
-						contentDescription = null,
-						tint = Color.Unspecified
-					)
+				if (chat.unreadCount > 0) {
+					Spacer(Modifier.width(8.dp))
+					UnreadBadge(chat.unreadCount)
 				}
 			}
 		}
@@ -145,15 +150,50 @@ internal fun ChatListItem(
 }
 
 @Composable
-private fun AvatarBox(name: String, avatarUrl: Uri?, isOnline: Boolean, modifier: Modifier.Companion) {
-	Box(modifier = modifier) {
-		NetworkAvatar(
-			name = name,
-			avatarModel = avatarUrl,
-			size = 56.dp,
-			modifier = Modifier,
-			shape = CircleShape
+private fun UnreadBadge(count: Int, modifier: Modifier = Modifier) {
+	val text = if (count > 99) "99+" else count.toString()
+	Box(
+		modifier = modifier
+			.defaultMinSize(minWidth = 18.dp, minHeight = 18.dp)
+			.clip(CircleShape)
+			.background(MaterialTheme.colorScheme.primary)
+			.padding(horizontal = 10.dp, vertical = 4.dp),
+		contentAlignment = Alignment.Center
+	) {
+		Text(
+			text = text,
+			style = LocalTypography.current.labelMedium.copy(fontWeight = FontWeight.Medium),
+			color = MaterialTheme.colorScheme.onPrimary
 		)
+	}
+}
+
+@Composable
+private fun AvatarBox(
+	name: String,
+	avatarUrl: Uri?,
+	isRepliesInbox: Boolean,
+	isOnline: Boolean,
+	modifier: Modifier.Companion
+) {
+	Box(modifier = modifier) {
+		if (isRepliesInbox) {
+			Image(
+				painter = painterResource(R.drawable.replyplz),
+				contentDescription = null,
+				modifier = Modifier
+					.size(52.dp)
+					.clip(CircleShape)
+			)
+		} else {
+			NetworkAvatar(
+				name = name,
+				avatarModel = avatarUrl,
+				size = 52.dp,
+				modifier = Modifier,
+				shape = CircleShape
+			)
+		}
 
 		if (isOnline) {
 			Box(
@@ -184,7 +224,7 @@ private fun ChatListItemPreview() {
 				avatarUrl = null,
 				attachedMediaUrl = null,
 				chatMuted = true,
-				hasMention = false,
+				unreadCount = 3,
 				lastSentMessageState = LastSentMessageState.Read
 			),
 			onClick = {},

@@ -46,7 +46,7 @@ fun generateRandomChats(n: Int): List<Chat> {
 			.minusMinutes(Random.nextLong(0, 60))
 			.minusSeconds(Random.nextLong(0, 60))
 		val isOnline = Random.nextBoolean()
-		val hasMention = Random.nextBoolean()
+		val unreadCount = if (Random.nextBoolean()) Random.nextInt(1, 10) else 0
 		val chatMuted = Random.nextBoolean()
 		val avatarUrl = if (Random.nextBoolean()) Uri.parse("https://example.com/avatar") else null
 		val attachedMediaUrl =
@@ -55,12 +55,12 @@ fun generateRandomChats(n: Int): List<Chat> {
 			if (Random.nextBoolean()) LastSentMessageState.entries.toTypedArray().random() else null
 
 		val chat = Chat(
-			id = Random.nextLong(1L, 100L).toString(),
+			id = "mock_chat_$i",
 			name = profileName,
 			lastMessageText = lastMessageText,
 			lastMessageDateTime = lastMessageDateTime,
 			isOnline = isOnline,
-			hasMention = hasMention,
+			unreadCount = unreadCount,
 			chatMuted = chatMuted,
 			avatarUrl = avatarUrl,
 			attachedMediaUrl = attachedMediaUrl,

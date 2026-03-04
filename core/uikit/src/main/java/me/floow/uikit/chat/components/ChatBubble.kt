@@ -1,5 +1,6 @@
 package me.floow.uikit.chat.components
 
+import android.text.format.DateFormat
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -31,7 +32,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -50,7 +53,8 @@ import me.floow.uikit.R
 import me.floow.uikit.theme.LocalTypography
 import me.floow.uikit.util.ComponentPreviewBox
 import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
+import java.time.ZoneId
+import java.util.Date
 
 data class ChatBubbleColors(
 	val backgroundColor: Color,
@@ -96,10 +100,17 @@ fun ChatBubble(
 	val isOut: Boolean = chatMessage is PrimaryOutMessage || chatMessage is ReplyOutMessage
 	val colors = if (!isOut) ChatBubbleColors.Outlined else ChatBubbleColors.Default
 	val haptic = LocalHapticFeedback.current
+	val context = LocalContext.current
 	val authorLabel = when {
 		chatMessage.authorName?.isNotBlank() == true -> chatMessage.authorName
 		chatMessage.authorUsername?.isNotBlank() == true -> "@${chatMessage.authorUsername}"
 		else -> null
+	}
+	val formattedMessageTime = remember(chatMessage.dateTime, context) {
+		val messageInstant = chatMessage.dateTime
+			.atZone(ZoneId.systemDefault())
+			.toInstant()
+		DateFormat.getTimeFormat(context).format(Date.from(messageInstant))
 	}
 
 	val backgroundColor by animateColorAsState(
@@ -151,7 +162,7 @@ fun ChatBubble(
 						if (chatMessage.isPinned) {
 							Icon(
 								painter = painterResource(R.drawable.notification_bell),
-								contentDescription = "Pinned",
+								contentDescription = stringResource(R.string.chat_pinned),
 								tint = colors.timeColor,
 								modifier = Modifier
 									.height(12.dp)
@@ -159,7 +170,7 @@ fun ChatBubble(
 							)
 						}
 						Text(
-							text = chatMessage.dateTime.format(DateTimeFormatter.ofPattern("hh:mm")),
+							text = formattedMessageTime,
 							color = colors.timeColor,
 							style = LocalTypography.current.labelMedium,
 							textAlign = TextAlign.End,
@@ -175,7 +186,15 @@ fun ChatBubble(
 				) {
 					if (showPinAction) {
 						DropdownMenuItem(
-							text = { Text(if (chatMessage.isPinned) "Unpin" else "Pin") },
+							text = {
+								Text(
+									if (chatMessage.isPinned) {
+										stringResource(R.string.chat_menu_unpin)
+									} else {
+										stringResource(R.string.chat_menu_pin)
+									}
+								)
+							},
 							onClick = {
 								onOptionClick(ChatBubbleOption.Pin, chatMessage)
 								showMenu = false
@@ -184,7 +203,7 @@ fun ChatBubble(
 					}
 					if (isOut) {
 						DropdownMenuItem(
-							text = { Text("Edit") },
+							text = { Text(stringResource(R.string.chat_menu_edit)) },
 							onClick = {
 								onOptionClick(ChatBubbleOption.Edit, chatMessage)
 								showMenu = false
@@ -192,7 +211,7 @@ fun ChatBubble(
 							leadingIcon = { Icon(painterResource(R.drawable.edit_icon), null) }
 						)
 						DropdownMenuItem(
-							text = { Text("Delete") },
+							text = { Text(stringResource(R.string.chat_menu_delete)) },
 							onClick = {
 								onOptionClick(ChatBubbleOption.Delete, chatMessage)
 								showMenu = false
