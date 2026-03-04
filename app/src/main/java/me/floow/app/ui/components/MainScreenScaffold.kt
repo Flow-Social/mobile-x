@@ -21,6 +21,7 @@ fun MainScreenScaffold(
 	modifier: Modifier = Modifier,
 	disableTopInset: Boolean = false,
 	feedUndoEnabled: Boolean = false,
+	chatsUnreadCount: Int = 0,
 	onFeedUndoClick: (() -> Unit)? = null,
 	content: @Composable (PaddingValues) -> Unit
 ) {
@@ -33,6 +34,7 @@ fun MainScreenScaffold(
 				currentDestination = currentDestination,
 				navigationItems = bottomNavigationItems,
 				feedUndoEnabled = feedUndoEnabled,
+				chatsUnreadCount = chatsUnreadCount,
 				onFeedUndoClick = onFeedUndoClick,
 				onClick = {
 					navController.navigate(it) {

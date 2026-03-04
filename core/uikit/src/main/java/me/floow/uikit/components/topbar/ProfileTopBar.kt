@@ -56,6 +56,7 @@ fun ProfileTopBar(
 
             WideOutlinedIconButton(
                 onClick = onEditProfileClick,
+                buttonWidth = 60.dp,
                 modifier = Modifier
             ) {
                 Icon(

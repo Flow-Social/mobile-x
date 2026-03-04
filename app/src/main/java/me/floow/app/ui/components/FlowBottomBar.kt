@@ -1,6 +1,7 @@
 package me.floow.app.ui.components
 
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -9,15 +10,20 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.animation.core.updateTransition
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -27,6 +33,7 @@ import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
 import me.floow.app.R as AppR
 import me.floow.app.navigation.BottomNavigationItem
+import me.floow.app.navigation.ChatsScreen
 import me.floow.app.navigation.FeedScreen
 import me.floow.app.navigation.NavigationRoute
 
@@ -35,10 +42,17 @@ fun FlowBottomBar(
 	currentDestination: NavDestination?,
 	navigationItems: List<BottomNavigationItem>,
 	feedUndoEnabled: Boolean = false,
+	chatsUnreadCount: Int = 0,
 	onFeedUndoClick: (() -> Unit)? = null,
 	onClick: (route: NavigationRoute) -> Unit,
 	modifier: Modifier = Modifier
 ) {
+	val unselectedColor = if (isSystemInDarkTheme()) {
+		Color.White.copy(alpha = 0.5f)
+	} else {
+		Color.Black.copy(alpha = 0.5f)
+	}
+
 	NavigationBar(
 		modifier = modifier,
 		containerColor = NavigationBarDefaults.containerColor,
@@ -48,6 +62,7 @@ fun FlowBottomBar(
 			val selected =
 				currentDestination?.hierarchy?.any { it.hasRoute(item.route::class) } ?: false
 			val isFeedItem = item.route == FeedScreen
+			val isChatsItem = item.route == ChatsScreen
 			val canUseUndo = feedUndoEnabled && onFeedUndoClick != null
 			val useUndoUi = isFeedItem && selected && canUseUndo
 
@@ -60,6 +75,13 @@ fun FlowBottomBar(
 						onClick(item.route)
 					}
 				},
+				colors = NavigationBarItemDefaults.colors(
+					selectedIconColor = MaterialTheme.colorScheme.primary,
+					unselectedIconColor = unselectedColor,
+					selectedTextColor = MaterialTheme.colorScheme.primary,
+					unselectedTextColor = unselectedColor,
+					indicatorColor = Color.Transparent
+				),
 				icon = {
 					if (isFeedItem && selected) {
 						AnimatedFeedIcon(
@@ -67,6 +89,22 @@ fun FlowBottomBar(
 							defaultIconRes = item.drawableIconId,
 							undoIconRes = me.floow.uikit.R.drawable.undo_icon
 						)
+					} else if (isChatsItem && chatsUnreadCount > 0) {
+						BadgedBox(
+							badge = {
+								Badge {
+									Text(
+										text = if (chatsUnreadCount > 99) "99+" else chatsUnreadCount.toString()
+									)
+								}
+							}
+						) {
+							Icon(
+								painter = painterResource(item.drawableIconId),
+								contentDescription = null,
+								modifier = Modifier.size(24.dp)
+							)
+						}
 					} else {
 						Icon(
 							painter = painterResource(item.drawableIconId),

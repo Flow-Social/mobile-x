@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="replies_inbox_title">Replies</string>
+    <string name="replies_fallback_actor_name">User</string>
+    <string name="replies_fallback_message_text">New reply</string>
+</resources>

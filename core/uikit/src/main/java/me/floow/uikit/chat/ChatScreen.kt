@@ -1,5 +1,6 @@
 package me.floow.uikit.chat
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
@@ -26,6 +27,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import me.floow.uikit.chat.components.ChatBubbleOption
@@ -44,7 +50,7 @@ import me.floow.uikit.chat.states.HasDataState
 import me.floow.uikit.chat.states.LoadingState
 import me.floow.uikit.chat.states.NoMessagesState
 import me.floow.uikit.components.avatar.NetworkAvatar
-import me.floow.uikit.theme.ElevanagonShape
+import me.floow.uikit.R
 
 @Composable
 fun ChatScreen(
@@ -52,6 +58,7 @@ fun ChatScreen(
 	onProfileClick: () -> Unit,
 	onTopBarDropdownClick: () -> Unit,
 	onChatBubbleClick: (ChatMessage) -> Unit,
+	onMessageActionClick: ((ChatMessage) -> Unit)? = null,
 	onAvatarClick: (ChatMessage) -> Unit = {},
 	onJumpToMessage: (Long) -> Unit,
 	onReply: (ChatMessage) -> Unit,
@@ -63,8 +70,12 @@ fun ChatScreen(
 	onEmojiPickerClick: () -> Unit,
 	onSendClick: () -> Unit,
 	onRequestScrollToBottom: () -> Unit,
+	onUserStartedScroll: () -> Unit = {},
+	onVisibleMessageIdsChanged: (Set<Long>) -> Unit = {},
+	onFirstVisibleMessageIdChanged: (Long?) -> Unit = {},
 	onLoadMore: () -> Unit = {},
 	onPostImageClick: (PostPreviewMessage, Int) -> Unit = { _, _ -> },
+	suspendInitialPlacement: Boolean = false,
 	onPinMessage: (Long) -> Unit,
 	onUnpinMessage: (Long) -> Unit,
 	onDeleteMessage: (Long) -> Unit,
@@ -74,59 +85,69 @@ fun ChatScreen(
 	state: ChatScreenUiState,
 	modifier: Modifier = Modifier
 ) {
+	val interactionPolicy = config.interactionPolicy
+	val scrollPolicy = config.scrollPolicy
+	val topBarPolicy = config.topBarPolicy
 	val snackbarHostState = remember { SnackbarHostState() }
 	val coroutineScope = rememberCoroutineScope()
 	var messageToDelete by remember { mutableStateOf<ChatMessage?>(null) }
+	val deleteMessageTitle = stringResource(R.string.chat_delete_message_title)
+	val deleteMessageText = stringResource(R.string.chat_delete_message_text)
+	val deleteMessageConfirm = stringResource(R.string.chat_delete_message_confirm)
+	val deleteMessageCancel = stringResource(R.string.chat_delete_message_cancel)
+	val messageDeletedText = stringResource(R.string.chat_message_deleted)
+	val undoActionText = stringResource(R.string.chat_undo_action)
+	val editingTitleText = stringResource(R.string.chat_editing_title)
 
 	if (messageToDelete != null) {
 		AlertDialog(
 			onDismissRequest = { messageToDelete = null },
-			title = { Text("Delete Message?") },
-			text = { Text("Are you sure you want to delete this message?") },
+			title = { Text(deleteMessageTitle) },
+			text = { Text(deleteMessageText) },
 			confirmButton = {
 				Button(
-					onClick = {
-						messageToDelete?.let { msg ->
-							onDeleteMessage(msg.id)
-							coroutineScope.launch {
+						onClick = {
+							messageToDelete?.let { msg ->
+								onDeleteMessage(msg.id)
+								coroutineScope.launch {
 								val result = snackbarHostState.showSnackbar(
-									message = "Message deleted",
-									actionLabel = "Undo",
+									message = messageDeletedText,
+									actionLabel = undoActionText,
 									duration = androidx.compose.material3.SnackbarDuration.Short
 								)
 								if (result == SnackbarResult.ActionPerformed) {
 									onUndoDelete()
 								}
 							}
+							}
+							messageToDelete = null
 						}
-						messageToDelete = null
+					) {
+						Text(deleteMessageConfirm)
 					}
-				) {
-					Text("Delete")
+				},
+				dismissButton = {
+					TextButton(onClick = { messageToDelete = null }) {
+						Text(deleteMessageCancel)
+					}
 				}
-			},
-			dismissButton = {
-				TextButton(onClick = { messageToDelete = null }) {
-					Text("Cancel")
-				}
-			}
-		)
-	}
+			)
+		}
 
 	Scaffold(
 		topBar = {
-			val typingUsers = if (state is ChatScreenUiState.HasData && config.showTypingIndicator) {
+			val typingUsers = if (state is ChatScreenUiState.HasData && interactionPolicy.showTypingIndicator) {
 				state.typingUserNames
 			} else {
 				emptyList()
 			}
-			if (config.topBarMode == ChatTopBarMode.TitleOnly) {
+			if (topBarPolicy.mode == ChatTopBarMode.TitleOnly) {
 				ChatScreenTitleTopBar(
-					title = config.topBarTitle ?: state.chatInterlocutorName,
+					title = topBarPolicy.title ?: state.chatInterlocutorName,
 					onBackClick = onBackClick,
 					onDropdownClick = onTopBarDropdownClick,
-					showDropdown = config.showTopBarDropdown,
-					dividerColor = config.dividerColor,
+					showDropdown = topBarPolicy.showDropdown,
+					dividerColor = topBarPolicy.dividerColor,
 					modifier = Modifier.statusBarsPadding()
 				)
 			} else {
@@ -134,20 +155,30 @@ fun ChatScreen(
 					profileName = state.chatInterlocutorName,
 					isOnline = false,
 					typingUsers = typingUsers,
+					showSubtitle = topBarPolicy.showSubtitle,
 					profileAvatar = { innerModifier ->
-						NetworkAvatar(
-							name = state.chatInterlocutorName,
-							avatarModel = state.chatInterlocutorAvatarUrl,
-							contentDescription = null,
-							size = 50.dp,
-							shape = ElevanagonShape,
-							modifier = innerModifier
-						)
+						if (topBarPolicy.avatarResId != null) {
+							Image(
+								painter = painterResource(topBarPolicy.avatarResId),
+								contentDescription = null,
+								contentScale = ContentScale.Crop,
+								modifier = innerModifier.clip(CircleShape)
+							)
+						} else {
+							NetworkAvatar(
+								name = state.chatInterlocutorName,
+								avatarModel = state.chatInterlocutorAvatarUrl,
+								contentDescription = null,
+								size = 42.dp,
+								shape = CircleShape,
+								modifier = innerModifier
+							)
+						}
 					},
 					onBackClick = onBackClick,
 					onDropdownClick = onTopBarDropdownClick,
 					onProfileClick = onProfileClick,
-					dividerColor = config.dividerColor,
+					dividerColor = topBarPolicy.dividerColor,
 					modifier = Modifier.statusBarsPadding()
 				)
 			}
@@ -155,57 +186,59 @@ fun ChatScreen(
 		snackbarHost = { SnackbarHost(snackbarHostState) },
 		contentWindowInsets = WindowInsets(0.dp),
 		bottomBar = {
-			Column(
-				modifier = Modifier
-					.fillMaxWidth()
-					.background(MaterialTheme.colorScheme.surface)
-					.navigationBarsPadding()
-					.imePadding()
-			) {
-				val isEditMode = state is ChatScreenUiState.HasData && state.messageToEditId != null
-				if (isEditMode) {
-					CurrentReply(
-						userNameToReply = "",
-						replyMessageText = state.messageFieldValue,
-						titleText = "Редактировать",
-						onClose = onCancelEdit,
+			if (interactionPolicy.showInputBar) {
+				Column(
+					modifier = Modifier
+						.fillMaxWidth()
+						.background(MaterialTheme.colorScheme.surface)
+						.navigationBarsPadding()
+						.imePadding()
+				) {
+						val isEditMode = state is ChatScreenUiState.HasData && state.messageToEditId != null
+						if (isEditMode) {
+							CurrentReply(
+								userNameToReply = "",
+								replyMessageText = state.messageFieldValue,
+								titleText = editingTitleText,
+								onClose = onCancelEdit,
+								modifier = Modifier.fillMaxWidth()
+							)
+						} else {
+							state.messageFieldReply?.let { reply ->
+								CurrentReply(
+								userNameToReply = reply.replyAuthorName,
+								replyMessageText = reply.replyMessageText,
+								onClose = onCurrentReplyClose,
+								onClick = onCurrentReplyClick,
+								modifier = Modifier.fillMaxWidth()
+							)
+						}
+					}
+
+					HorizontalDivider(color = config.dividerColor ?: MaterialTheme.colorScheme.outlineVariant)
+
+					MessageInputField(
+						value = state.messageFieldValue,
+						onValueChange = onMessageInputFieldValueChange,
+						onEmojiPickerClick = onEmojiPickerClick,
+						onSendClick = onSendClick,
+						sendButtonActive = state.messageFieldValue.isNotEmpty(),
+						isEditMode = if (state is ChatScreenUiState.HasData) state.messageToEditId != null else false,
+						showEmojiButton = interactionPolicy.showEmojiButton,
+						maxLength = interactionPolicy.maxInputLength,
+						focusRequestKey = if (state is ChatScreenUiState.HasData && state.messageToEditId == null) {
+							state.messageFieldReply?.replyId
+						} else {
+							null
+						},
+						onFocusChanged = { focused ->
+							if (focused && scrollPolicy.scrollToBottomOnInputFocus) {
+								onRequestScrollToBottom()
+							}
+						},
 						modifier = Modifier.fillMaxWidth()
 					)
-				} else {
-					state.messageFieldReply?.let { reply ->
-						CurrentReply(
-							userNameToReply = reply.replyAuthorName,
-							replyMessageText = reply.replyMessageText,
-							onClose = onCurrentReplyClose,
-							onClick = onCurrentReplyClick,
-							modifier = Modifier.fillMaxWidth()
-						)
-					}
 				}
-
-				HorizontalDivider(color = config.dividerColor ?: MaterialTheme.colorScheme.outlineVariant)
-
-				MessageInputField(
-					value = state.messageFieldValue,
-					onValueChange = onMessageInputFieldValueChange,
-					onEmojiPickerClick = onEmojiPickerClick,
-					onSendClick = onSendClick,
-					sendButtonActive = state.messageFieldValue.isNotEmpty(),
-					isEditMode = if (state is ChatScreenUiState.HasData) state.messageToEditId != null else false,
-					showEmojiButton = config.showEmojiButton,
-					maxLength = config.maxInputLength,
-					focusRequestKey = if (state is ChatScreenUiState.HasData && state.messageToEditId == null) {
-						state.messageFieldReply?.replyId
-					} else {
-						null
-					},
-					onFocusChanged = { focused ->
-						if (focused && config.scrollToBottomOnInputFocus) {
-							onRequestScrollToBottom()
-						}
-					},
-					modifier = Modifier.fillMaxWidth()
-				)
 			}
 		},
 		modifier = modifier
@@ -217,7 +250,7 @@ fun ChatScreen(
 				.fillMaxSize()
 				.padding(innerPadding)
 		) {
-			if (config.showPinActions && state is ChatScreenUiState.HasData) {
+			if (interactionPolicy.showPinActions && state is ChatScreenUiState.HasData) {
 				PinnedMessagesBar(
 					pinnedMessages = state.pinnedMessages,
 					onMessageClick = { onJumpToMessage(it.id) },
@@ -244,26 +277,34 @@ fun ChatScreen(
 				}
 
 				is ChatScreenUiState.HasData -> {
-					HasDataState(
-						state = state,
-						onChatBubbleClick = onChatBubbleClick,
-						onAvatarClick = onAvatarClick,
-						onReply = onReply,
-						onReplyClick = onReplyClick,
-						onPostImageClick = onPostImageClick,
-						onOptionClick = { option, message ->
-							when (option) {
-								ChatBubbleOption.Pin -> if (config.showPinActions) {
-									if (message.isPinned) onUnpinMessage(message.id) else onPinMessage(message.id)
+						HasDataState(
+							state = state,
+							onChatBubbleClick = onChatBubbleClick,
+							onMessageActionClick = onMessageActionClick,
+							onAvatarClick = onAvatarClick,
+							onReply = onReply,
+							onReplyClick = onReplyClick,
+							onPostImageClick = onPostImageClick,
+							onRequestScrollToBottom = onRequestScrollToBottom,
+							onUserStartedScroll = onUserStartedScroll,
+							onVisibleMessageIdsChanged = onVisibleMessageIdsChanged,
+							onFirstVisibleMessageIdChanged = onFirstVisibleMessageIdChanged,
+							suspendInitialPlacement = suspendInitialPlacement,
+							onOptionClick = if (interactionPolicy.showMessageOptions) {
+								{ option, message ->
+									when (option) {
+										ChatBubbleOption.Pin -> if (interactionPolicy.showPinActions) {
+											if (message.isPinned) onUnpinMessage(message.id) else onPinMessage(message.id)
+										}
+										ChatBubbleOption.Delete -> messageToDelete = message
+										ChatBubbleOption.Edit -> onEditMessage(message.id, message.messageText)
+									}
 								}
-								ChatBubbleOption.Delete -> messageToDelete = message
-								ChatBubbleOption.Edit -> onEditMessage(message.id, message.messageText)
-							}
-						},
-						onLoadMore = onLoadMore,
-						config = config,
-						modifier = commonModifier
-					)
+							} else null,
+							onLoadMore = onLoadMore,
+							config = config,
+							modifier = commonModifier
+						)
 				}
 			}
 

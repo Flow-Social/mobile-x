@@ -15,7 +15,7 @@ data class Chat(
 	val lastMessageText: String,
 	val lastMessageDateTime: LocalDateTime,
 	val isOnline: Boolean,
-	val hasMention: Boolean,
+	val unreadCount: Int,
 	val chatMuted: Boolean,
 	val avatarUrl: Uri?,
 	val attachedMediaUrl: Uri?,

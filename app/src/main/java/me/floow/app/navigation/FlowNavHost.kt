@@ -61,17 +61,26 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import me.floow.app.deeplink.DeepLinkDispatcher
+import me.floow.app.notifications.NotificationsBadgeViewModel
+import me.floow.app.push.PushTokenSyncScheduler
 import me.floow.app.navigation.bottomNavigationItems
-import me.floow.app.ui.components.FlowBottomBar
 import me.floow.app.ui.components.MainScreenScaffold
 import me.floow.chats.ChatRoute
 import me.floow.chats.ChatRouteInitialData
 import me.floow.chats.ChatsRoute
+import me.floow.chats.RepliesOverlayRoute
+import me.floow.chats.ReplyThreadNavigationTarget
+import me.floow.chats.resolveCommentTargetCandidates
+import me.floow.chats.uilogic.chats.isRepliesInboxChat
+import me.floow.chats.uilogic.replies.RepliesOverlayOpenMode
 import me.floow.chatssearch.ui.SearchUsersRoute
 import me.floow.comments.CommentsRoute
 import me.floow.comments.CommentsRouteInitialData
 import me.floow.domain.auth.AuthenticationManager
+import me.floow.domain.data.GetDataResponse
+import me.floow.domain.data.repos.PostsRepository
 import me.floow.domain.models.PostContent
+import me.floow.domain.models.CommentId
 import me.floow.domain.models.PostImageVariant
 import me.floow.domain.models.previewImageUrls
 import me.floow.domain.models.resolvedImageVariants
@@ -105,6 +114,10 @@ private sealed interface OverlayScreen {
 		val interlocutorName: String,
 		val interlocutorAvatarUri: String?
 	) : OverlayScreen
+	data class OverlayRepliesInbox(
+		val openMode: RepliesOverlayOpenMode = RepliesOverlayOpenMode.FROM_UNREAD,
+		val messageLinkAnchorSeq: Long? = null
+	) : OverlayScreen
 	data class OverlayComments(
 		val postId: String,
 		val postAuthorId: String,
@@ -115,10 +128,11 @@ private sealed interface OverlayScreen {
 		val postImageVariants: List<PostImageVariant>,
 		val postDescription: String?,
 		val postCreatedAt: Long,
-		val postCategory: String,
 		val postLikesCount: Int,
 		val postIsSelf: Boolean,
-		val mediaTransferToken: String? = null
+		val mediaTransferToken: String? = null,
+		val initialTargetCommentId: CommentId? = null,
+		val fallbackTargetCommentId: CommentId? = null
 	) : OverlayScreen
 
 	data class OverlayPostDeepLink(
@@ -191,9 +205,13 @@ fun FlowNavHost(
 	val authenticationManager: AuthenticationManager = koinInject()
 	val deepLinkDispatcher: DeepLinkDispatcher = koinInject()
 	val mediaTransferStore: PostMediaTransferStore = koinInject()
+	val postsRepository: PostsRepository = koinInject()
 	val usernameToIdCache: me.floow.domain.cache.UsernameToIdCache = koinInject()
+	val notificationsBadgeViewModel: NotificationsBadgeViewModel = koinViewModel(key = "notifications-badge-root")
 	val authState by authenticationManager.authenticationStateFlow.collectAsState()
+	val notificationsBadgeState by notificationsBadgeViewModel.state.collectAsState()
 	val isSignedIn = authState.let { authenticationManager.isSignedIn() }
+	val chatsUnreadCount = notificationsBadgeState.unreadCount
 	val navBackStackEntry by navController.currentBackStackEntryAsState()
 	val currentDestination = navBackStackEntry?.destination
 	val isProfileScreen = currentDestination?.hierarchy?.any { destination ->
@@ -214,6 +232,7 @@ fun FlowNavHost(
 	val snackbarScope = rememberCoroutineScope()
 	val previewCacheWindow = remember { ArrayDeque<Pair<String, List<String>>>() }
 	val editedPostOverrides = remember { mutableStateMapOf<String, PostContentOverride>() }
+	val postCacheById = remember { mutableStateMapOf<String, me.floow.domain.models.Post>() }
 
 	val deepLinkIntent by deepLinkDispatcher.intentFlow.collectAsState()
 
@@ -223,6 +242,15 @@ fun FlowNavHost(
 			navController.handleDeepLink(intent)
 		}
 		deepLinkDispatcher.clear()
+	}
+
+	LaunchedEffect(isSignedIn) {
+		if (isSignedIn) {
+			notificationsBadgeViewModel.startPolling()
+			PushTokenSyncScheduler.enqueueNow(context.applicationContext)
+		} else {
+			notificationsBadgeViewModel.stopPolling(resetUnread = true)
+		}
 	}
 
 	fun shareText(text: String) {
@@ -244,6 +272,10 @@ fun FlowNavHost(
 	}
 
 	fun pushOverlay(screen: OverlayScreen) {
+		val topOverlayScreen = overlayStack.lastOrNull()?.screen
+		if (screen is OverlayScreen.OverlayProfile && topOverlayScreen is OverlayScreen.OverlayProfile && topOverlayScreen.userId == screen.userId) {
+			return
+		}
 		overlayIdCounter += 1
 		val newId = overlayIdCounter
 		overlayStack.add(OverlayEntry(id = newId, screen = screen))
@@ -272,7 +304,9 @@ fun FlowNavHost(
 	fun openCommentsOverlay(
 		post: me.floow.domain.models.Post,
 		isSelf: Boolean,
-		sourceSnapshot: PostMediaSourceSnapshot? = null
+		sourceSnapshot: PostMediaSourceSnapshot? = null,
+		initialTargetCommentId: CommentId? = null,
+		fallbackTargetCommentId: CommentId? = null
 	) {
 		post.author.username?.value?.let { username ->
 			if (username.isNotBlank() && post.author.id.isNotBlank()) {
@@ -283,6 +317,9 @@ fun FlowNavHost(
 		val effectiveSourceSnapshot = sourceSnapshot?.takeIf { it.postId == post.id }
 			?: buildPostMediaSnapshot(post = post, owner = PostMediaSourceOwner.FEED)
 		val mediaTransferToken = mediaTransferStore.save(effectiveSourceSnapshot)
+		if (post.id.isNotBlank()) {
+			postCacheById[post.id] = post
+		}
 		pushOverlay(
 			OverlayScreen.OverlayComments(
 				postId = post.id,
@@ -294,12 +331,54 @@ fun FlowNavHost(
 				postImageVariants = post.content.resolvedImageVariants(),
 				postDescription = post.content.description,
 				postCreatedAt = post.createdAt,
-				postCategory = post.category,
-				postLikesCount = post.likesCount,
-				postIsSelf = isSelf,
-				mediaTransferToken = mediaTransferToken
+					postLikesCount = post.likesCount,
+					postIsSelf = isSelf,
+					mediaTransferToken = mediaTransferToken,
+					initialTargetCommentId = initialTargetCommentId,
+					fallbackTargetCommentId = fallbackTargetCommentId
+				)
 			)
-		)
+		}
+
+	fun openReplyThreadFromInbox(target: ReplyThreadNavigationTarget) {
+		val targetCommentIds = target.resolveCommentTargetCandidates()
+		val targetCommentId = targetCommentIds.firstOrNull()
+		val fallbackTargetCommentId = targetCommentIds.getOrNull(1)
+		if (target.postId.isBlank()) {
+			snackbarScope.launch {
+				snackbarHostState.showSnackbar("Не удалось открыть комментарий")
+			}
+			return
+		}
+		postCacheById[target.postId]?.let { cachedPost ->
+			openCommentsOverlay(
+				post = cachedPost,
+				isSelf = cachedPost.author.id == "me",
+				initialTargetCommentId = targetCommentId,
+				fallbackTargetCommentId = fallbackTargetCommentId
+			)
+			return
+		}
+		snackbarScope.launch {
+			when (val postResult = postsRepository.getPostById(target.postId)) {
+				is GetDataResponse.Success -> {
+					val post = postResult.data
+					if (post.id.isNotBlank()) {
+						postCacheById[post.id] = post
+					}
+					openCommentsOverlay(
+						post = post,
+						isSelf = post.author.id == "me",
+						initialTargetCommentId = targetCommentId,
+						fallbackTargetCommentId = fallbackTargetCommentId
+					)
+				}
+
+				is GetDataResponse.Error -> {
+					snackbarHostState.showSnackbar("Не удалось открыть комментарий")
+				}
+			}
+		}
 	}
 
 	fun openPostOverlay(
@@ -453,6 +532,7 @@ fun FlowNavHost(
 		return when (overlay) {
 			is OverlayScreen.OverlayProfile -> "overlay:${entry.id}:profile:${overlay.userId}"
 			is OverlayScreen.OverlayChat -> "overlay:${entry.id}:chat:${overlay.interlocutorId}"
+			is OverlayScreen.OverlayRepliesInbox -> "overlay:${entry.id}:replies-inbox"
 			is OverlayScreen.OverlayComments -> "overlay:${entry.id}:comments:${overlay.postId}"
 			is OverlayScreen.OverlayPostDeepLink -> "overlay:${entry.id}:post-deeplink:${overlay.postId}"
 			is OverlayScreen.OverlaySearchUsers -> "overlay:${entry.id}:search"
@@ -519,7 +599,7 @@ fun FlowNavHost(
 				}
 
 					ProfileRoute(
-						goToProfileEditScreen = { _, _, _, _, _ -> },
+							goToProfileEditScreen = { _, _, _, _, _ -> },
 						goToAddPostScreen = {},
 						onPostClick = { post, sourceSnapshot ->
 							openPostOverlay(post = post, isSelf = false, sourceSnapshot = sourceSnapshot)
@@ -545,11 +625,18 @@ fun FlowNavHost(
 					sharePost = { url ->
 						shareText(url)
 					},
-					onBackClick = onClose,
-					viewModel = profileVm,
-					modifier = Modifier.fillMaxSize()
-				)
-			}
+					onBumpMatchNavigate = { matchedUserId ->
+						pushOverlay(OverlayScreen.OverlayProfile(userId = matchedUserId))
+					},
+						bumpEnabled = me.floow.app.BuildConfig.BUMP_ENABLED,
+						onBackClick = onClose,
+						viewModel = profileVm,
+						bumpViewModel = koinViewModel(
+							key = "overlay-${overlayId}-profile-bump-${overlay.userId}"
+						),
+						modifier = Modifier.fillMaxSize()
+					)
+				}
 
 			is OverlayScreen.OverlaySearchUsers -> {
 				SearchUsersRoute(
@@ -897,21 +984,22 @@ fun FlowNavHost(
 
 			is OverlayScreen.OverlayComments -> {
 				CommentsRoute(
-					initialData = CommentsRouteInitialData(
-						postId = overlay.postId,
-						postAuthorId = overlay.postAuthorId,
-						postAuthorName = overlay.postAuthorName,
-						postAuthorAvatarUrl = overlay.postAuthorAvatarUrl?.let { Uri.parse(it) },
-						postAuthorUsername = overlay.postAuthorUsername,
-						postImageUrls = overlay.postImageUrls,
-						postImageVariants = overlay.postImageVariants,
-						postDescription = overlay.postDescription,
-						postCreatedAt = overlay.postCreatedAt,
-						postCategory = overlay.postCategory,
-						postLikesCount = overlay.postLikesCount,
-						postIsSelf = overlay.postIsSelf,
-						mediaTransferToken = overlay.mediaTransferToken
-					),
+						initialData = CommentsRouteInitialData(
+							postId = overlay.postId,
+							postAuthorId = overlay.postAuthorId,
+							postAuthorName = overlay.postAuthorName,
+							postAuthorAvatarUrl = overlay.postAuthorAvatarUrl?.let { Uri.parse(it) },
+							postAuthorUsername = overlay.postAuthorUsername,
+							postImageUrls = overlay.postImageUrls,
+							postImageVariants = overlay.postImageVariants,
+							postDescription = overlay.postDescription,
+							postCreatedAt = overlay.postCreatedAt,
+							postLikesCount = overlay.postLikesCount,
+							postIsSelf = overlay.postIsSelf,
+							mediaTransferToken = overlay.mediaTransferToken,
+							initialTargetCommentId = overlay.initialTargetCommentId,
+							fallbackTargetCommentId = overlay.fallbackTargetCommentId
+						),
 					onBackClick = onClose,
 					onAuthorClick = { userId ->
 						pushOverlay(OverlayScreen.OverlayProfile(userId = userId))
@@ -933,6 +1021,23 @@ fun FlowNavHost(
 						pushOverlay(OverlayScreen.OverlayProfile(userId = userId))
 					},
 					vm = koinViewModel(key = "overlay-${overlayId}-chat-${overlay.interlocutorId}"),
+					modifier = Modifier.fillMaxSize()
+				)
+			}
+
+			is OverlayScreen.OverlayRepliesInbox -> {
+				RepliesOverlayRoute(
+					onBackClick = onClose,
+					openMode = overlay.openMode,
+					messageLinkAnchorSeq = overlay.messageLinkAnchorSeq,
+					onOpenThreadClick = { target ->
+						openReplyThreadFromInbox(target)
+					},
+					onAllRepliesRead = {},
+					onProfileClick = { userId ->
+						pushOverlay(OverlayScreen.OverlayProfile(userId = userId))
+					},
+					vm = koinViewModel(key = "overlay-${overlayId}-replies-inbox"),
 					modifier = Modifier.fillMaxSize()
 				)
 			}
@@ -1080,7 +1185,8 @@ fun FlowNavHost(
 							navController = navController,
 							modifier = modifier,
 							feedUndoEnabled = feedCanUndo,
-							onFeedUndoClick = { feedViewModel.undoLastSwipe() }
+							onFeedUndoClick = { feedViewModel.undoLastSwipe() },
+							chatsUnreadCount = chatsUnreadCount
 						) { padding ->
 								FeedRoute(
 									onPostCreateClick = {
@@ -1145,7 +1251,8 @@ fun FlowNavHost(
 						deepLinks = listOf(
 							navDeepLink { uriPattern = "$profileDeeplinkUri/{userId}" }
 						)
-					) {
+					) { backStackEntry ->
+						val profileScreenRoute = backStackEntry.toRoute<ProfileScreen>()
 								ProfileRoute(
 							goToProfileEditScreen = { _, _, _, _, _ -> },
 								goToAddPostScreen = {},
@@ -1171,11 +1278,18 @@ fun FlowNavHost(
 							sharePost = { url ->
 								shareText(url)
 							},
-							onBackClick = { navController.popBackStack() },
-							viewModel = koinViewModel(),
-							modifier = Modifier.fillMaxSize()
-						)
-					}
+								onBumpMatchNavigate = { matchedUserId ->
+									pushOverlay(OverlayScreen.OverlayProfile(userId = matchedUserId))
+								},
+								bumpEnabled = me.floow.app.BuildConfig.BUMP_ENABLED,
+								onBackClick = { navController.popBackStack() },
+								viewModel = koinViewModel(),
+								bumpViewModel = koinViewModel(
+									key = "profile-screen-bump-${profileScreenRoute.userId}"
+								),
+								modifier = Modifier.fillMaxSize()
+							)
+						}
 
 					composable<PostDeepLinkScreen>(
 						deepLinks = listOf(
@@ -1327,7 +1441,12 @@ fun FlowNavHost(
 						}
 						val refreshPostsSignal by refreshPostsFlow.collectAsState()
 
-						MainScreenScaffold(navController, modifier = modifier, disableTopInset = true) { padding ->
+						MainScreenScaffold(
+							navController = navController,
+							modifier = modifier,
+							disableTopInset = true,
+							chatsUnreadCount = chatsUnreadCount
+						) { padding ->
 							ProfileRoute(
 								goToProfileEditScreen = { name, username, description, avatarUrl, backgroundUrl ->
 									pushOverlay(OverlayScreen.OverlayEditProfile(
@@ -1363,49 +1482,54 @@ fun FlowNavHost(
 								sharePost = { url ->
 									shareText(url)
 								},
+								onBumpMatchNavigate = { matchedUserId ->
+									pushOverlay(OverlayScreen.OverlayProfile(userId = matchedUserId))
+								},
+								bumpEnabled = me.floow.app.BuildConfig.BUMP_ENABLED,
 								refreshPostsSignal = refreshPostsSignal,
 								consumeRefreshPostsSignal = {
 									selfBackStackEntry?.savedStateHandle?.set("refresh_posts", false)
 								},
 								viewModel = koinViewModel(),
+								bumpViewModel = koinViewModel(key = "self-profile-bump"),
 								modifier = Modifier.fillMaxSize()
 							)
 						}
 					}
 
 					composable<ChatsScreen> {
-						val chatsBackStackEntry by navController.currentBackStackEntryAsState()
-						val chatsDestination = chatsBackStackEntry?.destination
-
-						ChatsRoute(
-							onChatClick = { _ ->
-								// Handled internally by ChatsRoute (Master-Detail)
-							},
-							onSearchClick = {
-								pushOverlay(OverlayScreen.OverlaySearchUsers())
-							},
-							onProfileClick = { userId ->
-								pushOverlay(OverlayScreen.OverlayProfile(userId = userId))
-							},
-							isMockBuild = me.floow.app.BuildConfig.USE_MOCK_DATA,
-							bottomBar = {
-								FlowBottomBar(
-									currentDestination = chatsDestination,
-									navigationItems = bottomNavigationItems,
-									onClick = {
-										navController.navigate(it) {
-											popUpTo(navController.graph.findStartDestination().id) {
-												saveState = true
-											}
-											launchSingleTop = true
-											restoreState = true
-										}
+						MainScreenScaffold(
+							navController = navController,
+							modifier = modifier,
+							chatsUnreadCount = chatsUnreadCount
+						) {
+							ChatsRoute(
+								onSearchClick = {
+									pushOverlay(OverlayScreen.OverlaySearchUsers(source = "chats"))
+								},
+								onChatClick = { chat ->
+									if (chat.isRepliesInboxChat()) {
+										pushOverlay(
+											OverlayScreen.OverlayRepliesInbox(
+												openMode = RepliesOverlayOpenMode.FROM_LAST_SEEN,
+												messageLinkAnchorSeq = null
+											)
+										)
+									} else {
+										pushOverlay(
+											OverlayScreen.OverlayChat(
+												interlocutorId = chat.id,
+												interlocutorName = chat.name.value,
+												interlocutorAvatarUri = chat.avatarUrl?.toString()
+											)
+										)
 									}
+									},
+									isMockBuild = me.floow.app.BuildConfig.USE_MOCK_DATA,
+									vm = koinViewModel(),
+									modifier = Modifier.fillMaxSize()
 								)
-							},
-							vm = koinInject(),
-							modifier = modifier
-						)
+						}
 					}
 
 					composable<ChatScreen> {
