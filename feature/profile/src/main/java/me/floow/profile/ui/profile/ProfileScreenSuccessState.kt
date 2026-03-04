@@ -4,21 +4,30 @@ import android.app.Activity
 import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetScaffold
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberBottomSheetScaffoldState
@@ -47,7 +56,9 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.LocalView
@@ -55,9 +66,14 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.coerceAtLeast
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.font.FontWeight
 import kotlin.math.abs
 import me.floow.domain.models.Post
 import me.floow.profile.ui.profile.segments.buttons.ProfileButtonsSegment
+import me.floow.profile.ui.profile.bump.BumpBleProximityEffect
+import me.floow.profile.ui.profile.bump.BumpDetectorEffect
+import me.floow.profile.uilogic.bump.ProfileBumpMode
+import me.floow.profile.uilogic.bump.ProfileBumpUiState
 import me.floow.profile.ui.profile.segments.content.ProfileContentSegment
 import me.floow.profile.ui.profile.segments.summary.ProfileSummarySegment
 import me.floow.profile.uilogic.profile.ProfileScreenState
@@ -65,6 +81,7 @@ import me.floow.uikit.components.media.transfer.PostMediaSourceSnapshot
 import me.floow.uikit.theme.FlowTheme
 import androidx.compose.material3.SheetValue
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.BorderStroke
 import androidx.core.view.WindowCompat
 
 import androidx.compose.animation.core.animateDpAsState
@@ -88,7 +105,16 @@ fun ProfileScreenSuccessState(
     onProfileEditClick: () -> Unit,
     onAddPostButtonClick: () -> Unit,
     onMessageButtonClick: () -> Unit,
-    onShareButtonClick: () -> Unit,
+    onShareProfileClick: () -> Unit,
+    onOpenBumpSheet: () -> Unit,
+    onHideBumpSheet: () -> Unit,
+    onStartBumpClick: () -> Unit,
+    onCancelBumpClick: () -> Unit,
+    onBumpImpactDetected: (Float) -> Unit,
+    onBumpPeerDetected: (String, Int) -> Unit,
+    bumpUiState: ProfileBumpUiState,
+    bumpMatchSignal: Int,
+    bumpEnabled: Boolean,
     onBackClick: () -> Unit,
     onPostClick: (Post, PostMediaSourceSnapshot?) -> Unit,
     onEditPost: (Post, PostMediaSourceSnapshot?) -> Unit = { _, _ -> },
@@ -100,7 +126,8 @@ fun ProfileScreenSuccessState(
     var postToDelete by remember { mutableStateOf<Post?>(null) }
     var showMenuForPost by remember { mutableStateOf<PostMenuContext?>(null) }
     val postsGridState = rememberLazyGridState()
-    val sheetState = rememberModalBottomSheetState()
+    val postMenuSheetState = rememberModalBottomSheetState()
+    val bumpSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scaffoldState = rememberBottomSheetScaffoldState()
     
     val density = LocalDensity.current
@@ -160,10 +187,20 @@ fun ProfileScreenSuccessState(
         }
     }
 
+    BumpDetectorEffect(
+        enabled = bumpUiState.isSheetVisible && bumpUiState.isDetectorEnabled,
+        onImpactDetected = onBumpImpactDetected,
+    )
+    BumpBleProximityEffect(
+        enabled = bumpUiState.isSheetVisible && bumpUiState.isBleProximityEnabled,
+        advertiseToken = bumpUiState.bleToken,
+        onPeerTokenDetected = onBumpPeerDetected,
+    )
+
     showMenuForPost?.let { menuContext ->
         ModalBottomSheet(
             onDismissRequest = { showMenuForPost = null },
-            sheetState = sheetState
+            sheetState = postMenuSheetState
         ) {
             PostActionsSheetContent(
                 canEdit = state.isSelf,
@@ -182,6 +219,36 @@ fun ProfileScreenSuccessState(
                     onSharePost(menuContext.post)
                     showMenuForPost = null
                 }
+            )
+        }
+    }
+
+    LaunchedEffect(bumpUiState.isSheetVisible, bumpEnabled, bumpUiState.mode) {
+        if (!bumpUiState.isSheetVisible || !bumpEnabled) return@LaunchedEffect
+        if (
+            bumpUiState.mode == ProfileBumpMode.Idle ||
+            bumpUiState.mode == ProfileBumpMode.Timeout ||
+            bumpUiState.mode == ProfileBumpMode.Error
+        ) {
+            onStartBumpClick()
+        }
+    }
+
+    LaunchedEffect(bumpMatchSignal) {
+        if (bumpMatchSignal <= 0 || !bumpUiState.isSheetVisible) return@LaunchedEffect
+        onHideBumpSheet()
+    }
+
+    if (bumpUiState.isSheetVisible) {
+        ModalBottomSheet(
+            onDismissRequest = onCancelBumpClick,
+            sheetState = bumpSheetState,
+        ) {
+            ShareAndBumpSheetContent(
+                bumpEnabled = bumpEnabled,
+                bumpUiState = bumpUiState,
+                onShowQrClick = onShareProfileClick,
+                onShareLinkClick = onShareProfileClick,
             )
         }
     }
@@ -350,7 +417,7 @@ fun ProfileScreenSuccessState(
                             ProfileScreenTopBar(
                                 username = state.shortUsername,
                                 isSelf = state.isSelf,
-                                onShareClick = onShareButtonClick,
+                                onShareClick = onOpenBumpSheet,
                                 onBackClick = onBackClick,
                                 heroBackgroundPainter = heroBackgroundPainter,
                                 heroBoundsInWindow = heroBoundsInWindow,
@@ -378,7 +445,7 @@ fun ProfileScreenSuccessState(
                                     onAddPostButtonClick = onAddPostButtonClick,
                                     onMessageButtonClick = onMessageButtonClick,
                                     onEditButtonClick = onProfileEditClick,
-                                    onShareButtonClick = onShareButtonClick,
+                                    onShareButtonClick = onOpenBumpSheet,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
 
@@ -426,6 +493,138 @@ private fun HapticDragHandle() {
     }
 }
 
+@Composable
+private fun ShareAndBumpSheetContent(
+    bumpEnabled: Boolean,
+    bumpUiState: ProfileBumpUiState,
+    onShowQrClick: () -> Unit,
+    onShareLinkClick: () -> Unit,
+) {
+    val mode = bumpUiState.mode
+    val hasError = !bumpUiState.errorMessage.isNullOrBlank()
+    val helperText = when {
+        !bumpEnabled -> stringResource(me.floow.profile.R.string.bump_feature_disabled)
+        hasError -> bumpUiState.errorMessage
+        mode == ProfileBumpMode.Timeout -> stringResource(me.floow.profile.R.string.bump_status_timeout)
+        else -> null
+    }
+    val colorScheme = MaterialTheme.colorScheme
+    val helperTextColor = when {
+        !bumpEnabled -> colorScheme.onSurfaceVariant
+        hasError -> colorScheme.error
+        mode == ProfileBumpMode.Timeout -> colorScheme.error
+        else -> colorScheme.onSurfaceVariant
+    }
+    val headlineAccent = colorScheme.primary
+    val sheetContainerColor = colorScheme.surfaceContainerLow
+    val qrOutline = colorScheme.outlineVariant
+    val headlineColor = colorScheme.onSurface
+    val primaryActionContainer = colorScheme.onSurface
+    val primaryActionContent = colorScheme.surface
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(sheetContainerColor)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Text(
+            text = stringResource(me.floow.profile.R.string.bump_sheet_headline_line1),
+            style = MaterialTheme.typography.headlineSmall,
+            color = headlineAccent,
+        )
+
+        Text(
+            text = stringResource(me.floow.profile.R.string.bump_sheet_headline_line2),
+            style = MaterialTheme.typography.headlineMedium,
+            color = headlineColor,
+            fontWeight = FontWeight.Bold,
+        )
+
+        if (!helperText.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = helperText,
+                style = MaterialTheme.typography.bodyMedium,
+                color = helperTextColor,
+            )
+        } else {
+            Spacer(modifier = Modifier.height(14.dp))
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(250.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(color = sheetContainerColor),
+            contentAlignment = Alignment.Center,
+        ) {
+            Image(
+                painter = painterResource(id = me.floow.profile.R.drawable.bumpme),
+                contentDescription = "Bump test hero image",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        OutlinedButton(
+            onClick = onShowQrClick,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            border = BorderStroke(1.dp, qrOutline),
+            colors = ButtonDefaults.outlinedButtonColors(
+                containerColor = Color.Transparent,
+                contentColor = headlineAccent,
+            ),
+        ) {
+            Text(
+                text = stringResource(me.floow.profile.R.string.bump_show_qr_action),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(vertical = 10.dp),
+            )
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        Button(
+            onClick = onShareLinkClick,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = primaryActionContainer,
+                contentColor = primaryActionContent,
+            ),
+        ) {
+            Text(
+                text = stringResource(me.floow.profile.R.string.bump_share_link_action),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(vertical = 10.dp),
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+    }
+}
+
+@Composable
+private fun bumpStatusLabel(mode: ProfileBumpMode): String {
+    return when (mode) {
+        ProfileBumpMode.Starting -> stringResource(me.floow.profile.R.string.bump_status_starting)
+        ProfileBumpMode.Listening -> stringResource(me.floow.profile.R.string.bump_status_listening)
+        ProfileBumpMode.Matching -> stringResource(me.floow.profile.R.string.bump_status_matching)
+        ProfileBumpMode.Timeout -> stringResource(me.floow.profile.R.string.bump_status_timeout)
+        ProfileBumpMode.Error -> stringResource(me.floow.profile.R.string.bump_status_error)
+        ProfileBumpMode.Matched -> stringResource(me.floow.profile.R.string.bump_status_matched)
+        ProfileBumpMode.Idle -> ""
+    }
+}
+
 @Preview
 @Composable
 fun ProfileScreenSuccessStatePreview() {
@@ -447,10 +646,19 @@ fun ProfileScreenSuccessStatePreview() {
 						canLoadMorePosts = false,
 						isLoadingMorePosts = false,
 					),
-				onProfileEditClick = {},
-				onAddPostButtonClick = {},
-				onMessageButtonClick = {},
-				onShareButtonClick = {},
+					onProfileEditClick = {},
+					onAddPostButtonClick = {},
+					onMessageButtonClick = {},
+					onShareProfileClick = {},
+	                onOpenBumpSheet = {},
+	                onHideBumpSheet = {},
+					onStartBumpClick = {},
+					onCancelBumpClick = {},
+				onBumpImpactDetected = {},
+				onBumpPeerDetected = { _, _ -> },
+				bumpUiState = ProfileBumpUiState(),
+                bumpMatchSignal = 0,
+				bumpEnabled = true,
 				onBackClick = {},
 				onPostClick = { _, _ -> },
 				modifier = Modifier.fillMaxWidth()
