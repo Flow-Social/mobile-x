@@ -8,11 +8,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.floow.comments.uilogic.CommentsViewModel
+import me.floow.domain.models.CommentId
 import me.floow.domain.models.PostImageVariant
 import me.floow.uikit.chat.ChatScreen
 import me.floow.uikit.chat.model.ChatLayoutMode
@@ -45,10 +46,11 @@ data class CommentsRouteInitialData(
 	val postImageVariants: List<PostImageVariant>,
 	val postDescription: String?,
 	val postCreatedAt: Long,
-	val postCategory: String,
 	val postLikesCount: Int,
 	val postIsSelf: Boolean,
-	val mediaTransferToken: String? = null
+	val mediaTransferToken: String? = null,
+	val initialTargetCommentId: CommentId? = null,
+	val fallbackTargetCommentId: CommentId? = null
 )
 
 @Composable
@@ -60,6 +62,9 @@ fun CommentsRoute(
 	modifier: Modifier = Modifier
 ) {
 	val state by vm.state.collectAsStateWithLifecycle()
+	val isInitialTargetResolved by vm.isInitialTargetResolved.collectAsStateWithLifecycle()
+	val commentsTitle = stringResource(R.string.comments_title)
+	val commentsPhotoSubtitle = stringResource(R.string.comments_photo_subtitle)
 	val viewerState = rememberFullscreenImageViewerState()
 	val mediaTransferStore: PostMediaTransferStore = koinInject()
 	val handoffSnapshot: PostMediaSourceSnapshot? = remember(initialData.mediaTransferToken, initialData.postId) {
@@ -90,37 +95,57 @@ fun CommentsRoute(
 	}
 	var openingPainter by remember(initialData.postId) { mutableStateOf<Painter?>(null) }
 	var openingOrigin by remember(initialData.postId) { mutableStateOf<SharedImageOrigin?>(null) }
-
-	LaunchedEffect(initialData.postId) {
+	LaunchedEffect(
+		initialData.postId,
+		initialData.initialTargetCommentId,
+		initialData.fallbackTargetCommentId,
+		commentsTitle
+	) {
 		vm.setInitialData(
 			postId = initialData.postId,
 			postAuthorId = initialData.postAuthorId,
 			postAuthorName = initialData.postAuthorName,
-				postAuthorAvatarUrl = initialData.postAuthorAvatarUrl,
-				postAuthorUsername = initialData.postAuthorUsername,
-				postImageUrls = initialData.postImageUrls,
-				postImageVariants = initialData.postImageVariants,
-				postDescription = initialData.postDescription,
-				postCreatedAt = initialData.postCreatedAt,
-				postLikesCount = initialData.postLikesCount
+			postAuthorAvatarUrl = initialData.postAuthorAvatarUrl,
+			postAuthorUsername = initialData.postAuthorUsername,
+			postImageUrls = initialData.postImageUrls,
+			postImageVariants = initialData.postImageVariants,
+			postDescription = initialData.postDescription,
+			postCreatedAt = initialData.postCreatedAt,
+			postLikesCount = initialData.postLikesCount,
+			defaultTitle = commentsTitle
 		)
-		vm.loadInitial()
+		vm.startInitialLoad(
+			primaryTargetCommentId = initialData.initialTargetCommentId,
+			fallbackTargetCommentId = initialData.fallbackTargetCommentId
+		)
 	}
 
-	val config = ChatScreenConfig(
-		layoutMode = ChatLayoutMode.OldestAtTop,
-		showTypingIndicator = false,
-		showPinActions = false,
-		showEmojiButton = false,
-		scrollToBottomOnInputFocus = false,
-		liftMessageListWithIme = true,
-		showAuthorHeaderForInMessages = true,
-		maxInputLength = COMMENT_MAX_LENGTH,
-		topBarMode = ChatTopBarMode.TitleOnly,
-		topBarTitle = "Комментарии",
-		showTopBarDropdown = false,
-		dividerColor = Color.Black.copy(alpha = 0.1f)
-	)
+	LaunchedEffect(state) {
+		vm.onInitialTargetSearchStateChanged(state)
+	}
+
+	val config = remember {
+		ChatScreenConfig(
+			layoutMode = ChatLayoutMode.OldestAtTop,
+			showTypingIndicator = false,
+			showPinActions = false,
+			showEmojiButton = false,
+			scrollToBottomOnInputFocus = false,
+			liftMessageListWithIme = true,
+			showAuthorHeaderForInMessages = true,
+			maxInputLength = COMMENT_MAX_LENGTH,
+			animateJumpToHighlightedMessage = false,
+			topBarMode = ChatTopBarMode.TitleOnly,
+			topBarTitle = commentsTitle,
+			showTopBarDropdown = false
+		)
+	}
+	val hasInitialTarget = remember(
+		initialData.initialTargetCommentId,
+		initialData.fallbackTargetCommentId
+	) {
+		initialData.initialTargetCommentId != null || initialData.fallbackTargetCommentId != null
+	}
 
 	ChatScreen(
 		onBackClick = onBackClick,
@@ -166,8 +191,9 @@ fun CommentsRoute(
 			}
 		},
 		onRequestScrollToBottom = vm::requestScrollToBottom,
-		onLoadMore = vm::loadMore,
-		onPostImageClick = { _, index ->
+			onVisibleMessageIdsChanged = vm::onVisibleMessageIdsChanged,
+			onLoadMore = vm::loadMore,
+			onPostImageClick = { _, index ->
 			if (images.isEmpty()) return@ChatScreen
 			if (viewerState.visible) return@ChatScreen
 			val safeIndex = index.coerceIn(0, images.lastIndex)
@@ -194,8 +220,9 @@ fun CommentsRoute(
 				images.size
 			)
 		},
-		onPinMessage = {},
-		onUnpinMessage = {},
+			onPinMessage = {},
+			suspendInitialPlacement = hasInitialTarget && !isInitialTargetResolved,
+			onUnpinMessage = {},
 		onDeleteMessage = vm::deleteComment,
 		onEditMessage = { id, text -> vm.startEditingComment(id, text) },
 		onUndoDelete = vm::undoDelete,
@@ -208,7 +235,7 @@ fun CommentsRoute(
 		model = FullscreenImageViewerModel(
 			images = images,
 			title = initialData.postAuthorName,
-			subtitleProvider = { "Фото" },
+			subtitleProvider = { commentsPhotoSubtitle },
 			openingPainter = if (viewerState.phase == ViewerPhase.Opening) openingPainter else null,
 			originForPage = { page ->
 				val safePage = page.coerceIn(0, images.lastIndex)
