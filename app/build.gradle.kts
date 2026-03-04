@@ -48,6 +48,11 @@ android {
             name = "GOOGLE_CLIENT_ID",
             value = "\"291755427997-hjaabnfaa435ikjlsocejeg5p9elraj8.apps.googleusercontent.com\""
         )
+        buildConfigField(
+            type = "boolean",
+            name = "BUMP_ENABLED",
+            value = "false"
+        )
     }
 
     flavorDimensions += "data"
@@ -61,6 +66,11 @@ android {
 				value = "false",
                 type = "boolean"
 			)
+            buildConfigField(
+                type = "boolean",
+                name = "BUMP_ENABLED",
+                value = "true"
+            )
         }
 
         create("mock") {
@@ -70,6 +80,11 @@ android {
                 name = "USE_MOCK_DATA",
                 value = "true",
                 type = "boolean"
+            )
+            buildConfigField(
+                type = "boolean",
+                name = "BUMP_ENABLED",
+                value = "false"
             )
         }
     }
@@ -133,12 +148,14 @@ dependencies {
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.analytics)
     implementation(libs.firebase.crashlytics)
+    implementation(libs.firebase.messaging)
 
     implementation(libs.core.ktx)
     implementation(libs.lifecycle.runtime.ktx)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.appcompat)
+    implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
 

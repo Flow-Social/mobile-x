@@ -264,6 +264,55 @@ object DatabaseMigrations {
 		}
 	}
 
+	val MIGRATION_12_13 = object : Migration(12, 13) {
+		override fun migrate(database: SupportSQLiteDatabase) {
+			database.execSQL(
+				"""
+				CREATE TABLE IF NOT EXISTS replies_inbox_notifications (
+					seq INTEGER NOT NULL PRIMARY KEY,
+					id TEXT NOT NULL,
+					type TEXT NOT NULL,
+					channel TEXT NOT NULL,
+					actor_id TEXT NOT NULL,
+					actor_username TEXT,
+					actor_name TEXT,
+					actor_avatar_url TEXT,
+					post_id TEXT NOT NULL,
+					comment_id TEXT NOT NULL,
+					thread_id TEXT NOT NULL,
+					reply_to_comment_id TEXT,
+					comment_text TEXT,
+					reply_to_comment_text TEXT,
+					title TEXT NOT NULL,
+					body TEXT NOT NULL,
+					is_read INTEGER NOT NULL,
+					read_at INTEGER,
+					created_at INTEGER NOT NULL,
+					updated_at INTEGER NOT NULL
+				)
+				""".trimIndent()
+			)
+			database.execSQL(
+				"CREATE INDEX IF NOT EXISTS index_replies_inbox_notifications_created_at ON replies_inbox_notifications(created_at)"
+			)
+			database.execSQL(
+				"CREATE INDEX IF NOT EXISTS index_replies_inbox_notifications_is_read_seq ON replies_inbox_notifications(is_read, seq)"
+			)
+			database.execSQL(
+				"""
+				CREATE TABLE IF NOT EXISTS replies_inbox_meta (
+					channel TEXT NOT NULL PRIMARY KEY,
+					last_read_seq INTEGER NOT NULL,
+					unread_count INTEGER NOT NULL,
+					first_unread_seq INTEGER,
+					max_seq INTEGER NOT NULL,
+					updated_at INTEGER NOT NULL
+				)
+				""".trimIndent()
+			)
+		}
+	}
+
 	private fun hasColumn(
 		database: SupportSQLiteDatabase,
 		tableName: String,

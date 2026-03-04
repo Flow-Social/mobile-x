@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicLong
 class MockCommentsRepository : CommentsRepository {
 	private val idCounter = AtomicLong(1L)
 	private val commentsByPostId: MutableMap<String, MutableList<Comment>> = mutableMapOf()
+	private val lastReadSeqByPostId: MutableMap<String, Long> = mutableMapOf()
 
 	init {
 		val author = CommentAuthor(
@@ -31,9 +32,11 @@ class MockCommentsRepository : CommentsRepository {
 		repeat(10) { idx ->
 			initial += Comment(
 				id = idCounter.getAndIncrement().toString(),
+				seq = idCounter.get() - 1L,
 				postId = "post_1",
 				author = author,
 				text = "Комментарий #${idx + 1}",
+				isRead = false,
 				createdAt = now + idx * 1000L,
 				updatedAt = now + idx * 1000L,
 				replyTo = null
@@ -42,24 +45,95 @@ class MockCommentsRepository : CommentsRepository {
 		commentsByPostId["post_1"] = initial
 	}
 
-	override suspend fun getComments(postId: String, cursor: String?, limit: Int): GetDataResponse<CommentsPage> {
+	override suspend fun getComments(
+		postId: String,
+		cursor: String?,
+		limit: Int,
+		anchorCommentId: Long?,
+		anchorBefore: Int?,
+		anchorAfter: Int?
+	): GetDataResponse<CommentsPage> {
 		val all = commentsByPostId[postId]?.sortedBy { it.createdAt }.orEmpty()
-		val startIndex = if (cursor.isNullOrBlank()) {
-			0
-		} else {
-			val (cursorTime, cursorId) = decodeCursor(cursor)
-			all.indexOfFirst { it.createdAt > cursorTime || (it.createdAt == cursorTime && it.id.toLong() > cursorId) }
-		}.coerceAtLeast(0)
-
-		val slice = all.drop(startIndex).take(limit)
-		val nextCursor = if (slice.size == limit) {
-			val last = slice.last()
-			encodeCursor(last.createdAt, last.id.toLong())
-		} else {
-			null
+		val lastReadSeq = lastReadSeqByPostId[postId] ?: 0L
+		val decorated = all.map { comment ->
+			comment.copy(isRead = comment.author.id == "me" || comment.seq <= lastReadSeq)
 		}
 
-		return GetDataResponse.Success(CommentsPage(items = slice, nextCursor = nextCursor))
+		val (slice, nextCursor) = if (anchorCommentId != null) {
+			val targetIndex = decorated.indexOfFirst { it.id.toLongOrNull() == anchorCommentId }
+			if (targetIndex >= 0) {
+				val before = (anchorBefore ?: 20).coerceIn(0, 80)
+				val after = (anchorAfter ?: 40).coerceIn(0, 80)
+				val startIndex = (targetIndex - before).coerceAtLeast(0)
+				val endExclusive = (targetIndex + after + 1).coerceAtMost(decorated.size)
+				val window = decorated.subList(startIndex, endExclusive)
+				val cursorValue = if (endExclusive < decorated.size) {
+					val last = window.last()
+					encodeCursor(last.createdAt, last.id.toLong())
+				} else {
+					null
+				}
+				window to cursorValue
+			} else {
+				val startIndex = if (cursor.isNullOrBlank()) {
+					0
+				} else {
+					val (cursorTime, cursorId) = decodeCursor(cursor)
+					decorated.indexOfFirst { it.createdAt > cursorTime || (it.createdAt == cursorTime && it.id.toLong() > cursorId) }
+				}.coerceAtLeast(0)
+				val page = decorated.drop(startIndex).take(limit)
+				val cursorValue = if (page.size == limit) {
+					val last = page.last()
+					encodeCursor(last.createdAt, last.id.toLong())
+				} else {
+					null
+				}
+				page to cursorValue
+			}
+		} else {
+			val startIndex = if (cursor.isNullOrBlank()) {
+				0
+			} else {
+				val (cursorTime, cursorId) = decodeCursor(cursor)
+				decorated.indexOfFirst { it.createdAt > cursorTime || (it.createdAt == cursorTime && it.id.toLong() > cursorId) }
+			}.coerceAtLeast(0)
+			val page = decorated.drop(startIndex).take(limit)
+			val cursorValue = if (page.size == limit) {
+				val last = page.last()
+				encodeCursor(last.createdAt, last.id.toLong())
+			} else {
+				null
+			}
+			page to cursorValue
+		}
+		val unreadCandidates = decorated.filter { it.author.id != "me" && it.seq > lastReadSeq }
+
+		return GetDataResponse.Success(
+			CommentsPage(
+				items = slice,
+				nextCursor = nextCursor,
+				unreadCount = unreadCandidates.size,
+				lastReadSeq = lastReadSeq,
+				firstUnreadSeq = unreadCandidates.minOfOrNull(Comment::seq),
+				maxSeq = decorated.maxOfOrNull(Comment::seq) ?: 0L
+			)
+		)
+	}
+
+	override suspend fun getCommentsContext(
+		postId: String,
+		targetCommentId: Long,
+		anchorBefore: Int?,
+		anchorAfter: Int?
+	): GetDataResponse<CommentsPage> {
+		return getComments(
+			postId = postId,
+			cursor = null,
+			limit = 120,
+			anchorCommentId = targetCommentId,
+			anchorBefore = anchorBefore,
+			anchorAfter = anchorAfter
+		)
 	}
 
 	override suspend fun createComment(postId: String, text: String, replyToId: Long?): GetDataResponse<Comment> {
@@ -82,11 +156,14 @@ class MockCommentsRepository : CommentsRepository {
 			}
 		}
 
+		val nextId = idCounter.getAndIncrement()
 		val comment = Comment(
-			id = idCounter.getAndIncrement().toString(),
+			id = nextId.toString(),
+			seq = nextId,
 			postId = postId,
 			author = author,
 			text = text,
+			isRead = true,
 			createdAt = now,
 			updatedAt = now,
 			replyTo = reply
@@ -117,6 +194,16 @@ class MockCommentsRepository : CommentsRepository {
 			}
 		}
 		return UpdateDataResponse.Failure()
+	}
+
+	override suspend fun markCommentsReadUpTo(postId: String, readUpToSeq: Long): GetDataResponse<Long> {
+		if (postId.isBlank() || readUpToSeq <= 0L) {
+			return GetDataResponse.Error(error = me.floow.domain.data.GetDataError.Other)
+		}
+		val current = lastReadSeqByPostId[postId] ?: 0L
+		val applied = maxOf(current, readUpToSeq)
+		lastReadSeqByPostId[postId] = applied
+		return GetDataResponse.Success(applied)
 	}
 
 	private fun encodeCursor(createdAt: Long, id: Long): String {
