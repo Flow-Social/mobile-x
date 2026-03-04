@@ -16,6 +16,7 @@ dependencies {
 
     implementation(libs.ktor.core)
     implementation(libs.ktor.cio)
+    implementation(libs.ktor.client.websockets)
     implementation(libs.ktor.client.content.negotiation)
     implementation(libs.ktor.serialization.kotlinx.json)
 

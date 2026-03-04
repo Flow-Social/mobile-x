@@ -6,12 +6,14 @@ import me.floow.database.DatabaseMigrations
 import me.floow.database.localstore.FeedSyncLocalStoreImpl
 import me.floow.database.localstore.PostsLocalStoreImpl
 import me.floow.database.localstore.ProfileLocalStoreImpl
+import me.floow.database.localstore.RepliesInboxLocalStoreImpl
 import me.floow.database.sharedpref.ProfileCacheProviderImpl
 import me.floow.database.sharedpref.UsernameToIdCacheImpl
 import me.floow.database.sharedpref.UserProfileCacheProviderImpl
 import me.floow.domain.cache.FeedSyncLocalStore
 import me.floow.domain.cache.ProfileCacheProvider
 import me.floow.domain.cache.PostsLocalStore
+import me.floow.domain.cache.RepliesInboxLocalStore
 import me.floow.domain.cache.UserProfileCacheProvider
 import me.floow.domain.cache.ProfileLocalStore
 import me.floow.domain.cache.UsernameToIdCache
@@ -19,7 +21,7 @@ import org.koin.dsl.module
 
 val databaseModule = module {
     single<AppDatabase> {
-        Room.databaseBuilder(
+        val builder = Room.databaseBuilder(
             get(),
             AppDatabase::class.java,
             "flowme.db"
@@ -32,15 +34,18 @@ val databaseModule = module {
             DatabaseMigrations.MIGRATION_6_7,
             DatabaseMigrations.MIGRATION_7_8,
             DatabaseMigrations.MIGRATION_8_9,
-			DatabaseMigrations.MIGRATION_9_10,
-			DatabaseMigrations.MIGRATION_10_11,
-			DatabaseMigrations.MIGRATION_11_12
+            DatabaseMigrations.MIGRATION_9_10,
+            DatabaseMigrations.MIGRATION_10_11,
+            DatabaseMigrations.MIGRATION_11_12,
+            DatabaseMigrations.MIGRATION_12_13
         )
-            .build()
+
+        builder.build()
     }
     single { get<AppDatabase>().profileDao() }
     single { get<AppDatabase>().postsDao() }
-	single { get<AppDatabase>().feedSyncCommandsDao() }
+    single { get<AppDatabase>().feedSyncCommandsDao() }
+    single { get<AppDatabase>().repliesInboxDao() }
 
 	single<ProfileCacheProvider> { ProfileCacheProviderImpl(get()) }
 	single<UserProfileCacheProvider> { UserProfileCacheProviderImpl(get()) }
@@ -48,5 +53,6 @@ val databaseModule = module {
 
     single<ProfileLocalStore> { ProfileLocalStoreImpl(get()) }
     single<PostsLocalStore> { PostsLocalStoreImpl(get()) }
-	single<FeedSyncLocalStore> { FeedSyncLocalStoreImpl(get()) }
+    single<FeedSyncLocalStore> { FeedSyncLocalStoreImpl(get()) }
+    single<RepliesInboxLocalStore> { RepliesInboxLocalStoreImpl(get(), get()) }
 }

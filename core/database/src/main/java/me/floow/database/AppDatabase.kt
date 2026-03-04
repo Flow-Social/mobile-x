@@ -6,9 +6,12 @@ import androidx.room.TypeConverters
 import me.floow.database.dao.FeedSyncCommandsDao
 import me.floow.database.dao.PostsDao
 import me.floow.database.dao.ProfileDao
+import me.floow.database.dao.RepliesInboxDao
 import me.floow.database.dbo.FeedSyncCommandEntity
 import me.floow.database.dbo.PostEntity
 import me.floow.database.dbo.ProfileEntity
+import me.floow.database.dbo.RepliesInboxMetaEntity
+import me.floow.database.dbo.RepliesInboxNotificationEntity
 import me.floow.database.dbo.TestDbo
 
 @Database(
@@ -16,13 +19,16 @@ import me.floow.database.dbo.TestDbo
         TestDbo::class,
         ProfileEntity::class,
         PostEntity::class,
-		FeedSyncCommandEntity::class
+		FeedSyncCommandEntity::class,
+		RepliesInboxNotificationEntity::class,
+		RepliesInboxMetaEntity::class
     ],
-    version = 12
+    version = 13
 )
 @TypeConverters(DatabaseConverters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun profileDao(): ProfileDao
     abstract fun postsDao(): PostsDao
 	abstract fun feedSyncCommandsDao(): FeedSyncCommandsDao
+	abstract fun repliesInboxDao(): RepliesInboxDao
 }

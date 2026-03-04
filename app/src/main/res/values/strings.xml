@@ -4,4 +4,7 @@
     <string name="feed_bottom_nav_back_label">Back</string>
     <string name="profile_bottom_nav_label">Profile</string>
     <string name="chats_bottom_nav_label">Chats</string>
+    <string name="notifications_channel_social">Social</string>
+    <string name="notifications_channel_messages">Messages</string>
+    <string name="notifications_channel_system">System</string>
 </resources>
