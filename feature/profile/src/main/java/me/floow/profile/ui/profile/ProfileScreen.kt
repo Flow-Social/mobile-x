@@ -5,6 +5,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import me.floow.profile.uilogic.bump.ProfileBumpUiState
 import me.floow.profile.uilogic.profile.ProfileScreenState
 import me.floow.uikit.components.loading.FlowLoadingIndicator
 import me.floow.uikit.components.media.transfer.PostMediaSourceSnapshot
@@ -14,7 +15,16 @@ fun ProfileScreen(
 	onProfileEditClick: () -> Unit,
     onAddPostButtonClick: () -> Unit,
 	onMessageButtonClick: () -> Unit,
-	onShareButtonClick: () -> Unit,
+	onShareProfileClick: () -> Unit,
+	onOpenBumpSheet: () -> Unit,
+	onHideBumpSheet: () -> Unit,
+	onStartBumpClick: () -> Unit,
+	onCancelBumpClick: () -> Unit,
+	onBumpImpactDetected: (Float) -> Unit,
+	onBumpPeerDetected: (String, Int) -> Unit,
+	bumpUiState: ProfileBumpUiState,
+	bumpMatchSignal: Int,
+	bumpEnabled: Boolean,
     onBackClick: () -> Unit = {},
     onPostClick: (me.floow.domain.models.Post, PostMediaSourceSnapshot?) -> Unit,
     onSharePost: (me.floow.domain.models.Post) -> Unit = {},
@@ -46,9 +56,18 @@ fun ProfileScreen(
 				ProfileScreenSuccessState(
 					state = state,
 					onProfileEditClick = onProfileEditClick,
-					onAddPostButtonClick = onAddPostButtonClick,
-					onMessageButtonClick = onMessageButtonClick,
-					onShareButtonClick = onShareButtonClick,
+						onAddPostButtonClick = onAddPostButtonClick,
+						onMessageButtonClick = onMessageButtonClick,
+						onShareProfileClick = onShareProfileClick,
+						onOpenBumpSheet = onOpenBumpSheet,
+						onHideBumpSheet = onHideBumpSheet,
+						onStartBumpClick = onStartBumpClick,
+						onCancelBumpClick = onCancelBumpClick,
+					onBumpImpactDetected = onBumpImpactDetected,
+					onBumpPeerDetected = onBumpPeerDetected,
+					bumpUiState = bumpUiState,
+					bumpMatchSignal = bumpMatchSignal,
+					bumpEnabled = bumpEnabled,
 	                    onBackClick = onBackClick,
 	                    onPostClick = onPostClick,
 	                onSharePost = onSharePost,

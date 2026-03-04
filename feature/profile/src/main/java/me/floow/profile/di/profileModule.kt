@@ -4,6 +4,7 @@ import me.floow.profile.uilogic.addpost.AddPostViewModel
 import me.floow.profile.uilogic.addpost.EditPostViewModel
 import me.floow.profile.uilogic.addpost.AndroidLocalImageFileReader
 import me.floow.profile.uilogic.addpost.LocalImageFileReader
+import me.floow.profile.uilogic.bump.ProfileBumpViewModel
 import me.floow.profile.uilogic.profile.ProfileScreenViewModel
 import me.floow.profile.uilogic.edit.EditProfileViewModel
 import org.koin.android.ext.koin.androidContext
@@ -14,6 +15,8 @@ val profileModule = module {
 	single<LocalImageFileReader> { AndroidLocalImageFileReader(androidContext()) }
 
 	viewModelOf(::ProfileScreenViewModel)
+
+	viewModelOf(::ProfileBumpViewModel)
 
 	viewModelOf(::EditProfileViewModel)
 

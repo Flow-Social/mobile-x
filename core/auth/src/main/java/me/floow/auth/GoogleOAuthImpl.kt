@@ -1,6 +1,8 @@
 package me.floow.auth
 
+import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import androidx.browser.customtabs.CustomTabsIntent
 import io.ktor.client.*
@@ -72,6 +74,9 @@ class GoogleOAuthImpl(
         }
 
         val customBuilder = builder.build()
+        if (context !is Activity) {
+            customBuilder.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
         customBuilder.launchUrl(context, authUrl)
     }
 

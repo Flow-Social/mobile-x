@@ -50,7 +50,7 @@ internal fun ProfileScreenTopBar(
             ) {
                 Box(
                     modifier = Modifier
-                        .sizeIn(minWidth = 72.dp, minHeight = 56.dp)
+                        .sizeIn(minWidth = 60.dp, minHeight = 56.dp)
                         .clip(RoundedCornerShape(28.dp))
                         .clickable(onClick = onShareClick),
                     contentAlignment = Alignment.Center
@@ -62,7 +62,7 @@ internal fun ProfileScreenTopBar(
                         blurRadius = 2.dp,
                         refractionScale = 1.01f,
                         modifier = Modifier
-                            .width(72.dp)
+                            .width(60.dp)
                             .height(40.dp),
                         onClick = null
                     ) {
