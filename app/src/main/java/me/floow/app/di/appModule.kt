@@ -7,12 +7,22 @@ import me.floow.app.LoggerImpl
 import me.floow.app.di.configs.apiConfig
 import me.floow.app.di.configs.googleOAuthInfoConfig
 import me.floow.app.notifications.CommentsReadCursorStoreImpl
+import me.floow.app.notifications.DirectChatsSyncCoordinator
+import me.floow.app.notifications.DirectMessagesReadCursorStoreImpl
+import me.floow.app.notifications.DirectMessagesOutgoingRetrySchedulerImpl
 import me.floow.app.notifications.NotificationsReadCursorStoreImpl
 import me.floow.app.notifications.NotificationsBadgeViewModel
+import me.floow.app.notifications.ScopedReadCursorStoreImpl
+import me.floow.app.push.ChatNotificationRenderer
+import me.floow.app.push.ChatPushAckSender
+import me.floow.app.push.NotificationPipeline
 import me.floow.auth.models.GoogleOAuthInfo
 import me.floow.domain.app.AppController
 import me.floow.domain.data.repos.CommentsReadCursorStore
+import me.floow.domain.data.repos.DirectMessagesReadCursorStore
+import me.floow.domain.data.repos.DirectMessagesOutgoingRetryScheduler
 import me.floow.domain.data.repos.NotificationsReadCursorStore
+import me.floow.domain.data.repos.ScopedReadCursorStore
 import me.floow.domain.utils.Logger
 import me.floow.uikit.components.media.transfer.InMemoryPostMediaTransferStore
 import me.floow.uikit.components.media.transfer.PostMediaTransferStore
@@ -23,10 +33,17 @@ import org.koin.dsl.module
 val appModule = module {
     single<GoogleOAuthInfo> { googleOAuthInfoConfig }
 	    single<ApiConfig> { apiConfig }
-	    single<Logger> { LoggerImpl() }
-	    single { DeepLinkDispatcher() }
-		single<CommentsReadCursorStore> { CommentsReadCursorStoreImpl(androidContext()) }
-		single<NotificationsReadCursorStore> { NotificationsReadCursorStoreImpl(androidContext()) }
+		single<Logger> { LoggerImpl() }
+		single { DeepLinkDispatcher() }
+		single<ScopedReadCursorStore> { ScopedReadCursorStoreImpl(androidContext()) }
+		single<CommentsReadCursorStore> { CommentsReadCursorStoreImpl(androidContext(), get()) }
+		single<NotificationsReadCursorStore> { NotificationsReadCursorStoreImpl(androidContext(), get()) }
+		single<DirectMessagesReadCursorStore> { DirectMessagesReadCursorStoreImpl(androidContext(), get()) }
+		single<DirectMessagesOutgoingRetryScheduler> { DirectMessagesOutgoingRetrySchedulerImpl(androidContext()) }
+		single { ChatPushAckSender(pushApi = get(), chatsRealtimeApi = get()) }
+		single { ChatNotificationRenderer(context = androidContext()) }
+		single { NotificationPipeline(context = androidContext(), renderer = get(), ackSender = get(), logger = get()) }
+		single { DirectChatsSyncCoordinator(chatsRepository = get(), notificationPipeline = get(), logger = get()) }
 	    single<PostMediaTransferStore> { InMemoryPostMediaTransferStore() }
 		viewModelOf(::NotificationsBadgeViewModel)
 	}
