@@ -26,7 +26,8 @@ class FlowFirebaseMessagingService : FirebaseMessagingService() {
 	private val dedupLock = Any()
 
     override fun onNewToken(token: String) {
-        PushTokenSyncScheduler.enqueueNow(applicationContext)
+		PushTokenStorage.save(applicationContext, token)
+		PushTokenSyncScheduler.enqueueNow(applicationContext)
     }
 
     override fun onMessageReceived(message: RemoteMessage) {

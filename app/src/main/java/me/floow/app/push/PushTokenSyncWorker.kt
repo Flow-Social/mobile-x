@@ -34,6 +34,7 @@ class PushTokenSyncWorker(
             logger.d("PushTokenSyncWorker.doWork", "Failed to resolve FCM token: ${error.message}")
             return Result.retry()
         }
+		PushTokenStorage.save(applicationContext, token)
 
         val locale = resolveLocaleTag(applicationContext.resources.configuration)
         val timezone = runCatching { TimeZone.getDefault().id }.getOrNull()

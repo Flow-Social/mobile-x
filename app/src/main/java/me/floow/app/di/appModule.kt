@@ -40,10 +40,23 @@ val appModule = module {
 		single<NotificationsReadCursorStore> { NotificationsReadCursorStoreImpl(androidContext(), get()) }
 		single<DirectMessagesReadCursorStore> { DirectMessagesReadCursorStoreImpl(androidContext(), get()) }
 		single<DirectMessagesOutgoingRetryScheduler> { DirectMessagesOutgoingRetrySchedulerImpl(androidContext()) }
-		single { ChatPushAckSender(pushApi = get(), chatsRealtimeApi = get()) }
+		single { ChatPushAckSender(context = androidContext(), pushApi = get(), chatsRealtimeApi = get()) }
 		single { ChatNotificationRenderer(context = androidContext()) }
 		single { NotificationPipeline(context = androidContext(), renderer = get(), ackSender = get(), logger = get()) }
-		single { DirectChatsSyncCoordinator(chatsRepository = get(), notificationPipeline = get(), logger = get()) }
+		single {
+		val context = androidContext()
+		DirectChatsSyncCoordinator(
+			chatsRepository = get(),
+			notificationPipeline = get(),
+			logger = get(),
+			currentUserIdProvider = {
+				context.getSharedPreferences("flowme.auth", android.content.Context.MODE_PRIVATE)
+					.getString("authUserId", null)
+					?.trim()
+					?.takeIf(String::isNotEmpty)
+			}
+		)
+	}
 	    single<PostMediaTransferStore> { InMemoryPostMediaTransferStore() }
 		viewModelOf(::NotificationsBadgeViewModel)
 	}
