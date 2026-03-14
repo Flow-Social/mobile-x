@@ -25,7 +25,14 @@ class ChatPushAckSender(
 		} else {
 			request
 		}
-		if (chatsRealtimeApi.sendPushAck(enriched)) return
+		chatsRealtimeApi.sendPushAck(enriched)
+		PushAckScheduler.enqueue(
+			context = context,
+			notificationId = enriched.notificationId,
+			conversationId = enriched.conversationId,
+			messageId = enriched.messageId,
+			deviceToken = deviceToken
+		)
 		withContext(Dispatchers.IO) {
 			when (pushApi.ackPush(enriched)) {
 				is PushAckResponse.Success -> Unit
