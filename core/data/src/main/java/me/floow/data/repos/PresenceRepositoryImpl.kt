@@ -257,18 +257,28 @@ class PresenceRepositoryImpl(
 	}
 
 	private fun computeDesiredTargetsLocked(): Set<String> {
-		return ownerTargets.values
-			.asSequence()
-			.flatten()
-			.take(MAX_PRESENCE_TARGETS)
-			.toSet()
+		// Keep subscription order stable to avoid random evictions when we hit MAX_PRESENCE_TARGETS.
+		// Owners are ordered (linkedMapOf), and each owner's targets are kept as LinkedHashSet.
+		val out = LinkedHashSet<String>(MAX_PRESENCE_TARGETS)
+		for (targets in ownerTargets.values) {
+			for (userId in targets) {
+				out.add(userId)
+				if (out.size >= MAX_PRESENCE_TARGETS) return out
+			}
+		}
+		return out
 	}
 
 	private fun normalizeUserIds(userIds: List<String>): Set<String> {
-		return userIds
-			.map { it.trim() }
-			.filter { it.isNotEmpty() && it.toLongOrNull() != null }
-			.distinct()
-			.toSet()
+		// Use LinkedHashSet to preserve caller order (stable diffs + stable eviction under limit).
+		val out = LinkedHashSet<String>(userIds.size)
+		for (raw in userIds) {
+			val trimmed = raw.trim()
+			if (trimmed.isEmpty()) continue
+			// Backend presence subscribe expects numeric user_ids.
+			if (trimmed.toLongOrNull() == null) continue
+			out.add(trimmed)
+		}
+		return out
 	}
 }
