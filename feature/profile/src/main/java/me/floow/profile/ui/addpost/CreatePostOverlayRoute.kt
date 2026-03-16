@@ -6,8 +6,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import me.floow.profile.uilogic.addpost.AddPostVmState
 import me.floow.profile.uilogic.addpost.AddPostViewModel
 
@@ -23,6 +27,9 @@ fun CreatePostOverlayRoute(
 	val uiState = remember(state, isMockBuild) {
 		state.toCreatePostUiState(allowManualUrls = isMockBuild)
 	}
+	val focusManager = LocalFocusManager.current
+	val keyboardController = LocalSoftwareKeyboardController.current
+	var isClosing by remember { mutableStateOf(false) }
 	val pickImagesLauncher = rememberLauncherForActivityResult(
 		contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = AddPostVmState.MAX_IMAGES)
 	) { uris ->
@@ -31,7 +38,12 @@ fun CreatePostOverlayRoute(
 
 	CreatePostOverlayScreen(
 		uiState = uiState,
-		onCloseClick = onBackClick,
+		onCloseClick = {
+			isClosing = true
+			focusManager.clearFocus(force = true)
+			keyboardController?.hide()
+			onBackClick()
+		},
 		onPickImagesClick = {
 			pickImagesLauncher.launch(
 				PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
@@ -45,9 +57,15 @@ fun CreatePostOverlayRoute(
 		onPublishClick = {
 			viewModel.publish(
 				allowManualUrls = isMockBuild,
-				onSuccess = onPublished
+				onSuccess = {
+					isClosing = true
+					focusManager.clearFocus(force = true)
+					keyboardController?.hide()
+					onPublished()
+				}
 			)
 		},
+		blockAutoFocus = isClosing,
 		modifier = modifier,
 	)
 }

@@ -40,7 +40,7 @@ private val ProfilePostsGridContentPadding = PaddingValues(
 	bottom = 24.dp,
 	start = 12.dp,
 	end = 12.dp,
-	top = 12.dp,
+	top = 0.dp,
 )
 private val ProfilePostsGridItemSpacing = 10.dp
 private val ProfilePostsSkeletonShape = RoundedCornerShape(24.dp)

@@ -77,7 +77,11 @@ internal fun ProfileButtonsSegment(
 			}
 		}
 
-		VerticalDivider(Modifier.height(18.dp))
+		VerticalDivider(
+			modifier = Modifier.height(18.dp),
+			thickness = 2.dp,
+			color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.72f)
+		)
 
 		Column(
 			modifier = Modifier

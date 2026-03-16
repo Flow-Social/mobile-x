@@ -27,6 +27,7 @@ internal fun AvatarUsernameProfileSummaryPage(
 	profileAvatarUri: Uri?,
 	displayName: String?,
 	totalLikesReceived: Int,
+	statusLabel: String?,
 	modifier: Modifier = Modifier
 ) {
 	Column(
@@ -43,7 +44,7 @@ internal fun AvatarUsernameProfileSummaryPage(
             modifier = Modifier
                 .size(150.dp)
                 .clip(NinehedronShape)
-                .border(2.dp, Color.White, NinehedronShape)
+                .border(4.dp, Color.White, NinehedronShape)
         ) {
             InitialAvatar(
                 name = displayName.orEmpty(),
@@ -68,7 +69,7 @@ internal fun AvatarUsernameProfileSummaryPage(
             }
         }
 
-		Spacer(Modifier.height(9.dp))
+			Spacer(Modifier.height(16.dp))
 
         Text(
             text = displayName ?: stringResource(R.string.no_display_name),
@@ -76,7 +77,16 @@ internal fun AvatarUsernameProfileSummaryPage(
             color = Color.White,
         )
 
-		Spacer(Modifier.height(17.dp))
+			if (!statusLabel.isNullOrBlank()) {
+				Spacer(Modifier.height(6.dp))
+				Text(
+					text = statusLabel,
+					style = LocalTypography.current.bodyMedium,
+					color = Color.White.copy(alpha = 0.8f),
+				)
+			}
+
+			Spacer(Modifier.height(24.dp))
 
 		LikesLabel(
 			onClick = {},

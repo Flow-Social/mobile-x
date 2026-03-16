@@ -28,6 +28,7 @@ fun ProfileSummarySegment(
 	displayName: String?,
 	description: String?,
 	totalLikesReceived: Int,
+	statusLabel: String?,
 	modifier: Modifier = Modifier
 ) {
 	val pageCount = 2
@@ -35,10 +36,10 @@ fun ProfileSummarySegment(
 	val pagerZoneKey = remember { "profile_summary_pager_zone" }
 
 	Box(modifier) {
-	HorizontalPager(
+		HorizontalPager(
 			state = pagerState,
 			modifier = Modifier
-				.height(360.dp)
+				.height(390.dp)
 				.testTag("profile_summary_pager")
 				.overlayHorizontalSwipeZone(
 					zoneKey = pagerZoneKey,
@@ -52,6 +53,7 @@ fun ProfileSummarySegment(
 							profileAvatarUri = profileAvatarUri,
 							displayName = displayName,
 							totalLikesReceived = totalLikesReceived,
+							statusLabel = statusLabel,
 							modifier = Modifier.fillMaxSize()
 						)
 					}

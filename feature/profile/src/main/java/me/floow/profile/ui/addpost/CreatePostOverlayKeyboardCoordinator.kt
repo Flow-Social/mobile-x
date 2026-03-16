@@ -27,6 +27,9 @@ internal class CreatePostOverlayKeyboardCoordinator {
 	var isInitialKeyboardOpened by mutableStateOf(false)
 		private set
 
+	var isAutoFocusBlocked by mutableStateOf(false)
+		private set
+
 	private var restoreRequestId by mutableIntStateOf(0)
 
 	fun showDialog() {
@@ -45,6 +48,10 @@ internal class CreatePostOverlayKeyboardCoordinator {
 		isInitialKeyboardOpened = true
 	}
 
+	fun blockAutoFocus() {
+		isAutoFocusBlocked = true
+	}
+
 	internal fun currentRestoreRequestId(): Int = restoreRequestId
 }
 
@@ -53,10 +60,12 @@ internal fun rememberCreatePostOverlayKeyboardCoordinator(
 	focusRequester: FocusRequester,
 	keyboardController: SoftwareKeyboardController?,
 	lifecycleOwner: LifecycleOwner,
+	blockAutoFocus: Boolean,
 ): CreatePostOverlayKeyboardCoordinator {
 	val coordinator = remember { CreatePostOverlayKeyboardCoordinator() }
 
 	fun ensureInputFocus() {
+		if (coordinator.isAutoFocusBlocked) return
 		runCatching { focusRequester.requestFocus() }
 		keyboardController?.show()
 	}
@@ -65,12 +74,24 @@ internal fun rememberCreatePostOverlayKeyboardCoordinator(
 		coordinator.showDialog()
 	}
 
+	LaunchedEffect(blockAutoFocus) {
+		if (blockAutoFocus) {
+			coordinator.blockAutoFocus()
+		}
+	}
+
 	LaunchedEffect(
 		coordinator.dialogVisible,
 		coordinator.isInputLaidOut,
-		coordinator.isInitialKeyboardOpened
+		coordinator.isInitialKeyboardOpened,
+		coordinator.isAutoFocusBlocked
 	) {
-		if (coordinator.dialogVisible && coordinator.isInputLaidOut && !coordinator.isInitialKeyboardOpened) {
+		if (
+			coordinator.dialogVisible &&
+			coordinator.isInputLaidOut &&
+			!coordinator.isInitialKeyboardOpened &&
+			!coordinator.isAutoFocusBlocked
+		) {
 			delay(CreatePostOverlayTokens.initialFocusDelayMs)
 			ensureInputFocus()
 			coordinator.markInitialKeyboardOpened()
@@ -81,13 +102,15 @@ internal fun rememberCreatePostOverlayKeyboardCoordinator(
 		coordinator.currentRestoreRequestId(),
 		coordinator.dialogVisible,
 		coordinator.isInputLaidOut,
-		coordinator.isInitialKeyboardOpened
+		coordinator.isInitialKeyboardOpened,
+		coordinator.isAutoFocusBlocked
 	) {
 		if (
 			coordinator.currentRestoreRequestId() > 0 &&
 			coordinator.dialogVisible &&
 			coordinator.isInputLaidOut &&
-			coordinator.isInitialKeyboardOpened
+			coordinator.isInitialKeyboardOpened &&
+			!coordinator.isAutoFocusBlocked
 		) {
 			ensureInputFocus()
 			delay(CreatePostOverlayTokens.refocusDelayMs)
@@ -99,14 +122,16 @@ internal fun rememberCreatePostOverlayKeyboardCoordinator(
 		lifecycleOwner,
 		coordinator.dialogVisible,
 		coordinator.isInputLaidOut,
-		coordinator.isInitialKeyboardOpened
+		coordinator.isInitialKeyboardOpened,
+		coordinator.isAutoFocusBlocked
 	) {
 		val observer = LifecycleEventObserver { _, event ->
 			if (
 				event == Lifecycle.Event.ON_RESUME &&
 				coordinator.dialogVisible &&
 				coordinator.isInputLaidOut &&
-				coordinator.isInitialKeyboardOpened
+				coordinator.isInitialKeyboardOpened &&
+				!coordinator.isAutoFocusBlocked
 			) {
 				coordinator.requestInputFocusRestore()
 			}

@@ -3,10 +3,13 @@ package me.floow.profile.uilogic.addpost
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.os.Build
 import android.provider.OpenableColumns
+import androidx.exifinterface.media.ExifInterface
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 
 data class LocalImageFile(
@@ -194,9 +197,11 @@ class AndroidLocalImageFileReader(
 		qualityCandidates: IntArray
 	): ByteArray? {
 		val sourceBitmap = BitmapFactory.decodeByteArray(sourceBytes, 0, sourceBytes.size) ?: return null
+		val orientation = readExifOrientation(sourceBytes)
+		val orientedBitmap = normalizeBitmapOrientation(sourceBitmap, orientation)
 		return try {
 			for (maxDimension in maxDimensionCandidates) {
-				val resized = resizeBitmapIfNeeded(sourceBitmap, maxDimension)
+				val resized = resizeBitmapIfNeeded(orientedBitmap, maxDimension)
 				try {
 					for (quality in qualityCandidates) {
 						val encoded = compressToJpeg(resized, quality) ?: continue
@@ -205,13 +210,16 @@ class AndroidLocalImageFileReader(
 						}
 					}
 				} finally {
-					if (resized !== sourceBitmap) {
+					if (resized !== orientedBitmap) {
 						resized.recycle()
 					}
 				}
 			}
 			null
 		} finally {
+			if (orientedBitmap !== sourceBitmap) {
+				orientedBitmap.recycle()
+			}
 			sourceBitmap.recycle()
 		}
 	}
@@ -290,6 +298,58 @@ class AndroidLocalImageFileReader(
 		val compressed = bitmap.compress(Bitmap.CompressFormat.JPEG, quality, output)
 		if (!compressed) return null
 		return output.toByteArray()
+	}
+
+	private fun readExifOrientation(sourceBytes: ByteArray): Int {
+		return runCatching {
+			ExifInterface(ByteArrayInputStream(sourceBytes)).getAttributeInt(
+				ExifInterface.TAG_ORIENTATION,
+				ExifInterface.ORIENTATION_UNDEFINED
+			)
+		}.getOrDefault(ExifInterface.ORIENTATION_UNDEFINED)
+	}
+
+	private fun normalizeBitmapOrientation(source: Bitmap, orientation: Int): Bitmap {
+		if (orientation == ExifInterface.ORIENTATION_UNDEFINED || orientation == ExifInterface.ORIENTATION_NORMAL) {
+			return source
+		}
+
+		val matrix = Matrix()
+		when (orientation) {
+			ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> {
+				matrix.setScale(-1f, 1f)
+				matrix.postTranslate(source.width.toFloat(), 0f)
+			}
+			ExifInterface.ORIENTATION_ROTATE_180 -> {
+				matrix.setRotate(180f)
+				matrix.postTranslate(source.width.toFloat(), source.height.toFloat())
+			}
+			ExifInterface.ORIENTATION_FLIP_VERTICAL -> {
+				matrix.setScale(1f, -1f)
+				matrix.postTranslate(0f, source.height.toFloat())
+			}
+			ExifInterface.ORIENTATION_TRANSPOSE -> {
+				matrix.setRotate(90f)
+				matrix.postScale(-1f, 1f)
+				matrix.postTranslate(source.height.toFloat(), 0f)
+			}
+			ExifInterface.ORIENTATION_ROTATE_90 -> {
+				matrix.setRotate(90f)
+				matrix.postTranslate(source.height.toFloat(), 0f)
+			}
+			ExifInterface.ORIENTATION_TRANSVERSE -> {
+				matrix.setRotate(270f)
+				matrix.postScale(-1f, 1f)
+				matrix.postTranslate(0f, source.width.toFloat())
+			}
+			ExifInterface.ORIENTATION_ROTATE_270 -> {
+				matrix.setRotate(270f)
+				matrix.postTranslate(0f, source.width.toFloat())
+			}
+			else -> return source
+		}
+
+		return Bitmap.createBitmap(source, 0, 0, source.width, source.height, matrix, true)
 	}
 
 	@Suppress("DEPRECATION")

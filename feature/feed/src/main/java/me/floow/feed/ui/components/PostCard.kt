@@ -39,7 +39,9 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -62,6 +64,9 @@ import me.floow.domain.values.ProfileUsername
 import me.floow.domain.values.util.RawValueObjectCreate
 import java.text.SimpleDateFormat
 import java.util.*
+
+private const val SingleImageCardRotation = -5f
+private const val SingleImageAspectRatio = 180f / 240f
 
 @Composable
 internal fun PostCard(
@@ -126,6 +131,7 @@ internal fun PostCard(
 				timestamp = post.createdAt,
 				onProfileTagClick = onProfileTagClick,
 				onPostLinkClick = onPostLinkClick,
+				onCommentsClick = { onCommentsClick(post) },
 				linkColor = post.category.categoryColor()
 			)
 
@@ -231,10 +237,21 @@ private fun ImageGallery(
     val index = LocalSwipeItemIndex.current
     val isTopCard = index == 0
     val attachFadeMs = 36
-    
+
     val expansion = remember { Animatable(0f) }
     val cleanedVariants = imageVariants.take(4)
     if (cleanedVariants.isEmpty()) return
+    if (cleanedVariants.size == 1) {
+        SingleImageGallery(
+            variant = cleanedVariants.first(),
+            onViewClick = onViewClick,
+            onOverlaySourceSnapshot = onOverlaySourceSnapshot,
+            isOverlayActive = isOverlayActive,
+            overlayDetachedCount = overlayDetachedCount,
+            modifier = modifier
+        )
+        return
+    }
 
     val front = cleanedVariants.first()
     var frontPainter by remember(front) { mutableStateOf<androidx.compose.ui.graphics.painter.Painter>(ColorPainter(Color(0xFF1A1A1A))) }
@@ -651,11 +668,132 @@ private fun ImageGallery(
 }
 
 @Composable
+private fun SingleImageGallery(
+    variant: me.floow.domain.models.PostImageVariant,
+    onViewClick: (OverlayLaunchData) -> Unit,
+    onOverlaySourceSnapshot: (OverlayLaunchData) -> Unit,
+    isOverlayActive: Boolean,
+    overlayDetachedCount: Int,
+    modifier: Modifier = Modifier
+) {
+    val haptic = LocalHapticFeedback.current
+    val density = LocalDensity.current
+    val defaultCardWidthPx = with(density) { 220.dp.toPx() }
+    val defaultCardHeightPx = with(density) { 280.dp.toPx() }
+    val frontCardAlpha by animateFloatAsState(
+        targetValue = if (isOverlayActive && overlayDetachedCount >= 1) 0f else 1f,
+        animationSpec = tween(durationMillis = 36),
+        label = "singleFrontCardAlpha"
+    )
+
+    val lastRect = remember { androidx.compose.runtime.mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+    val frontImageRect = remember { androidx.compose.runtime.mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+
+    val frontContent = remember(variant) {
+        movableContentOf {
+            ProgressiveImage(
+                lqUrl = variant.lqUrl,
+                previewUrl = variant.previewUrl,
+                fullUrl = variant.fullUrl,
+                mode = ProgressiveImageMode.LIST,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        }
+    }
+
+    val buildLaunchData = remember(
+        frontImageRect.value,
+        lastRect.value,
+        frontContent,
+        defaultCardWidthPx,
+        defaultCardHeightPx
+    ) {
+        {
+            val frontRect = frontImageRect.value
+            val fallbackCenter = lastRect.value?.center
+            val pose = if (frontRect != null) {
+                CardPose(
+                    centerX = frontRect.center.x,
+                    centerY = frontRect.center.y,
+                    width = frontRect.width,
+                    height = frontRect.height,
+                    rotation = SingleImageCardRotation
+                )
+            } else {
+                fallbackCenter?.let { center ->
+                    CardPose(
+                        centerX = center.x,
+                        centerY = center.y,
+                        width = defaultCardWidthPx,
+                        height = defaultCardHeightPx,
+                        rotation = SingleImageCardRotation
+                    )
+                }
+            }
+            OverlayLaunchData(
+                buttonRect = frontRect ?: lastRect.value,
+                cardRects = listOf(frontRect),
+                cardPoses = listOf(pose),
+                cardContents = listOf(frontContent)
+            )
+        }
+    }
+
+    LaunchedEffect(isOverlayActive, frontImageRect.value) {
+        if (isOverlayActive) {
+            onOverlaySourceSnapshot(buildLaunchData())
+        }
+    }
+
+    val openOverlay: () -> Unit = {
+        if (!isOverlayActive) {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            onViewClick(buildLaunchData())
+        }
+    }
+
+    BoxWithConstraints(
+        modifier = modifier
+            .onGloballyPositioned { coords ->
+                lastRect.value = coords.boundsInWindow()
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        val widthByDesign = maxWidth * 0.60f
+        val widthByHeight = maxHeight * SingleImageAspectRatio
+        val cardWidth = widthByDesign.coerceAtMost(widthByHeight)
+
+        Box(
+            modifier = Modifier
+                .width(cardWidth)
+                .aspectRatio(SingleImageAspectRatio)
+                .graphicsLayer {
+                    rotationZ = SingleImageCardRotation
+                    alpha = frontCardAlpha
+                }
+                .clickable(
+                    enabled = !isOverlayActive,
+                    onClick = openOverlay
+                )
+                .onGloballyPositioned { coords ->
+                    frontImageRect.value = coords.boundsInWindow()
+                }
+                .clip(RoundedCornerShape(18.dp))
+        ) {
+            frontContent()
+        }
+    }
+}
+
+@Composable
 private fun TextContent(
 	description: String?,
 	timestamp: Long,
 	onProfileTagClick: (String) -> Unit,
 	onPostLinkClick: (String, String) -> Unit,
+	onCommentsClick: () -> Unit,
 	linkColor: Color,
 	modifier: Modifier = Modifier
 ) {
@@ -688,17 +826,75 @@ private fun TextContent(
 					horizontalArrangement = Arrangement.SpaceBetween,
 					verticalAlignment = Alignment.Bottom
 				) {
-					LinkifiedText(
-						text = body,
-						style = MaterialTheme.typography.bodyMedium.copy(
-							fontSize = 14.sp,
+					BoxWithConstraints(modifier = Modifier.weight(1f)) {
+						val maxLines = 8
+						val readMoreText = "читать дальше"
+						val textMeasurer = rememberTextMeasurer()
+						val density = LocalDensity.current
+						val bodyStyle = MaterialTheme.typography.bodyMedium.copy(
+							fontSize = 16.sp,
 							color = MaterialTheme.colorScheme.onSurface
-						),
-						linkColor = linkColor,
-						modifier = Modifier.weight(1f),
-						onProfileTagClick = onProfileTagClick,
-						onPostLinkClick = onPostLinkClick
-					)
+						)
+						val maxWidthPx = with(density) { maxWidth.roundToPx() }.coerceAtLeast(0)
+
+						val trimResult = remember(body, maxWidthPx, bodyStyle) {
+							if (maxWidthPx == 0) {
+								TrimResult(body = body, isTruncated = false)
+							} else {
+								val fullLayout = textMeasurer.measure(
+									text = body,
+									style = bodyStyle,
+									maxLines = maxLines,
+									overflow = TextOverflow.Ellipsis,
+									constraints = Constraints(maxWidth = maxWidthPx)
+								)
+								if (!fullLayout.hasVisualOverflow) {
+									TrimResult(body = body, isTruncated = false)
+								} else {
+									val suffix = "… $readMoreText"
+									var cutIndex = fullLayout.getLineEnd(maxLines - 1, visibleEnd = true)
+									var candidate = body.take(cutIndex).trimEnd()
+									while (candidate.isNotEmpty()) {
+										val layout = textMeasurer.measure(
+											text = candidate + suffix,
+											style = bodyStyle,
+											maxLines = maxLines,
+											overflow = TextOverflow.Clip,
+											constraints = Constraints(maxWidth = maxWidthPx)
+										)
+										if (!layout.hasVisualOverflow) break
+										cutIndex -= 1
+										candidate = body.take(cutIndex.coerceAtLeast(0)).trimEnd()
+									}
+									TrimResult(body = candidate, isTruncated = true)
+								}
+							}
+						}
+
+						val displayBody = if (trimResult.isTruncated) {
+							"${trimResult.body}… "
+						} else {
+							trimResult.body
+						}
+
+						LinkifiedText(
+							text = displayBody,
+							style = bodyStyle,
+							linkColor = linkColor,
+							trailingText = if (trimResult.isTruncated) readMoreText else null,
+							trailingStyle = MaterialTheme.typography.bodyMedium.copy(
+								fontSize = 16.sp,
+								color = linkColor,
+								fontWeight = FontWeight.SemiBold
+							),
+							maxLines = maxLines,
+							overflow = TextOverflow.Clip,
+							onProfileTagClick = onProfileTagClick,
+							onPostLinkClick = onPostLinkClick,
+							onTrailingClick = if (trimResult.isTruncated) onCommentsClick else null,
+							onTextClick = if (trimResult.isTruncated) onCommentsClick else null
+						)
+					}
 					
 					// Время справа внизу
 					Text(
@@ -726,7 +922,7 @@ private fun PostFooter(
 
 	Column(modifier = modifier.fillMaxWidth()) {
 		HorizontalDivider(
-			color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+			color = MaterialTheme.colorScheme.outlineVariant,
 			thickness = 1.dp
 		)
 		
@@ -778,6 +974,11 @@ private fun extractTitleAndBody(description: String): Pair<String, String> {
 	val body = words.drop(3).joinToString(" ")
 	return title to body
 }
+
+private data class TrimResult(
+	val body: String,
+	val isTruncated: Boolean
+)
 
 private fun formatTime(timestamp: Long): String {
 	val formatter = SimpleDateFormat("HH:mm", Locale.getDefault())

@@ -18,8 +18,10 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.font.FontWeight
 private const val TAG_PROFILE = "profile"
 private const val TAG_POST = "post"
+private const val TAG_TRAILING = "trailing"
 private const val BASE_URL = "https://flow-social.github.io"
 
 private data class LinkMatch(
@@ -35,13 +37,18 @@ fun LinkifiedText(
     modifier: Modifier = Modifier,
     style: TextStyle = MaterialTheme.typography.bodyMedium,
     linkColor: Color = MaterialTheme.colorScheme.primary,
+    trailingText: String? = null,
+    trailingStyle: TextStyle = style.copy(color = linkColor, fontWeight = FontWeight.SemiBold),
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip,
     onProfileTagClick: (String) -> Unit = {},
-    onPostLinkClick: (String, String) -> Unit = { _, _ -> }
+    onPostLinkClick: (String, String) -> Unit = { _, _ -> },
+    onTrailingClick: (() -> Unit)? = null,
+    onTextClick: (() -> Unit)? = null,
+    onTextLayout: (TextLayoutResult) -> Unit = {}
 ) {
-    val annotated = remember(text, linkColor) {
-        buildAnnotatedText(text, linkColor)
+    val annotated = remember(text, linkColor, trailingText, trailingStyle) {
+        buildAnnotatedText(text, linkColor, trailingText, trailingStyle)
     }
     var textLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
 
@@ -61,19 +68,35 @@ fun LinkifiedText(
 
                 annotated.getStringAnnotations(TAG_PROFILE, offset, offset).firstOrNull()?.let { ann ->
                     onProfileTagClick(ann.item)
+                    return@detectTapGestures
                 }
+
+                annotated.getStringAnnotations(TAG_TRAILING, offset, offset).firstOrNull()?.let {
+                    onTrailingClick?.invoke()
+                    return@detectTapGestures
+                }
+
+                onTextClick?.invoke()
             }
         },
         style = style,
         maxLines = maxLines,
         overflow = overflow,
-        onTextLayout = { textLayout = it }
+        onTextLayout = {
+            textLayout = it
+            onTextLayout(it)
+        }
     )
 }
 
-private fun buildAnnotatedText(text: String, linkColor: Color): AnnotatedString {
+private fun buildAnnotatedText(
+    text: String,
+    linkColor: Color,
+    trailingText: String?,
+    trailingStyle: TextStyle
+): AnnotatedString {
     val links = findLinks(text)
-    if (links.isEmpty()) return AnnotatedString(text)
+    if (links.isEmpty() && trailingText.isNullOrEmpty()) return AnnotatedString(text)
 
     return buildAnnotatedString {
         var cursor = 0
@@ -95,6 +118,17 @@ private fun buildAnnotatedText(text: String, linkColor: Color): AnnotatedString 
         }
         if (cursor < text.length) {
             append(text.substring(cursor))
+        }
+        if (!trailingText.isNullOrEmpty()) {
+            withStyle(trailingStyle.toSpanStyle()) {
+                append(trailingText)
+            }
+            addStringAnnotation(
+                tag = TAG_TRAILING,
+                annotation = trailingText,
+                start = length - trailingText.length,
+                end = length
+            )
         }
     }
 }

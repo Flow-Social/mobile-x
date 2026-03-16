@@ -104,6 +104,7 @@ internal fun CreatePostOverlayScreen(
 	onImageCardClick: ((String) -> Unit)? = null,
 	showCategorySelector: Boolean = true,
 	allowAddImageCard: Boolean = true,
+	blockAutoFocus: Boolean = false,
 	modifier: Modifier = Modifier,
 ) {
 	val mediaListState = rememberLazyListState()
@@ -121,6 +122,7 @@ internal fun CreatePostOverlayScreen(
 		focusRequester = focusRequester,
 		keyboardController = keyboardController,
 		lifecycleOwner = lifecycleOwner,
+		blockAutoFocus = blockAutoFocus,
 	)
 	val imeBottomPadding = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
 	val statusTopPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()

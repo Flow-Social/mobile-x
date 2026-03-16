@@ -39,6 +39,7 @@ dependencies {
 	implementation(libs.activity.compose)
 	implementation(libs.lifecycle.runtime.compose)
 	implementation(libs.reorderable)
+	implementation(libs.androidx.exifinterface)
 
 	api(platform(libs.koin.bom))
 	api(libs.koin.core)

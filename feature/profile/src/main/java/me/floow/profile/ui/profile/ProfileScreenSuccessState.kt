@@ -1,6 +1,5 @@
 package me.floow.profile.ui.profile
 
-import android.app.Activity
 import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -36,11 +35,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -49,7 +48,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInWindow
@@ -61,7 +60,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.platform.LocalInspectionMode
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.coerceAtLeast
@@ -77,12 +75,12 @@ import me.floow.profile.uilogic.bump.ProfileBumpUiState
 import me.floow.profile.ui.profile.segments.content.ProfileContentSegment
 import me.floow.profile.ui.profile.segments.summary.ProfileSummarySegment
 import me.floow.profile.uilogic.profile.ProfileScreenState
+import me.floow.domain.utils.toLocalDateTimeFromEpochMillis
 import me.floow.uikit.components.media.transfer.PostMediaSourceSnapshot
 import me.floow.uikit.theme.FlowTheme
+import me.floow.uikit.theme.LocalSystemBarStyle
 import androidx.compose.material3.SheetValue
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.BorderStroke
-import androidx.core.view.WindowCompat
 
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
@@ -92,6 +90,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import me.floow.uikit.components.misc.PostActionsSheetContent
 import me.floow.uikit.components.media.ProgressiveImage
 import me.floow.uikit.components.media.ProgressiveImageMode
+import java.time.format.DateTimeFormatter
 
 private data class PostMenuContext(
 	val post: Post,
@@ -132,9 +131,9 @@ fun ProfileScreenSuccessState(
     
     val density = LocalDensity.current
     var contentHeight by remember { mutableStateOf(0.dp) }
-    val heroHeight = 540.dp
+    val heroHeight = 580.dp
     val isSheetExpanded by remember {
-        derivedStateOf { scaffoldState.bottomSheetState.targetValue == SheetValue.Expanded }
+        derivedStateOf { scaffoldState.bottomSheetState.currentValue == SheetValue.Expanded }
     }
     val isPostsGridAtTop by remember {
         derivedStateOf {
@@ -142,27 +141,33 @@ fun ProfileScreenSuccessState(
                 postsGridState.firstVisibleItemScrollOffset == 0
         }
     }
-    val isLightTheme = !isSystemInDarkTheme()
-    val isLightThemeState = rememberUpdatedState(isLightTheme)
     val sheetCornerRadius by animateDpAsState(
         targetValue = if (isSheetExpanded) 0.dp else 24.dp,
         animationSpec = tween(durationMillis = 220),
         label = "sheetCornerRadius"
     )
     val statusBarColor = if (isSheetExpanded) {
-        MaterialTheme.colorScheme.surface
+        MaterialTheme.colorScheme.surfaceContainerHigh
     } else {
-        Color.Transparent
+        MaterialTheme.colorScheme.background
     }
+    val useDarkStatusIcons = statusBarColor.luminance() > 0.5f
+    val systemBarStyle = LocalSystemBarStyle.current
     val haptic = LocalHapticFeedback.current
-    val view = LocalView.current
-    val hostActivity = view.context as? Activity
     var heroBoundsInWindow by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
-    LaunchedEffect(hostActivity, isSheetExpanded, isLightTheme, statusBarColor) {
-        val window = hostActivity?.window ?: return@LaunchedEffect
-        val darkIcons = isLightTheme && isSheetExpanded
-        WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = darkIcons
-        window.statusBarColor = statusBarColor.toArgb()
+    SideEffect {
+        systemBarStyle.value = systemBarStyle.value.copy(
+            statusBarColor = statusBarColor,
+            useDarkStatusBarIcons = useDarkStatusIcons
+        )
+    }
+    DisposableEffect(systemBarStyle) {
+        onDispose {
+            systemBarStyle.value = systemBarStyle.value.copy(
+                statusBarColor = null,
+                useDarkStatusBarIcons = null
+            )
+        }
     }
     LaunchedEffect(scaffoldState.bottomSheetState) {
         var lastCurrent = scaffoldState.bottomSheetState.currentValue
@@ -180,13 +185,6 @@ fun ProfileScreenSuccessState(
                 lastCurrent = current
             }
     }
-    DisposableEffect(hostActivity) {
-        onDispose {
-            val window = hostActivity?.window ?: return@onDispose
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = isLightThemeState.value
-        }
-    }
-
     BumpDetectorEffect(
         enabled = bumpUiState.isSheetVisible && bumpUiState.isDetectorEnabled,
         onImpactDetected = onBumpImpactDetected,
@@ -286,7 +284,7 @@ fun ProfileScreenSuccessState(
         ) {
             // Calculate peek height: space remaining after content
             // If content is taller than available space, peek height is minimal (80dp)
-            val rawPeekHeight = (availableHeight - contentHeight).coerceAtLeast(80.dp)
+            val rawPeekHeight = (availableHeight - contentHeight).coerceIn(80.dp, 420.dp)
             LaunchedEffect(rawPeekHeight) {
                 val previous = stablePeekHeight
                 if (previous == null) {
@@ -359,7 +357,7 @@ fun ProfileScreenSuccessState(
                                         heroBoundsInWindow = coordinates.boundsInWindow()
                                     }
 	                        ) {
-	                            val fallbackPainter = painterResource(me.floow.profile.R.drawable.profile_hero_bg)
+	                            val fallbackPainter = androidx.compose.ui.graphics.painter.ColorPainter(Color.DarkGray)
 	                            val backgroundModel = state.backgroundUri?.toString()?.takeIf { it.isNotBlank() }
                                 val (backgroundLqUrl, backgroundPreviewUrl) = remember(backgroundModel) {
                                     resolveProfileListUrls(backgroundModel)
@@ -427,6 +425,21 @@ fun ProfileScreenSuccessState(
                                     .align(Alignment.TopCenter)
                             )
 
+							val lastSeenLabel = if (!state.isSelf) {
+								when {
+									state.isOnline -> stringResource(me.floow.uikit.R.string.online)
+									state.lastSeenAtMillis != null && state.lastSeenAtMillis > 0L -> {
+										val timeLabel = state.lastSeenAtMillis
+											.toLocalDateTimeFromEpochMillis()
+											.format(DateTimeFormatter.ofPattern("HH:mm"))
+										stringResource(me.floow.uikit.R.string.last_seen_at, timeLabel)
+									}
+									else -> stringResource(me.floow.uikit.R.string.offline)
+								}
+							} else {
+								null
+							}
+
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -437,7 +450,8 @@ fun ProfileScreenSuccessState(
                                     displayName = state.displayName,
                                     description = state.description,
                                     totalLikesReceived = state.totalLikesReceived,
-                                    Modifier.fillMaxWidth(),
+									statusLabel = lastSeenLabel,
+                                    modifier = Modifier.fillMaxWidth(),
                                 )
 
                                 ProfileButtonsSegment(
@@ -445,7 +459,7 @@ fun ProfileScreenSuccessState(
                                     onAddPostButtonClick = onAddPostButtonClick,
                                     onMessageButtonClick = onMessageButtonClick,
                                     onEditButtonClick = onProfileEditClick,
-                                    onShareButtonClick = onOpenBumpSheet,
+                                    onShareButtonClick = onShareProfileClick,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
 

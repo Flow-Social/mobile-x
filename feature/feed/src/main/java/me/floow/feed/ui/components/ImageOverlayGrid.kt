@@ -98,6 +98,8 @@ internal fun ImageOverlayGrid(
             .take(MAX_CARDS)
     }
     if (variants.isEmpty()) return
+    val activeCount = variants.size
+    val isSingleImage = activeCount == 1
 
     val motions = remember(post.id) { List(MAX_CARDS) { CardMotionState() } }
     val backgroundAlpha = remember { Animatable(0f) }
@@ -127,26 +129,40 @@ internal fun ImageOverlayGrid(
 
         val gridGap = 10.dp
         val horizontalPadding = 22.dp
-        val cardWidth = (((maxWidth - horizontalPadding * 2) - gridGap) / 2f)
-            .coerceIn(120.dp, 190.dp)
+        val cardWidth = if (isSingleImage) {
+            (maxWidth - horizontalPadding * 2).coerceIn(180.dp, 320.dp)
+        } else {
+            (((maxWidth - horizontalPadding * 2) - gridGap) / 2f).coerceIn(120.dp, 190.dp)
+        }
         val cardHeight = cardWidth * (230f / 180f)
         val cardWidthPx = with(density) { cardWidth.toPx() }
         val cardHeightPx = with(density) { cardHeight.toPx() }
         val gapPx = with(density) { gridGap.toPx() }
 
-        val gridWidthPx = cardWidthPx * 2f + gapPx
-        val gridHeightPx = cardHeightPx * 2f + gapPx
+        val gridWidthPx = if (isSingleImage) cardWidthPx else cardWidthPx * 2f + gapPx
+        val gridHeightPx = if (isSingleImage) cardHeightPx else cardHeightPx * 2f + gapPx
         val gridLeftPx = (screenWidthPx - gridWidthPx) / 2f
         val gridTopPx = ((screenHeightPx - gridHeightPx) / 2f - with(density) { 20.dp.toPx() })
             .coerceAtLeast(with(density) { 72.dp.toPx() })
 
-        val targetOffsets = remember(gridLeftPx, gridTopPx, gapPx, cardWidthPx, cardHeightPx) {
-            listOf(
-                Offset(gridLeftPx, gridTopPx),
-                Offset(gridLeftPx + cardWidthPx + gapPx, gridTopPx),
-                Offset(gridLeftPx, gridTopPx + cardHeightPx + gapPx),
-                Offset(gridLeftPx + cardWidthPx + gapPx, gridTopPx + cardHeightPx + gapPx)
-            )
+        val targetOffsets = remember(
+            isSingleImage,
+            gridLeftPx,
+            gridTopPx,
+            gapPx,
+            cardWidthPx,
+            cardHeightPx
+        ) {
+            if (isSingleImage) {
+                listOf(Offset(gridLeftPx, gridTopPx))
+            } else {
+                listOf(
+                    Offset(gridLeftPx, gridTopPx),
+                    Offset(gridLeftPx + cardWidthPx + gapPx, gridTopPx),
+                    Offset(gridLeftPx, gridTopPx + cardHeightPx + gapPx),
+                    Offset(gridLeftPx + cardWidthPx + gapPx, gridTopPx + cardHeightPx + gapPx)
+                )
+            }
         }
 
         val validStartRect = startRect?.takeIf { it.width > 1f && it.height > 1f }
@@ -161,7 +177,6 @@ internal fun ImageOverlayGrid(
         } else {
             0.28f
         }
-        val activeCount = variants.size
         val sourceRects = launchData?.cardRects ?: emptyList()
         val sourcePoses = launchData?.cardPoses ?: emptyList()
         val startScaleX = List(activeCount) { index ->
