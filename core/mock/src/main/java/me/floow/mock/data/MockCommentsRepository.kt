@@ -1,11 +1,14 @@
 package me.floow.mock.data
 
 import java.util.Base64
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import me.floow.domain.data.GetDataResponse
 import me.floow.domain.data.UpdateDataResponse
 import me.floow.domain.data.repos.CommentsRepository
 import me.floow.domain.models.Comment
 import me.floow.domain.models.CommentAuthor
+import me.floow.domain.models.CommentRealtimeEvent
 import me.floow.domain.models.CommentReply
 import me.floow.domain.models.CommentsPage
 import me.floow.domain.values.ProfileName
@@ -204,6 +207,14 @@ class MockCommentsRepository : CommentsRepository {
 		val applied = maxOf(current, readUpToSeq)
 		lastReadSeqByPostId[postId] = applied
 		return GetDataResponse.Success(applied)
+	}
+
+	override fun subscribePostComments(
+		postId: String,
+		afterSeq: Long,
+		replayLimit: Int
+	): Flow<CommentRealtimeEvent> {
+		return emptyFlow()
 	}
 
 	private fun encodeCursor(createdAt: Long, id: Long): String {

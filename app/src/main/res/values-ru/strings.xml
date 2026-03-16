@@ -8,4 +8,8 @@
     <string name="notifications_channel_social">Соцсеть</string>
     <string name="notifications_channel_messages">Сообщения</string>
     <string name="notifications_channel_system">Система</string>
+    <string name="notifications_you">Вы</string>
+    <string name="notifications_reply_action">Ответить</string>
+    <string name="notifications_reply_hint">Написать ответ</string>
+    <string name="notifications_mark_read_action">Прочитано</string>
 </resources>

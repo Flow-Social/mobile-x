@@ -1,6 +1,5 @@
 package me.floow.chats.ui.chats.components
 
-import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Image
@@ -32,15 +31,21 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import me.floow.chats.uilogic.chats.Chat
+import me.floow.chats.uilogic.chats.ChatType
 import me.floow.chats.uilogic.chats.LastSentMessageState
 import me.floow.chats.uilogic.chats.isRepliesInboxChat
+import me.floow.chats.uilogic.chats.isSavedMessages
 import me.floow.domain.values.ProfileName
 import me.floow.uikit.components.avatar.NetworkAvatar
 import me.floow.uikit.theme.LocalTypography
 import me.floow.uikit.util.ComponentPreviewBox
 import me.flowme.chats.R
-import java.time.LocalDateTime
+import me.floow.domain.utils.toLocalDateTimeFromEpochMillis
 import java.time.format.DateTimeFormatter
+
+private const val DIALOG_CREATED_TEXT = "Диалог создан"
+private const val OUTGOING_PREFIX = "Вы: "
+private val TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm")
 
 @Composable
 internal fun ChatListItem(
@@ -48,6 +53,18 @@ internal fun ChatListItem(
 	onClick: (Chat) -> Unit,
 	modifier: Modifier = Modifier
 ) {
+	val showUnreadBadge = chat.unreadCount > 0
+	val showDeliveryStatusIcon = !showUnreadBadge && chat.lastSentMessageState != null
+	val previewText = if (
+		chat.lastSentMessageState != null &&
+		!chat.isRepliesInboxChat() &&
+		chat.lastMessageText != DIALOG_CREATED_TEXT
+	) {
+		"$OUTGOING_PREFIX${chat.lastMessageText}"
+	} else {
+		chat.lastMessageText
+	}
+
 	Row(
 		modifier = modifier
 			.clickable { onClick(chat) }
@@ -59,6 +76,7 @@ internal fun ChatListItem(
 			name = chat.name.value,
 			avatarUrl = chat.avatarUrl,
 			isRepliesInbox = chat.isRepliesInboxChat(),
+			isSavedMessages = chat.isSavedMessages(),
 			isOnline = chat.isOnline,
 			modifier = Modifier
 		)
@@ -66,18 +84,21 @@ internal fun ChatListItem(
 		Spacer(Modifier.width(12.dp))
 
 		Column(
-			modifier = Modifier
+			modifier = Modifier.weight(1f)
 		) {
 			Row(
-				modifier = Modifier,
+				modifier = Modifier.fillMaxWidth(),
 				verticalAlignment = Alignment.CenterVertically
 			) {
 				Text(
 					text = chat.name.value,
+					modifier = Modifier.weight(1f),
 					style = LocalTypography.current.titleMedium.copy(
 						fontSize = 18.sp,
 						fontWeight = FontWeight.Medium
-					)
+					),
+					maxLines = 1,
+					overflow = TextOverflow.Ellipsis
 				)
 
 				if (chat.chatMuted) {
@@ -90,12 +111,14 @@ internal fun ChatListItem(
 					)
 				}
 
-				Spacer(Modifier.weight(1f))
-
-				if (chat.lastSentMessageState != null) {
+				if (showDeliveryStatusIcon) {
 					when (chat.lastSentMessageState) {
 						LastSentMessageState.Sent -> {
-							// TODO
+							Icon(
+								painter = painterResource(R.drawable.chat_sent_icon),
+								contentDescription = null,
+								tint = Color.Unspecified
+							)
 						}
 
 						LastSentMessageState.Read -> {
@@ -106,11 +129,18 @@ internal fun ChatListItem(
 							)
 						}
 					}
+					Spacer(Modifier.width(4.dp))
 				}
 
+				val timeLabel = chat.lastMessageTimeMillis
+					.takeIf { it > 0L }
+					?.toLocalDateTimeFromEpochMillis()
+					?.format(TIME_FORMATTER)
+					.orEmpty()
 				Text(
-					text = chat.lastMessageDateTime.format(DateTimeFormatter.ofPattern("HH:mm")),
-					style = LocalTypography.current.labelMedium
+					text = timeLabel,
+					style = LocalTypography.current.captionMedium.copy(fontWeight = FontWeight.Medium),
+					color = MaterialTheme.colorScheme.onSurfaceVariant
 				)
 			}
 
@@ -132,15 +162,15 @@ internal fun ChatListItem(
 				}
 
 				Text(
-					text = chat.lastMessageText,
+					text = previewText,
 					modifier = Modifier.weight(1f),
-					style = LocalTypography.current.bodyMedium,
+					style = LocalTypography.current.bodyMedium.copy(fontSize = 16.sp),
 					maxLines = 1,
 					overflow = TextOverflow.Ellipsis,
-					color = MaterialTheme.colorScheme.secondary
+					color = MaterialTheme.colorScheme.onSurfaceVariant
 				)
 
-				if (chat.unreadCount > 0) {
+				if (showUnreadBadge) {
 					Spacer(Modifier.width(8.dp))
 					UnreadBadge(chat.unreadCount)
 				}
@@ -171,13 +201,29 @@ private fun UnreadBadge(count: Int, modifier: Modifier = Modifier) {
 @Composable
 private fun AvatarBox(
 	name: String,
-	avatarUrl: Uri?,
+	avatarUrl: String?,
 	isRepliesInbox: Boolean,
+	isSavedMessages: Boolean,
 	isOnline: Boolean,
-	modifier: Modifier.Companion
+	modifier: Modifier.Companion,
 ) {
 	Box(modifier = modifier) {
-		if (isRepliesInbox) {
+		if (isSavedMessages) {
+			Box(
+				modifier = Modifier
+					.size(52.dp)
+					.clip(CircleShape)
+					.background(MaterialTheme.colorScheme.primary),
+				contentAlignment = Alignment.Center,
+			) {
+				Icon(
+					painter = painterResource(me.floow.uikit.R.drawable.bookmark_icon),
+					contentDescription = null,
+					tint = MaterialTheme.colorScheme.onPrimary,
+					modifier = Modifier.size(26.dp),
+				)
+			}
+		} else if (isRepliesInbox) {
 			Image(
 				painter = painterResource(R.drawable.replyplz),
 				contentDescription = null,
@@ -217,10 +263,12 @@ private fun ChatListItemPreview() {
 		ChatListItem(
 			chat = Chat(
 				id = "2",
+				conversationId = 2L,
+				type = ChatType.DIRECT,
 				name = ProfileName.create("Demn"),
 				lastMessageText = "Some message text idk",
 				isOnline = true,
-				lastMessageDateTime = LocalDateTime.now().minusHours(3),
+				lastMessageTimeMillis = System.currentTimeMillis() - 3 * 60 * 60 * 1000L,
 				avatarUrl = null,
 				attachedMediaUrl = null,
 				chatMuted = true,

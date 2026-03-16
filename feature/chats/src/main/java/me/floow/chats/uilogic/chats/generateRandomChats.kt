@@ -1,8 +1,6 @@
 package me.floow.chats.uilogic.chats
 
-import android.net.Uri
 import me.floow.domain.values.ProfileName
-import java.time.LocalDateTime
 import kotlin.random.Random
 
 fun generateRandomChats(n: Int): List<Chat> {
@@ -40,25 +38,27 @@ fun generateRandomChats(n: Int): List<Chat> {
 			value = firstNames.random(),
 		)
 		val lastMessageText = messages.random()
-		val lastMessageDateTime = LocalDateTime.now()
-			.minusDays(Random.nextLong(0, 30))
-			.minusHours(Random.nextLong(0, 24))
-			.minusMinutes(Random.nextLong(0, 60))
-			.minusSeconds(Random.nextLong(0, 60))
+		val lastMessageTimeMillis = System.currentTimeMillis() -
+			Random.nextLong(0, 30L * 24 * 60 * 60 * 1000) -
+			Random.nextLong(0, 24L * 60 * 60 * 1000) -
+			Random.nextLong(0, 60L * 60 * 1000) -
+			Random.nextLong(0, 60L * 1000)
 		val isOnline = Random.nextBoolean()
 		val unreadCount = if (Random.nextBoolean()) Random.nextInt(1, 10) else 0
 		val chatMuted = Random.nextBoolean()
-		val avatarUrl = if (Random.nextBoolean()) Uri.parse("https://example.com/avatar") else null
+		val avatarUrl = if (Random.nextBoolean()) "https://example.com/avatar" else null
 		val attachedMediaUrl =
-			if (Random.nextBoolean()) Uri.parse("https://example.com/media") else null
+			if (Random.nextBoolean()) "https://example.com/media" else null
 		val lastSentMessageState =
 			if (Random.nextBoolean()) LastSentMessageState.entries.toTypedArray().random() else null
 
 		val chat = Chat(
 			id = "mock_chat_$i",
+			conversationId = null,
+			type = ChatType.DIRECT,
 			name = profileName,
 			lastMessageText = lastMessageText,
-			lastMessageDateTime = lastMessageDateTime,
+			lastMessageTimeMillis = lastMessageTimeMillis,
 			isOnline = isOnline,
 			unreadCount = unreadCount,
 			chatMuted = chatMuted,

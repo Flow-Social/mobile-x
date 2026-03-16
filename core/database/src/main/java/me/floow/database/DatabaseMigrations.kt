@@ -313,6 +313,138 @@ object DatabaseMigrations {
 		}
 	}
 
+	val MIGRATION_13_14 = object : Migration(13, 14) {
+		override fun migrate(database: SupportSQLiteDatabase) {
+			database.execSQL(
+				"""
+				CREATE TABLE IF NOT EXISTS direct_chat_conversations (
+					id INTEGER NOT NULL PRIMARY KEY,
+					kind TEXT NOT NULL,
+					peer_id TEXT NOT NULL,
+					peer_username TEXT,
+					peer_name TEXT,
+					peer_avatar_url TEXT,
+					last_message_id INTEGER,
+					last_message_sender_id TEXT,
+					last_message_sender_username TEXT,
+					last_message_sender_name TEXT,
+					last_message_sender_avatar_url TEXT,
+					last_message_text TEXT,
+					last_message_created_at INTEGER,
+					last_message_updated_at INTEGER,
+					unread_count INTEGER NOT NULL,
+					last_read_message_id INTEGER NOT NULL,
+					created_at INTEGER NOT NULL,
+					updated_at INTEGER NOT NULL
+				)
+				""".trimIndent()
+			)
+			database.execSQL(
+				"CREATE INDEX IF NOT EXISTS index_direct_chat_conversations_updated_at ON direct_chat_conversations(updated_at)"
+			)
+			database.execSQL(
+				"""
+				CREATE TABLE IF NOT EXISTS direct_chat_messages (
+					id INTEGER NOT NULL PRIMARY KEY,
+					conversation_id INTEGER NOT NULL,
+					sender_id TEXT NOT NULL,
+					sender_username TEXT,
+					sender_name TEXT,
+					sender_avatar_url TEXT,
+					text TEXT NOT NULL,
+					created_at INTEGER NOT NULL,
+					updated_at INTEGER NOT NULL
+				)
+				""".trimIndent()
+			)
+			database.execSQL(
+				"CREATE INDEX IF NOT EXISTS index_direct_chat_messages_conversation_id_id ON direct_chat_messages(conversation_id, id)"
+			)
+			database.execSQL(
+				"CREATE INDEX IF NOT EXISTS index_direct_chat_messages_conversation_id_created_at ON direct_chat_messages(conversation_id, created_at)"
+			)
+			database.execSQL(
+				"""
+				CREATE TABLE IF NOT EXISTS direct_chat_read_state (
+					conversation_id INTEGER NOT NULL PRIMARY KEY,
+					last_read_message_id INTEGER NOT NULL,
+					unread_count INTEGER NOT NULL,
+					first_unread_id INTEGER,
+					max_message_id INTEGER NOT NULL,
+					updated_at INTEGER NOT NULL
+				)
+				""".trimIndent()
+			)
+		}
+	}
+
+	val MIGRATION_14_15 = object : Migration(14, 15) {
+		override fun migrate(database: SupportSQLiteDatabase) {
+			if (!hasColumn(database, "direct_chat_messages", "reply_to_message_id")) {
+				database.execSQL(
+					"ALTER TABLE direct_chat_messages ADD COLUMN reply_to_message_id INTEGER"
+				)
+			}
+			if (!hasColumn(database, "direct_chat_messages", "reply_to_message_text")) {
+				database.execSQL(
+					"ALTER TABLE direct_chat_messages ADD COLUMN reply_to_message_text TEXT"
+				)
+			}
+		}
+	}
+
+	val MIGRATION_15_16 = object : Migration(15, 16) {
+		override fun migrate(database: SupportSQLiteDatabase) {
+			if (!hasColumn(database, "direct_chat_messages", "is_pinned")) {
+				database.execSQL(
+					"ALTER TABLE direct_chat_messages ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0"
+				)
+			}
+			if (!hasColumn(database, "direct_chat_messages", "pinned_at")) {
+				database.execSQL(
+					"ALTER TABLE direct_chat_messages ADD COLUMN pinned_at INTEGER"
+				)
+			}
+			if (!hasColumn(database, "direct_chat_messages", "pinned_by_user_id")) {
+				database.execSQL(
+					"ALTER TABLE direct_chat_messages ADD COLUMN pinned_by_user_id TEXT"
+				)
+			}
+			database.execSQL(
+				"CREATE INDEX IF NOT EXISTS index_direct_chat_messages_conversation_id_pinned_at ON direct_chat_messages(conversation_id, pinned_at DESC, id DESC)"
+			)
+		}
+	}
+
+	val MIGRATION_16_17 = object : Migration(16, 17) {
+		override fun migrate(database: SupportSQLiteDatabase) {
+			if (!hasColumn(database, "direct_chat_conversations", "peer_last_read_message_id")) {
+				database.execSQL(
+					"ALTER TABLE direct_chat_conversations ADD COLUMN peer_last_read_message_id INTEGER"
+				)
+			}
+		}
+	}
+
+	val MIGRATION_17_18 = object : Migration(17, 18) {
+		override fun migrate(database: SupportSQLiteDatabase) {
+			if (!hasColumn(database, "direct_chat_messages", "client_message_id")) {
+				database.execSQL(
+					"ALTER TABLE direct_chat_messages ADD COLUMN client_message_id TEXT"
+				)
+			}
+		}
+	}
+
+	val MIGRATION_18_19 = object : Migration(18, 19) {
+		override fun migrate(database: SupportSQLiteDatabase) {
+			database.execSQL(
+				"CREATE INDEX IF NOT EXISTS index_direct_chat_messages_conversation_id_client_message_id " +
+					"ON direct_chat_messages(conversation_id, client_message_id)"
+			)
+		}
+	}
+
 	private fun hasColumn(
 		database: SupportSQLiteDatabase,
 		tableName: String,

@@ -9,6 +9,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -65,19 +66,21 @@ fun ProfileRoute(
         )
     }
 
-    val locationPermissionLauncher = rememberLauncherForActivityResult(
+    val bumpPermissionsLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions(),
     ) { _ ->
-        // Location permission is soft for bump: we still continue with BLE-only matching.
-    }
-    val blePermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestMultiplePermissions(),
-    ) { _ ->
-        // BLE permission is also soft: no hard error if denied.
+        // Bump permissions are soft: we still continue without hard blocking.
     }
 
     LaunchedEffect(Unit) {
         viewModel.loadData()
+    }
+
+    DisposableEffect(Unit) {
+        viewModel.onProfileScreenVisible()
+        onDispose {
+            viewModel.onProfileScreenHidden()
+        }
     }
 
     LaunchedEffect(refreshPostsSignal) {
@@ -131,22 +134,18 @@ fun ProfileRoute(
             if (!bumpEnabled) return@ProfileScreen
             if (!bumpUiState.isSheetVisible) return@ProfileScreen
 
+            val missingPermissions = mutableListOf<String>()
             if (!bumpCoordinator.hasLocationPermission()) {
-                locationPermissionLauncher.launch(
-                    arrayOf(
-                        Manifest.permission.ACCESS_FINE_LOCATION,
-                        Manifest.permission.ACCESS_COARSE_LOCATION,
-                    ),
-                )
+                missingPermissions += Manifest.permission.ACCESS_FINE_LOCATION
+                missingPermissions += Manifest.permission.ACCESS_COARSE_LOCATION
             }
             if (!hasBleRuntimePermissions(context) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                blePermissionLauncher.launch(
-                    arrayOf(
-                        Manifest.permission.BLUETOOTH_SCAN,
-                        Manifest.permission.BLUETOOTH_ADVERTISE,
-                        Manifest.permission.BLUETOOTH_CONNECT,
-                    ),
-                )
+                missingPermissions += Manifest.permission.BLUETOOTH_SCAN
+                missingPermissions += Manifest.permission.BLUETOOTH_ADVERTISE
+                missingPermissions += Manifest.permission.BLUETOOTH_CONNECT
+            }
+            if (missingPermissions.isNotEmpty()) {
+                bumpPermissionsLauncher.launch(missingPermissions.distinct().toTypedArray())
             }
             coroutineScope.launch {
                 bumpCoordinator.startSession(ttlSeconds = 10)

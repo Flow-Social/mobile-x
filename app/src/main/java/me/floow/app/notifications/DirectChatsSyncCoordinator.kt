@@ -18,7 +18,8 @@ import me.floow.domain.utils.Logger
 class DirectChatsSyncCoordinator(
 	private val chatsRepository: ChatsRepository,
 	private val notificationPipeline: NotificationPipeline,
-	private val logger: Logger
+	private val logger: Logger,
+	private val currentUserIdProvider: () -> String?
 ) {
 	private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 	private var realtimeJob: Job? = null
@@ -38,6 +39,10 @@ class DirectChatsSyncCoordinator(
 				when (event) {
 					is DirectChatRealtimeEvent.MessageCreated -> {
 						if (event.isReplay) return@collectLatest
+						val currentUserId = currentUserIdProvider()
+						if (!currentUserId.isNullOrBlank() && event.message.sender.id == currentUserId) {
+							return@collectLatest
+						}
 						val payload = buildPayloadFromEvent(event)
 						if (payload != null) {
 							notificationPipeline.process(payload, ChatNotificationSource.WS)

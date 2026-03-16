@@ -1,7 +1,6 @@
 package me.floow.uikit.chat.components
 
 import android.net.Uri
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -18,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
@@ -40,14 +40,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import me.floow.uikit.R
-import me.floow.uikit.theme.ElevanagonShape
 import me.floow.uikit.util.ComponentPreviewBox
+import me.floow.domain.utils.toLocalDateTimeFromEpochMillis
+import java.time.format.DateTimeFormatter
+
+private val LAST_SEEN_FORMATTER = DateTimeFormatter.ofPattern("HH:mm")
 
 @Composable
 fun ChatScreenTopBar(
 	profileName: String,
 	isOnline: Boolean,
+	lastSeenAtMillis: Long?,
 	typingUsers: List<String>,
 	showSubtitle: Boolean = true,
 	profileAvatar: @Composable (Modifier) -> Unit,
@@ -117,8 +123,16 @@ fun ChatScreenTopBar(
 								TypingDots()
 							}
 						} else {
+							val lastSeenLabel = lastSeenAtMillis
+								?.takeIf { it > 0L }
+								?.toLocalDateTimeFromEpochMillis()
+								?.format(LAST_SEEN_FORMATTER)
 							Text(
-								text = stringResource(if (isOnline) R.string.online else R.string.offline),
+								text = when {
+									isOnline -> stringResource(R.string.online)
+									!lastSeenLabel.isNullOrBlank() -> stringResource(R.string.last_seen_at, lastSeenLabel)
+									else -> stringResource(R.string.offline)
+								},
 								color = MaterialTheme.colorScheme.onSurfaceVariant,
 								style = MaterialTheme.typography.bodyMedium.copy(
 									fontSize = 13.sp,
@@ -201,6 +215,68 @@ fun ChatScreenTitleTopBar(
 }
 
 @Composable
+fun ChatSelectionTopBar(
+	selectedCount: Int,
+	canCopy: Boolean,
+	canDelete: Boolean,
+	onCloseClick: () -> Unit,
+	onCopyClick: () -> Unit,
+	onDeleteClick: () -> Unit,
+	dividerColor: Color? = null,
+	modifier: Modifier = Modifier
+) {
+	Column(modifier) {
+		Row(
+			Modifier
+				.fillMaxWidth()
+				.height(TopAppBarDefaults.TopAppBarExpandedHeight)
+				.padding(horizontal = 12.dp),
+			verticalAlignment = Alignment.CenterVertically,
+		) {
+			IconButton(onClick = onCloseClick) {
+				Icon(
+					imageVector = Icons.Default.Close,
+					contentDescription = stringResource(R.string.chat_selection_close)
+				)
+			}
+
+			Text(
+				text = stringResource(R.string.chat_selection_selected_count, selectedCount),
+				style = MaterialTheme.typography.titleMedium.copy(
+					fontSize = 18.sp,
+					fontWeight = FontWeight.Medium
+				),
+				modifier = Modifier.weight(1f)
+			)
+
+			IconButton(
+				onClick = onCopyClick,
+				enabled = canCopy
+			) {
+				Icon(
+					painter = painterResource(R.drawable.chat_selection_copy_icon),
+					contentDescription = stringResource(R.string.chat_selection_copy),
+					modifier = Modifier.size(26.dp)
+				)
+			}
+
+			IconButton(
+				onClick = onDeleteClick,
+				enabled = canDelete
+			) {
+				Icon(
+					painter = painterResource(R.drawable.chat_selection_delete_icon),
+					contentDescription = stringResource(R.string.chat_selection_delete),
+					modifier = Modifier.size(26.dp)
+				)
+			}
+		}
+
+		HorizontalDivider(color = dividerColor ?: MaterialTheme.colorScheme.outlineVariant)
+	}
+}
+
+@Composable
 private fun TypingDots() {
 	val infiniteTransition = rememberInfiniteTransition(label = "TypingDots")
 	Row(
@@ -239,15 +315,9 @@ private fun ChatScreenTopBarPreview() {
 		ChatScreenTopBar(
 			profileName = "Alina",
 			isOnline = false,
+			lastSeenAtMillis = System.currentTimeMillis() - 22 * 60 * 1000L,
 			typingUsers = emptyList(),
-			profileAvatar = { modifier ->
-				Image(
-					painterResource(R.drawable.cute_girl),
-					null,
-					modifier
-						.clip(ElevanagonShape),
-				)
-			},
+			profileAvatar = {},
 			onBackClick = {},
 			onDropdownClick = {},
 			onProfileClick = {},

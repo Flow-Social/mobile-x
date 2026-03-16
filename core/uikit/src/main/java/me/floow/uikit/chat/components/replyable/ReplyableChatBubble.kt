@@ -26,20 +26,18 @@ import me.floow.uikit.util.ComponentPreviewBox
 import java.time.LocalDateTime
 import kotlin.math.roundToInt
 
-import me.floow.uikit.chat.components.ChatBubbleOption
-
 @Composable
 internal fun ReplyableChatBubble(
 	chatMessage: ChatMessage,
-	onClick: (ChatMessage) -> Unit,
 	onReplyClick: (ChatMessage) -> Unit,
 	onReply: (ChatMessage) -> Unit,
+	onRetrySendClick: ((ChatMessage) -> Unit)? = null,
 	isHighlighted: Boolean = false,
-	onOptionClick: ((ChatBubbleOption, ChatMessage) -> Unit)? = null,
 	showAuthorHeaderForInMessages: Boolean = false,
-	showPinAction: Boolean = true,
+	showUnreadDot: Boolean = false,
 	showReplyPreview: Boolean = true,
-	modifier: Modifier = Modifier
+	modifier: Modifier = Modifier,
+	bubbleBoundsModifier: Modifier = Modifier
 ) {
 	val isOut = chatMessage is PrimaryOutMessage || chatMessage is ReplyOutMessage
 	val currentViewConfiguration = LocalViewConfiguration.current
@@ -90,14 +88,14 @@ internal fun ReplyableChatBubble(
 				) {
 					ChatBubble(
 						chatMessage = chatMessage,
-						onClick = onClick,
 						onReplyClick = onReplyClick,
+						onRetrySendClick = onRetrySendClick,
 						isHighlighted = isHighlighted,
-						onOptionClick = onOptionClick,
 						showAuthorHeaderForInMessages = showAuthorHeaderForInMessages,
-						showPinAction = showPinAction,
+						showUnreadDot = showUnreadDot,
 						showReplyPreview = showReplyPreview,
-						modifier = if (isOut) Modifier.fillMaxWidth() else Modifier
+						modifier = if (isOut) Modifier.fillMaxWidth() else Modifier,
+						bubbleBoundsModifier = bubbleBoundsModifier
 					)
 				}
 			}
@@ -127,7 +125,6 @@ private fun ReplyableChatBubblePreview() {
 				messageText = "Some awesome!!! Message. See you later.. probably",
 				dateTime = LocalDateTime.now(),
 			),
-			onClick = {},
 			onReplyClick = {},
 			onReply = {
 				println("REPLY !!!")

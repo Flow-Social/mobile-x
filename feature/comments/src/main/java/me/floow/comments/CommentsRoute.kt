@@ -16,11 +16,12 @@ import me.floow.comments.uilogic.CommentsViewModel
 import me.floow.domain.models.CommentId
 import me.floow.domain.models.PostImageVariant
 import me.floow.uikit.chat.ChatScreen
+import me.floow.uikit.chat.model.ChatInteractionAdapter
 import me.floow.uikit.chat.model.ChatLayoutMode
-import me.floow.uikit.chat.model.ChatReplyMessage
 import me.floow.uikit.chat.model.ChatScreenConfig
 import me.floow.uikit.chat.model.ChatScreenUiState
 import me.floow.uikit.chat.model.ChatTopBarMode
+import me.floow.uikit.chat.model.DEFAULT_CHAT_MESSAGE_MAX_LENGTH
 import me.floow.uikit.chat.model.PostPreviewMessage
 import me.floow.uikit.components.media.viewer2.FullscreenImageViewerAction
 import me.floow.uikit.components.media.viewer2.FullscreenImageViewerModel
@@ -33,8 +34,6 @@ import me.floow.uikit.components.media.transfer.PostMediaSourceSnapshot
 import me.floow.uikit.components.media.transfer.PostMediaTransferStore
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
-
-private const val COMMENT_MAX_LENGTH = 2256
 
 data class CommentsRouteInitialData(
 	val postId: String,
@@ -120,8 +119,14 @@ fun CommentsRoute(
 		)
 	}
 
-	LaunchedEffect(state) {
-		vm.onInitialTargetSearchStateChanged(state)
+	LaunchedEffect(
+		isInitialTargetResolved,
+		(state as? ChatScreenUiState.HasData)?.messages,
+		(state as? ChatScreenUiState.HasData)?.canLoadMore,
+		(state as? ChatScreenUiState.HasData)?.isLoadingMore,
+		state is ChatScreenUiState.Error
+	) {
+		vm.onInitialTargetSearchStateChanged()
 	}
 
 	val config = remember {
@@ -130,11 +135,11 @@ fun CommentsRoute(
 			showTypingIndicator = false,
 			showPinActions = false,
 			showEmojiButton = false,
-			scrollToBottomOnInputFocus = false,
-			liftMessageListWithIme = true,
-			showAuthorHeaderForInMessages = true,
-			maxInputLength = COMMENT_MAX_LENGTH,
-			animateJumpToHighlightedMessage = false,
+				scrollToBottomOnInputFocus = false,
+				liftMessageListWithIme = true,
+				showAuthorHeaderForInMessages = true,
+				maxInputLength = DEFAULT_CHAT_MESSAGE_MAX_LENGTH,
+				animateJumpToHighlightedMessage = false,
 			topBarMode = ChatTopBarMode.TitleOnly,
 			topBarTitle = commentsTitle,
 			showTopBarDropdown = false
@@ -172,26 +177,26 @@ fun CommentsRoute(
 		onJumpToMessage = vm::jumpToComment,
 		onReply = vm::addCurrentReply,
 		onReplyClick = {
-			val targetId = if (it is ChatReplyMessage) it.replyMessageId else it.id
-			vm.jumpToComment(targetId)
+			ChatInteractionAdapter.onReplyClick(it, vm::jumpToComment)
 		},
 		onCurrentReplyClose = vm::closeCurrentReply,
 		onCurrentReplyClick = {
-			(state as? ChatScreenUiState.HasData)?.messageFieldReply?.replyId?.let { vm.jumpToComment(it) }
+			ChatInteractionAdapter.onCurrentReplyClick(state, vm::jumpToComment)
 		},
 		onCancelEdit = vm::cancelEditing,
 		onMessageInputFieldValueChange = vm::updateMessageInputField,
-		onEmojiPickerClick = {},
 		onSendClick = {
-			val messageToEditId = (state as? ChatScreenUiState.HasData)?.messageToEditId
-			if (messageToEditId != null) {
-				vm.editComment(messageToEditId, state.messageFieldValue)
-			} else {
-				vm.sendComment()
-			}
-		},
-		onRequestScrollToBottom = vm::requestScrollToBottom,
-			onVisibleMessageIdsChanged = vm::onVisibleMessageIdsChanged,
+			ChatInteractionAdapter.onSendClick(
+				state = state,
+				onEditMessage = vm::editComment,
+				onSendMessage = vm::sendComment
+			)
+			},
+			onRequestScrollToBottom = vm::requestScrollToBottom,
+			onRetryClick = vm::loadInitial,
+			onViewportSnapshotChanged = { snapshot ->
+				vm.onVisibleMessageIdsChanged(snapshot.visibleMessageIds)
+			},
 			onLoadMore = vm::loadMore,
 			onPostImageClick = { _, index ->
 			if (images.isEmpty()) return@ChatScreen
@@ -220,11 +225,12 @@ fun CommentsRoute(
 				images.size
 			)
 		},
-			onPinMessage = {},
-			suspendInitialPlacement = hasInitialTarget && !isInitialTargetResolved,
-			onUnpinMessage = {},
-		onDeleteMessage = vm::deleteComment,
+		onPinMessage = {},
+		suspendInitialPlacement = hasInitialTarget && !isInitialTargetResolved,
+		onUnpinMessage = {},
+		onDeleteMessage = { message -> vm.deleteComment(message.id) },
 		onEditMessage = { id, text -> vm.startEditingComment(id, text) },
+		onRetryMessage = {},
 		onUndoDelete = vm::undoDelete,
 		config = config,
 		state = state,

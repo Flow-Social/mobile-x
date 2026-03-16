@@ -1,10 +1,15 @@
 package me.floow.data.repos
 
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import me.floow.domain.api.CommentsApi
+import me.floow.domain.api.CommentsRealtimeApi
+import me.floow.domain.api.models.CommentItem
 import me.floow.domain.api.models.CreateCommentResponse
 import me.floow.domain.api.models.DeleteCommentResponse
 import me.floow.domain.api.models.GetCommentsResponse
 import me.floow.domain.api.models.MarkCommentsReadUpToResponse
+import me.floow.domain.api.models.CommentsRealtimeEvent
 import me.floow.domain.api.models.UpdateCommentResponse
 import me.floow.domain.data.FailureError
 import me.floow.domain.data.GetDataError
@@ -13,6 +18,7 @@ import me.floow.domain.data.UpdateDataResponse
 import me.floow.domain.data.repos.CommentsRepository
 import me.floow.domain.models.Comment
 import me.floow.domain.models.CommentAuthor
+import me.floow.domain.models.CommentRealtimeEvent
 import me.floow.domain.models.CommentReply
 import me.floow.domain.models.CommentsPage
 import me.floow.domain.utils.Logger
@@ -22,7 +28,8 @@ import me.floow.domain.values.util.RawValueObjectCreate
 
 class CommentsRepositoryImpl(
 	private val logger: Logger,
-	private val commentsApi: CommentsApi
+	private val commentsApi: CommentsApi,
+	private val commentsRealtimeApi: CommentsRealtimeApi
 ) : CommentsRepository {
 	@OptIn(RawValueObjectCreate::class)
 	override suspend fun getComments(
@@ -44,31 +51,7 @@ class CommentsRepositoryImpl(
 			)
 		) {
 			is GetCommentsResponse.Success -> {
-				val items = response.items.map { item ->
-					Comment(
-						id = item.id,
-						seq = item.seq,
-						postId = item.postId,
-						author = CommentAuthor(
-							id = item.authorId,
-							name = item.authorName?.let(ProfileName::createRaw),
-							username = item.authorUsername?.let(ProfileUsername::createRaw),
-							avatarUrl = item.authorAvatarUrl
-						),
-						text = item.text,
-						isRead = item.isRead,
-						createdAt = item.createdAt,
-						updatedAt = item.updatedAt,
-						replyTo = item.replyTo?.let { reply ->
-							CommentReply(
-								id = reply.id,
-								text = reply.text,
-								authorId = reply.authorId,
-								authorName = reply.authorName
-							)
-						}
-					)
-				}
+				val items = response.items.map { item -> item.toDomainComment() }
 				GetDataResponse.Success(
 					CommentsPage(
 						items = items,
@@ -115,32 +98,7 @@ class CommentsRepositoryImpl(
 	override suspend fun createComment(postId: String, text: String, replyToId: Long?): GetDataResponse<Comment> {
 		return when (val response = commentsApi.createComment(me.floow.domain.api.models.CreateCommentData(postId, text, replyToId))) {
 			is CreateCommentResponse.Success -> {
-				val item = response.comment
-				GetDataResponse.Success(
-					Comment(
-						id = item.id,
-						seq = item.seq,
-						postId = item.postId,
-						author = CommentAuthor(
-							id = item.authorId,
-							name = item.authorName?.let(ProfileName::createRaw),
-							username = item.authorUsername?.let(ProfileUsername::createRaw),
-							avatarUrl = item.authorAvatarUrl
-						),
-						text = item.text,
-						isRead = item.isRead,
-						createdAt = item.createdAt,
-						updatedAt = item.updatedAt,
-						replyTo = item.replyTo?.let { reply ->
-							CommentReply(
-								id = reply.id,
-								text = reply.text,
-								authorId = reply.authorId,
-								authorName = reply.authorName
-							)
-						}
-					)
-				)
+				GetDataResponse.Success(response.comment.toDomainComment())
 			}
 
 			CreateCommentResponse.Error -> {
@@ -171,35 +129,100 @@ class CommentsRepositoryImpl(
 		}
 	}
 
+	override fun subscribePostComments(
+		postId: String,
+		afterSeq: Long,
+		replayLimit: Int
+	): Flow<CommentRealtimeEvent> {
+		val postIdLong = postId.toLongOrNull()
+			?.takeIf { value -> value > 0L }
+			?: return kotlinx.coroutines.flow.emptyFlow()
+
+		return commentsRealtimeApi.subscribePostComments(
+			postId = postIdLong,
+			afterSeq = afterSeq,
+			replayLimit = replayLimit
+		).map(::mapRealtimeEvent)
+	}
+
+	@OptIn(RawValueObjectCreate::class)
+	private fun mapRealtimeEvent(event: CommentsRealtimeEvent): CommentRealtimeEvent {
+		val postId = event.postId.toString()
+		return when (event) {
+			is CommentsRealtimeEvent.Hello -> CommentRealtimeEvent.Hello(
+				postId = postId,
+				eventId = event.eventId,
+				seq = event.seq,
+				lastReadSeq = event.lastReadSeq,
+				unreadCount = event.unreadCount,
+				firstUnreadSeq = event.firstUnreadSeq,
+				maxSeq = event.maxSeq
+			)
+
+			is CommentsRealtimeEvent.CommentCreated -> CommentRealtimeEvent.CommentCreated(
+				postId = postId,
+				eventId = event.eventId,
+				comment = event.comment.toDomainComment(),
+				seq = event.seq,
+				lastReadSeq = event.lastReadSeq,
+				unreadCount = event.unreadCount,
+				firstUnreadSeq = event.firstUnreadSeq,
+				maxSeq = event.maxSeq,
+				isReplay = event.isReplay
+			)
+
+			is CommentsRealtimeEvent.CommentUpdated -> CommentRealtimeEvent.CommentUpdated(
+				postId = postId,
+				eventId = event.eventId,
+				comment = event.comment.toDomainComment(),
+				seq = event.seq,
+				lastReadSeq = event.lastReadSeq,
+				unreadCount = event.unreadCount,
+				firstUnreadSeq = event.firstUnreadSeq,
+				maxSeq = event.maxSeq
+			)
+
+			is CommentsRealtimeEvent.CommentDeleted -> CommentRealtimeEvent.CommentDeleted(
+				postId = postId,
+				eventId = event.eventId,
+				deletedCommentId = event.deletedCommentId.toString(),
+				actorUserId = event.actorUserId,
+				seq = event.seq,
+				lastReadSeq = event.lastReadSeq,
+				unreadCount = event.unreadCount,
+				firstUnreadSeq = event.firstUnreadSeq,
+				maxSeq = event.maxSeq
+			)
+
+			is CommentsRealtimeEvent.ReadUpToUpdated -> CommentRealtimeEvent.ReadUpToUpdated(
+				postId = postId,
+				eventId = event.eventId,
+				readUpToSeq = event.readUpToSeq,
+				actorUserId = event.actorUserId,
+				seq = event.seq,
+				lastReadSeq = event.lastReadSeq,
+				unreadCount = event.unreadCount,
+				firstUnreadSeq = event.firstUnreadSeq,
+				maxSeq = event.maxSeq
+			)
+
+			is CommentsRealtimeEvent.ResyncRequired -> CommentRealtimeEvent.ResyncRequired(
+				postId = postId,
+				eventId = event.eventId,
+				seq = event.seq,
+				lastReadSeq = event.lastReadSeq,
+				unreadCount = event.unreadCount,
+				firstUnreadSeq = event.firstUnreadSeq,
+				maxSeq = event.maxSeq
+			)
+		}
+	}
+
 	@OptIn(RawValueObjectCreate::class)
 	private fun mapCommentsSuccessResponse(
 		response: GetCommentsResponse.Success
 	): GetDataResponse<CommentsPage> {
-		val items = response.items.map { item ->
-			Comment(
-				id = item.id,
-				seq = item.seq,
-				postId = item.postId,
-				author = CommentAuthor(
-					id = item.authorId,
-					name = item.authorName?.let(ProfileName::createRaw),
-					username = item.authorUsername?.let(ProfileUsername::createRaw),
-					avatarUrl = item.authorAvatarUrl
-				),
-				text = item.text,
-				isRead = item.isRead,
-				createdAt = item.createdAt,
-				updatedAt = item.updatedAt,
-				replyTo = item.replyTo?.let { reply ->
-					CommentReply(
-						id = reply.id,
-						text = reply.text,
-						authorId = reply.authorId,
-						authorName = reply.authorName
-					)
-				}
-			)
-		}
+		val items = response.items.map { item -> item.toDomainComment() }
 		return GetDataResponse.Success(
 			CommentsPage(
 				items = items,
@@ -209,6 +232,33 @@ class CommentsRepositoryImpl(
 				firstUnreadSeq = response.firstUnreadSeq,
 				maxSeq = response.maxSeq
 			)
+		)
+	}
+
+	@OptIn(RawValueObjectCreate::class)
+	private fun CommentItem.toDomainComment(): Comment {
+		return Comment(
+			id = id,
+			seq = seq,
+			postId = postId,
+			author = CommentAuthor(
+				id = authorId,
+				name = authorName?.let(ProfileName::createRaw),
+				username = authorUsername?.let(ProfileUsername::createRaw),
+				avatarUrl = authorAvatarUrl
+			),
+			text = text,
+			isRead = isRead,
+			createdAt = createdAt,
+			updatedAt = updatedAt,
+			replyTo = replyTo?.let { reply ->
+				CommentReply(
+					id = reply.id,
+					text = reply.text,
+					authorId = reply.authorId,
+					authorName = reply.authorName
+				)
+			}
 		)
 	}
 }

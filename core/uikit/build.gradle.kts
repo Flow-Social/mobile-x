@@ -48,12 +48,15 @@ dependencies {
     api(libs.material.icons.extended)
 
     api(libs.activity.compose)
+    api(libs.lifecycle.runtime.compose)
 
     api(libs.coil)
     api(libs.coil.compose)
     api(libs.coil.gif)
 
     api(libs.textflow.material3)
+    api(libs.emoji2.emojipicker)
+    api(libs.androidx.datastore.preferences)
 
     testImplementation(libs.junit)
 

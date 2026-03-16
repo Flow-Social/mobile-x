@@ -5,7 +5,9 @@ plugins {
 }
 
 kotlin {
-    jvmToolchain(21)
+    // Android/Gradle test runtime is Java 17; compiling this JVM module with 21
+    // produces classfiles (v65) that JUnit on 17 can't load.
+    jvmToolchain(17)
 }
 
 dependencies {

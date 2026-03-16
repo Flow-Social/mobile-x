@@ -7,6 +7,10 @@ import me.floow.database.dao.FeedSyncCommandsDao
 import me.floow.database.dao.PostsDao
 import me.floow.database.dao.ProfileDao
 import me.floow.database.dao.RepliesInboxDao
+import me.floow.database.dao.DirectChatsDao
+import me.floow.database.dbo.DirectChatConversationEntity
+import me.floow.database.dbo.DirectChatMessageEntity
+import me.floow.database.dbo.DirectChatReadStateEntity
 import me.floow.database.dbo.FeedSyncCommandEntity
 import me.floow.database.dbo.PostEntity
 import me.floow.database.dbo.ProfileEntity
@@ -21,9 +25,12 @@ import me.floow.database.dbo.TestDbo
         PostEntity::class,
 		FeedSyncCommandEntity::class,
 		RepliesInboxNotificationEntity::class,
-		RepliesInboxMetaEntity::class
+		RepliesInboxMetaEntity::class,
+		DirectChatConversationEntity::class,
+		DirectChatMessageEntity::class,
+		DirectChatReadStateEntity::class
     ],
-    version = 13
+    version = 19
 )
 @TypeConverters(DatabaseConverters::class)
 abstract class AppDatabase : RoomDatabase() {
@@ -31,4 +38,5 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun postsDao(): PostsDao
 	abstract fun feedSyncCommandsDao(): FeedSyncCommandsDao
 	abstract fun repliesInboxDao(): RepliesInboxDao
+	abstract fun directChatsDao(): DirectChatsDao
 }

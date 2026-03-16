@@ -25,6 +25,8 @@ import me.floow.domain.data.repos.RepliesRealtimeState
 import me.floow.domain.models.UserNotification
 import me.floow.domain.models.UserNotificationActor
 import me.floow.domain.models.UserNotificationsPage
+import me.floow.domain.realtime.shouldReloadOnHelloRealtimeGap
+import me.floow.domain.realtime.shouldReloadOnSequentialGap
 import me.floow.domain.utils.Logger
 
 private const val REPLIES_CHANNEL = "replies"
@@ -201,26 +203,16 @@ class NotificationsRealtimeRepositoryImpl(
 		if (event.channel != REPLIES_CHANNEL) return
 		when (event) {
 			is NotificationsRealtimeEvent.Hello -> {
-				if (lastKnownMaxSeq > 0L && event.maxSeq > 0L && event.maxSeq < lastKnownMaxSeq) {
-					logger.d(
-						"NotificationsRealtimeRepositoryImpl.applyRepliesRealtimeEvent",
-						"Server max_seq=${event.maxSeq} behind local=$lastKnownMaxSeq, forcing snapshot reconcile"
+				if (shouldReloadRepliesSnapshotOnHello(
+						localMaxSeq = lastKnownMaxSeq,
+						eventMaxSeq = event.maxSeq,
+						streamAfterSeq = streamAfterSeq,
+						maxReplayWindow = MAX_REALTIME_REPLAY_WINDOW
 					)
-					loadRepliesSnapshot()
-					_repliesState.update { state ->
-						state.copy(
-							isBootstrapping = false,
-							isConnected = true,
-							hasError = false
-						)
-					}
-					return
-				}
-				val gap = (event.maxSeq - streamAfterSeq).coerceAtLeast(0L)
-				if (streamAfterSeq > 0L && gap > MAX_REALTIME_REPLAY_WINDOW) {
+				) {
 					logger.d(
 						"NotificationsRealtimeRepositoryImpl.applyRepliesRealtimeEvent",
-						"Detected replay gap=$gap after_seq=$streamAfterSeq, forcing snapshot reconcile"
+						"Detected hello gap/stale max_seq=${event.maxSeq}, local=$lastKnownMaxSeq, after_seq=$streamAfterSeq; forcing snapshot reconcile"
 					)
 					loadRepliesSnapshot()
 					_repliesState.update { state ->
@@ -249,8 +241,11 @@ class NotificationsRealtimeRepositoryImpl(
 						}
 						return
 					}
-					val expectedNextSeq = lastKnownMaxSeq + 1L
-					if (lastKnownMaxSeq > 0L && seq > expectedNextSeq) {
+					if (shouldReloadRepliesSnapshotOnCreated(
+							localMaxSeq = lastKnownMaxSeq,
+							eventSeq = seq
+						)
+					) {
 						logger.d(
 							"NotificationsRealtimeRepositoryImpl.applyRepliesRealtimeEvent",
 							"Detected seq gap local=$lastKnownMaxSeq event=$seq, forcing snapshot reconcile"
@@ -285,6 +280,30 @@ class NotificationsRealtimeRepositoryImpl(
 			)
 		}
 	}
+}
+
+internal fun shouldReloadRepliesSnapshotOnHello(
+	localMaxSeq: Long,
+	eventMaxSeq: Long,
+	streamAfterSeq: Long,
+	maxReplayWindow: Long
+): Boolean {
+	return shouldReloadOnHelloRealtimeGap(
+		localMaxCursor = localMaxSeq,
+		eventMaxCursor = eventMaxSeq,
+		streamAfterCursor = streamAfterSeq,
+		maxReplayWindow = maxReplayWindow
+	)
+}
+
+internal fun shouldReloadRepliesSnapshotOnCreated(
+	localMaxSeq: Long,
+	eventSeq: Long
+): Boolean {
+	return shouldReloadOnSequentialGap(
+		localMaxCursor = localMaxSeq,
+		eventCursor = eventSeq
+	)
 }
 
 private fun NotificationsRealtimeEvent.toMeta(): RepliesInboxMeta {

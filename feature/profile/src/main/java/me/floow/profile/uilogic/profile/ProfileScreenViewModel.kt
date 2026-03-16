@@ -8,6 +8,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -21,8 +22,10 @@ import me.floow.domain.data.cache.CacheState
 import me.floow.domain.data.repos.PostsRepository
 import me.floow.domain.data.repos.ProfileRepository
 import me.floow.domain.data.repos.UsersRepository
+import me.floow.domain.data.repos.PresenceRepository
 import me.floow.domain.models.Post
 import me.floow.domain.models.PublicProfile
+import me.floow.domain.models.UserPresence
 import me.floow.domain.utils.Logger
 import me.floow.domain.utils.TelemetryOperation
 import me.floow.domain.utils.TelemetryScope
@@ -40,6 +43,8 @@ data class ProfileScreenVmState(
 	val description: String? = null,
 	val totalLikesReceived: Int = 0,
 	val isSelf: Boolean = true,
+	val isOnline: Boolean = false,
+	val lastSeenAtMillis: Long? = null,
 	val posts: List<Post> = emptyList(),
 	val arePostsLoading: Boolean = false,
 	val arePostsError: Boolean = false,
@@ -61,6 +66,8 @@ data class ProfileScreenVmState(
 			displayName = displayName,
 			totalLikesReceived = totalLikesReceived,
 			isSelf = isSelf,
+			isOnline = isOnline,
+			lastSeenAtMillis = lastSeenAtMillis,
 			posts = posts,
 			arePostsLoading = arePostsLoading,
 			arePostsError = arePostsError,
@@ -85,18 +92,20 @@ class ProfileScreenViewModel(
 	private val profileRepository: ProfileRepository,
 	private val postsRepository: PostsRepository,
 	private val usersRepository: UsersRepository,
+	private val presenceRepository: PresenceRepository,
 	private val profileLocalStore: ProfileLocalStore,
 	private val postsLocalStore: PostsLocalStore,
 	private val usernameToIdCache: UsernameToIdCache,
 	private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 	private companion object {
-		private const val PROFILE_REMOTE_MAX_AGE_MS = 60_000L
-		private const val PROFILE_REMOTE_STALE_REVALIDATE_MS = 10 * 60 * 1000L
+		private const val PROFILE_REMOTE_MAX_AGE_MS = 5 * 60 * 1000L
+		private const val PROFILE_REMOTE_STALE_REVALIDATE_MS = 30 * 60 * 1000L
 		private const val PROFILE_POSTS_PAGE_SIZE = 20
 		private const val PROFILE_POSTS_CACHE_MAX_ITEMS = 120
 		private const val PROFILE_POSTS_CACHE_TTL_MS = 24 * 60 * 60 * 1000L
 		private const val DELETED_POST_TOMBSTONE_TTL_MS = 60_000L
+		private const val PRESENCE_OWNER_PREFIX = "profile:"
 	}
 
 	private val _state = MutableStateFlow(ProfileScreenVmState())
@@ -118,6 +127,15 @@ class ProfileScreenViewModel(
 		staleWhileRevalidateMs = PROFILE_REMOTE_STALE_REVALIDATE_MS
 	)
 	private val lastRemoteFetchAtByUser = mutableMapOf<String, Long>()
+	private var currentPresenceOwner: String? = null
+
+	init {
+		viewModelScope.launch {
+			presenceRepository.presences.collectLatest { presences ->
+				applyPresence(presences[_state.value.id])
+			}
+		}
+	}
 
 	fun loadData(forceRemote: Boolean = false) {
 		val userId: String? = savedStateHandle["userId"]
@@ -133,6 +151,10 @@ class ProfileScreenViewModel(
 				targetUserId
 			} else {
 				resolveUserIdByUsername(targetUserId) ?: targetUserId
+			}
+			if (!isSelf && resolvedUserId.isNotBlank()) {
+				bindPresenceToUser(resolvedUserId)
+				applyPresence(presenceRepository.presences.value[resolvedUserId])
 			}
 
 			prunePostsCacheIfStale(resolvedUserId)
@@ -519,6 +541,51 @@ class ProfileScreenViewModel(
 	private fun capProfileCachedPosts(posts: List<Post>): List<Post> {
 		if (posts.size <= PROFILE_POSTS_CACHE_MAX_ITEMS) return posts
 		return posts.take(PROFILE_POSTS_CACHE_MAX_ITEMS)
+	}
+
+	fun onProfileScreenVisible() {
+		val current = _state.value
+		if (current.isSelf) return
+		val userId = current.id.takeIf { it.isNotBlank() } ?: return
+		bindPresenceToUser(userId)
+	}
+
+	fun onProfileScreenHidden() {
+		clearPresenceBinding()
+	}
+
+	private fun applyPresence(presence: UserPresence?) {
+		_state.update { state ->
+			if (state.isSelf || state.id.isBlank()) return@update state
+			if (presence == null) return@update state
+			val isOnline = presence.isOnline
+			val incomingLastSeen = presence.lastSeenAtMillis
+			val lastSeen = when {
+				isOnline -> incomingLastSeen ?: state.lastSeenAtMillis
+				incomingLastSeen != null && incomingLastSeen > 0L -> incomingLastSeen
+				else -> state.lastSeenAtMillis
+			}
+			if (state.isOnline == isOnline && state.lastSeenAtMillis == lastSeen) return@update state
+			state.copy(isOnline = isOnline, lastSeenAtMillis = lastSeen)
+		}
+	}
+
+	private fun bindPresenceToUser(userId: String) {
+		val owner = PRESENCE_OWNER_PREFIX + userId
+		if (currentPresenceOwner == owner) return
+		currentPresenceOwner?.let(presenceRepository::clearTargets)
+		currentPresenceOwner = owner
+		presenceRepository.setTargets(owner = owner, userIds = listOf(userId))
+	}
+
+	private fun clearPresenceBinding() {
+		currentPresenceOwner?.let(presenceRepository::clearTargets)
+		currentPresenceOwner = null
+	}
+
+	override fun onCleared() {
+		clearPresenceBinding()
+		super.onCleared()
 	}
 
 	private fun filterDeletedPosts(posts: List<Post>): List<Post> {

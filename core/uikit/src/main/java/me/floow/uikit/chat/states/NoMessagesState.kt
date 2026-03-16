@@ -1,19 +1,15 @@
 package me.floow.uikit.chat.states
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import me.floow.uikit.components.misc.BlankContentBox
+import me.floow.uikit.R
 
 @Composable
 fun NoMessagesState(modifier: Modifier = Modifier) {
-	Box(
+	BlankContentBox(
 		modifier = modifier,
-		contentAlignment = Alignment.Center
-	) {
-		Text(
-			text = "no messages im so sorry"
-		)
-	}
+		titleRes = R.string.no_messages_title,
+		subtitleRes = R.string.no_messages_subtitle
+	)
 }

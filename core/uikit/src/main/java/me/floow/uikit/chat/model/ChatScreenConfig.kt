@@ -20,7 +20,10 @@ data class ChatScrollPolicy(
 	val animateJumpToHighlightedMessage: Boolean = true,
 	val scrollToBottomOnInputFocus: Boolean = true,
 	val alwaysShowScrollToBottomWhenNotAtBottom: Boolean = false,
-	val liftMessageListWithIme: Boolean = false
+	val liftMessageListWithIme: Boolean = false,
+	val jumpAlignment: ChatJumpAlignment = ChatJumpAlignment.Center,
+	val jumpAnimationDurationMs: Int = 180,
+	val allowAutoCenterCorrection: Boolean = false
 )
 
 @Immutable
@@ -47,6 +50,9 @@ data class ChatScreenConfig(
 	val scrollToBottomOnInputFocus: Boolean = true,
 	val alwaysShowScrollToBottomWhenNotAtBottom: Boolean = false,
 	val liftMessageListWithIme: Boolean = false,
+	val jumpAlignment: ChatJumpAlignment = ChatJumpAlignment.Center,
+	val jumpAnimationDurationMs: Int = 180,
+	val allowAutoCenterCorrection: Boolean = false,
 	val showAuthorHeaderForInMessages: Boolean = false,
 	val maxInputLength: Int? = null,
 	val topBarMode: ChatTopBarMode = ChatTopBarMode.Standard,
@@ -73,7 +79,10 @@ data class ChatScreenConfig(
 			animateJumpToHighlightedMessage = animateJumpToHighlightedMessage,
 			scrollToBottomOnInputFocus = scrollToBottomOnInputFocus,
 			alwaysShowScrollToBottomWhenNotAtBottom = alwaysShowScrollToBottomWhenNotAtBottom,
-			liftMessageListWithIme = liftMessageListWithIme
+			liftMessageListWithIme = liftMessageListWithIme,
+			jumpAlignment = jumpAlignment,
+			jumpAnimationDurationMs = jumpAnimationDurationMs,
+			allowAutoCenterCorrection = allowAutoCenterCorrection
 		)
 
 	val topBarPolicy: ChatTopBarPolicy
@@ -90,6 +99,12 @@ data class ChatScreenConfig(
 enum class ChatLayoutMode {
 	NewestAtBottom,
 	OldestAtTop
+}
+
+enum class ChatJumpAlignment {
+	Center,
+	Top,
+	Bottom
 }
 
 enum class ChatTopBarMode {
