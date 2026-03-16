@@ -35,6 +35,7 @@ internal fun ReplyableChatBubble(
 	isHighlighted: Boolean = false,
 	showAuthorHeaderForInMessages: Boolean = false,
 	showUnreadDot: Boolean = false,
+	showMessageStatus: Boolean = true,
 	showReplyPreview: Boolean = true,
 	modifier: Modifier = Modifier,
 	bubbleBoundsModifier: Modifier = Modifier
@@ -93,6 +94,7 @@ internal fun ReplyableChatBubble(
 						isHighlighted = isHighlighted,
 						showAuthorHeaderForInMessages = showAuthorHeaderForInMessages,
 						showUnreadDot = showUnreadDot,
+						showMessageStatus = showMessageStatus,
 						showReplyPreview = showReplyPreview,
 						modifier = if (isOut) Modifier.fillMaxWidth() else Modifier,
 						bubbleBoundsModifier = bubbleBoundsModifier

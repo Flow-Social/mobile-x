@@ -135,6 +135,7 @@ fun CommentsRoute(
 			showTypingIndicator = false,
 			showPinActions = false,
 			showEmojiButton = false,
+			showMessageStatusIndicators = false,
 				scrollToBottomOnInputFocus = false,
 				liftMessageListWithIme = true,
 				showAuthorHeaderForInMessages = true,

@@ -44,6 +44,7 @@ data class ChatScreenConfig(
 	val showInputBar: Boolean = true,
 	val showMessageOptions: Boolean = true,
 	val showReplyInteractions: Boolean = true,
+	val showMessageStatusIndicators: Boolean = true,
 	val showHighlightedMessageBackground: Boolean = true,
 	val animateJumpToHighlightedMessage: Boolean = true,
 	val showEmojiButton: Boolean = true,

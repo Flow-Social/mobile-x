@@ -101,6 +101,7 @@ fun ChatBubble(
 	isHighlighted: Boolean = false,
 	showAuthorHeaderForInMessages: Boolean = false,
 	showUnreadDot: Boolean = false,
+	showMessageStatus: Boolean = true,
 	showReplyPreview: Boolean = true,
 	onRetrySendClick: ((ChatMessage) -> Unit)? = null,
 	modifier: Modifier = Modifier,
@@ -184,7 +185,7 @@ fun ChatBubble(
 				)
 			}
 
-			if (isOut) {
+			if (isOut && showMessageStatus) {
 				MessageStatusIndicator(
 					status = chatMessage.deliveryStatus,
 					showUnreadDot = showUnreadDot,

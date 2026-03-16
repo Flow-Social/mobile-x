@@ -210,6 +210,7 @@ internal fun MessageBubble(
 			isHighlighted = isHighlighted,
 			showAuthorHeaderForInMessages = showAuthorHeaderForInMessages,
 			showUnreadDot = showUnreadDot,
+			showMessageStatus = config.showMessageStatusIndicators,
 			showReplyPreview = showReplyPreview,
 			modifier = modifier,
 			bubbleBoundsModifier = bubbleBoundsModifier
@@ -222,6 +223,7 @@ internal fun MessageBubble(
 			isHighlighted = isHighlighted,
 			showAuthorHeaderForInMessages = showAuthorHeaderForInMessages,
 			showUnreadDot = showUnreadDot,
+			showMessageStatus = config.showMessageStatusIndicators,
 			showReplyPreview = showReplyPreview,
 			modifier = modifier,
 			bubbleBoundsModifier = bubbleBoundsModifier
