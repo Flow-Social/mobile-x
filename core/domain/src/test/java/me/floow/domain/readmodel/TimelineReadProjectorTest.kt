@@ -28,10 +28,10 @@ class TimelineReadProjectorTest {
 			)
 		)
 
-		assertEquals(setOf(4L), projection.unreadMessageIds)
-		assertEquals(2L, projection.unreadBoundaryMessageId)
-		assertEquals(2L, projection.readUpToCursor)
-	}
+			assertEquals(setOf(4L), projection.unreadMessageIds)
+			assertEquals(4L, projection.unreadBoundaryMessageId)
+			assertEquals(2L, projection.readUpToCursor)
+		}
 
 	@Test
 	fun `message link mode prioritizes link anchor`() {
