@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.util.TypedValue
@@ -12,6 +13,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.SystemBarStyle
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,15 +62,23 @@ class MainActivity : ComponentActivity() {
 			)
 			splashProvider.view.animate()
 				.alpha(0f)
-				.scaleX(0.94f)
-				.scaleY(0.94f)
+				.scaleX(0.88f)
+				.scaleY(0.88f)
 				.translationY(translationY)
 				.setDuration(180L)
 				.withEndAction { splashProvider.remove() }
 				.start()
 		}
 
-		enableEdgeToEdge()
+		val isDarkMode = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+			Configuration.UI_MODE_NIGHT_YES
+		enableEdgeToEdge(
+			statusBarStyle = if (isDarkMode) {
+				SystemBarStyle.dark(Color.TRANSPARENT)
+			} else {
+				SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
+			}
+		)
 
 		setContent {
 			FlowTheme {
