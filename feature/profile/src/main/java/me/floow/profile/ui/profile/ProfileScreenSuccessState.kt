@@ -133,7 +133,10 @@ fun ProfileScreenSuccessState(
     var contentHeight by remember { mutableStateOf(0.dp) }
     val heroHeight = 580.dp
     val isSheetExpanded by remember {
-        derivedStateOf { scaffoldState.bottomSheetState.currentValue == SheetValue.Expanded }
+        derivedStateOf {
+            scaffoldState.bottomSheetState.currentValue == SheetValue.Expanded ||
+                scaffoldState.bottomSheetState.targetValue == SheetValue.Expanded
+        }
     }
     val isPostsGridAtTop by remember {
         derivedStateOf {
@@ -149,9 +152,13 @@ fun ProfileScreenSuccessState(
     val statusBarColor = if (isSheetExpanded) {
         MaterialTheme.colorScheme.surfaceContainerHigh
     } else {
-        MaterialTheme.colorScheme.background
+        Color.Transparent
     }
-    val useDarkStatusIcons = statusBarColor.luminance() > 0.5f
+    val useDarkStatusIcons = if (isSheetExpanded) {
+        statusBarColor.luminance() > 0.5f
+    } else {
+        false
+    }
     val systemBarStyle = LocalSystemBarStyle.current
     val haptic = LocalHapticFeedback.current
     var heroBoundsInWindow by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
