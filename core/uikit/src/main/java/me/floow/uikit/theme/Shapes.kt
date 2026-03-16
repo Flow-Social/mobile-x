@@ -17,17 +17,19 @@ import androidx.graphics.shapes.*
 import me.floow.uikit.util.ComponentPreviewBox
 import kotlin.math.max
 
-private val elevanagon = RoundedPolygon.star(
-    11,
-    rounding = CornerRounding(0.3f),
+private const val Cookie9SidedDeeperInnerRadius = 0.74f
+
+private val cookie9SidedPolygon: RoundedPolygon = RoundedPolygon.star(
+    numVerticesPerRadius = 9,
+    innerRadius = Cookie9SidedDeeperInnerRadius,
+    rounding = CornerRounding(0.5f),
 )
 
-private val ninehedron = RoundedPolygon.star(
-    9,
-    rounding = CornerRounding(0.3f),
-)
+private val elevanagon = cookie9SidedPolygon
 
-fun RoundedPolygon.getBounds() = calculateBounds().let { Rect(it[0], it[1], it[2], it[3]) }
+private val ninehedron = cookie9SidedPolygon
+
+private fun RoundedPolygon.getBounds() = calculateBounds().let { Rect(it[0], it[1], it[2], it[3]) }
 
 class RoundedPolygonShape(
     private val polygon: RoundedPolygon
