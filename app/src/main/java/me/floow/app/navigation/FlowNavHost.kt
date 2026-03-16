@@ -4,6 +4,10 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
@@ -62,6 +66,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import me.floow.app.deeplink.DeepLinkDispatcher
 import me.floow.app.notifications.NotificationsBadgeViewModel
+import me.floow.app.notifications.DirectChatsSyncCoordinator
+import me.floow.app.push.DirectChatNotificationCenter
 import me.floow.app.push.PushTokenSyncScheduler
 import me.floow.app.navigation.bottomNavigationItems
 import me.floow.app.ui.components.MainScreenScaffold
@@ -71,7 +77,9 @@ import me.floow.chats.ChatsRoute
 import me.floow.chats.RepliesOverlayRoute
 import me.floow.chats.ReplyThreadNavigationTarget
 import me.floow.chats.resolveCommentTargetCandidates
+import me.floow.chats.uilogic.chat.DirectChatOpenMode
 import me.floow.chats.uilogic.chats.isRepliesInboxChat
+import me.floow.chats.uilogic.chats.isSavedMessages
 import me.floow.chats.uilogic.replies.RepliesOverlayOpenMode
 import me.floow.chatssearch.ui.SearchUsersRoute
 import me.floow.comments.CommentsRoute
@@ -112,7 +120,11 @@ private sealed interface OverlayScreen {
 	data class OverlayChat(
 		val interlocutorId: String,
 		val interlocutorName: String,
-		val interlocutorAvatarUri: String?
+		val interlocutorAvatarUri: String?,
+		val conversationId: Long? = null,
+		val messageAnchorId: Long? = null,
+		val openMode: DirectChatOpenMode = DirectChatOpenMode.FROM_LAST_SEEN,
+		val isSavedMessages: Boolean = false,
 	) : OverlayScreen
 	data class OverlayRepliesInbox(
 		val openMode: RepliesOverlayOpenMode = RepliesOverlayOpenMode.FROM_UNREAD,
@@ -206,8 +218,10 @@ fun FlowNavHost(
 	val deepLinkDispatcher: DeepLinkDispatcher = koinInject()
 	val mediaTransferStore: PostMediaTransferStore = koinInject()
 	val postsRepository: PostsRepository = koinInject()
+	val directMessagesReadCursorStore: me.floow.domain.data.repos.DirectMessagesReadCursorStore = koinInject()
 	val usernameToIdCache: me.floow.domain.cache.UsernameToIdCache = koinInject()
 	val notificationsBadgeViewModel: NotificationsBadgeViewModel = koinViewModel(key = "notifications-badge-root")
+	val directChatsSyncCoordinator: DirectChatsSyncCoordinator = koinInject()
 	val authState by authenticationManager.authenticationStateFlow.collectAsState()
 	val notificationsBadgeState by notificationsBadgeViewModel.state.collectAsState()
 	val isSignedIn = authState.let { authenticationManager.isSignedIn() }
@@ -230,6 +244,7 @@ fun FlowNavHost(
 	var editPostDiscardDialogOverlayId by remember { mutableStateOf<Long?>(null) }
 	val snackbarHostState = remember { SnackbarHostState() }
 	val snackbarScope = rememberCoroutineScope()
+	val chatOpenScope = rememberCoroutineScope()
 	val previewCacheWindow = remember { ArrayDeque<Pair<String, List<String>>>() }
 	val editedPostOverrides = remember { mutableStateMapOf<String, PostContentOverride>() }
 	val postCacheById = remember { mutableStateMapOf<String, me.floow.domain.models.Post>() }
@@ -239,7 +254,10 @@ fun FlowNavHost(
 	LaunchedEffect(deepLinkIntent, isSignedIn) {
 		val intent = deepLinkIntent ?: return@LaunchedEffect
 		if (isSignedIn) {
-			navController.handleDeepLink(intent)
+			val handledChatDeepLink = handleChatConversationDeepLinkIntent(intent, navController)
+			if (!handledChatDeepLink) {
+				navController.handleDeepLink(intent)
+			}
 		}
 		deepLinkDispatcher.clear()
 	}
@@ -247,9 +265,11 @@ fun FlowNavHost(
 	LaunchedEffect(isSignedIn) {
 		if (isSignedIn) {
 			notificationsBadgeViewModel.startPolling()
+			directChatsSyncCoordinator.start()
 			PushTokenSyncScheduler.enqueueNow(context.applicationContext)
 		} else {
 			notificationsBadgeViewModel.stopPolling(resetUnread = true)
+			directChatsSyncCoordinator.stop()
 		}
 	}
 
@@ -531,7 +551,7 @@ fun FlowNavHost(
 		val overlay = entry.screen
 		return when (overlay) {
 			is OverlayScreen.OverlayProfile -> "overlay:${entry.id}:profile:${overlay.userId}"
-			is OverlayScreen.OverlayChat -> "overlay:${entry.id}:chat:${overlay.interlocutorId}"
+			is OverlayScreen.OverlayChat -> "overlay:${entry.id}:chat:${overlay.interlocutorId}:${overlay.conversationId ?: 0L}"
 			is OverlayScreen.OverlayRepliesInbox -> "overlay:${entry.id}:replies-inbox"
 			is OverlayScreen.OverlayComments -> "overlay:${entry.id}:comments:${overlay.postId}"
 			is OverlayScreen.OverlayPostDeepLink -> "overlay:${entry.id}:post-deeplink:${overlay.postId}"
@@ -555,6 +575,7 @@ fun FlowNavHost(
 				val profileRepository: me.floow.domain.data.repos.ProfileRepository = koinInject()
 				val postsRepository: me.floow.domain.data.repos.PostsRepository = koinInject()
 				val usersRepository: me.floow.domain.data.repos.UsersRepository = koinInject()
+				val presenceRepository: me.floow.domain.data.repos.PresenceRepository = koinInject()
 				val profileLocalStore: me.floow.domain.cache.ProfileLocalStore = koinInject()
 				val postsLocalStore: me.floow.domain.cache.PostsLocalStore = koinInject()
 					val factory = remember(overlay.userId) {
@@ -572,6 +593,7 @@ fun FlowNavHost(
 										profileRepository = profileRepository,
 										postsRepository = postsRepository,
 										usersRepository = usersRepository,
+										presenceRepository = presenceRepository,
 										profileLocalStore = profileLocalStore,
 										postsLocalStore = postsLocalStore,
 										usernameToIdCache = usernameToIdCache,
@@ -1014,13 +1036,17 @@ fun FlowNavHost(
 					initialData = ChatRouteInitialData(
 						chatInterlocutorId = overlay.interlocutorId,
 						chatInterlocutorName = overlay.interlocutorName,
-						chatInterlocutorAvatarUrl = overlay.interlocutorAvatarUri?.let { Uri.parse(it) }
+						chatInterlocutorAvatarUrl = overlay.interlocutorAvatarUri?.let { Uri.parse(it) },
+						conversationId = overlay.conversationId,
+						messageAnchorId = overlay.messageAnchorId,
+						openMode = overlay.openMode,
+						isSavedMessages = overlay.isSavedMessages,
 					),
 					onBackClick = onClose,
 					onProfileClick = { userId ->
 						pushOverlay(OverlayScreen.OverlayProfile(userId = userId))
 					},
-					vm = koinViewModel(key = "overlay-${overlayId}-chat-${overlay.interlocutorId}"),
+					vm = koinViewModel(key = "chat-session-${overlay.interlocutorId}"),
 					modifier = Modifier.fillMaxSize()
 				)
 			}
@@ -1070,8 +1096,37 @@ fun FlowNavHost(
 				}
 			}
 
-		val topEntry = overlayStack.lastOrNull()
-		val topParallaxEnabled = topEntry?.let { overlayParallaxEnabled[it.id] } ?: true
+			val topEntry = overlayStack.lastOrNull()
+			LaunchedEffect(topEntry?.id, topEntry?.screen) {
+				val topChat = topEntry?.screen as? OverlayScreen.OverlayChat
+				if (topChat != null) {
+					DirectChatNotificationCenter.setActiveChat(
+						context = context.applicationContext,
+						conversationId = topChat.conversationId,
+						interlocutorId = topChat.interlocutorId
+					)
+					topChat.conversationId
+						?.takeIf { it > 0L }
+						?.let { conversationId ->
+							DirectChatNotificationCenter.cancelConversationNotifications(
+								context = context.applicationContext,
+								conversationId = conversationId
+							)
+						}
+					topChat.interlocutorId
+						.trim()
+						.takeIf(String::isNotEmpty)
+						?.let { interlocutorId ->
+							DirectChatNotificationCenter.cancelInterlocutorNotifications(
+								context = context.applicationContext,
+								interlocutorId = interlocutorId
+							)
+						}
+				} else {
+					DirectChatNotificationCenter.clearActiveChat(context.applicationContext)
+				}
+			}
+			val topParallaxEnabled = topEntry?.let { overlayParallaxEnabled[it.id] } ?: true
 		val effectiveParallaxFactor = if (topParallaxEnabled == true) parallaxFactor else 0f
 			val shouldBlurUnderlay = topEntry?.screen is OverlayScreen.OverlayCreatePost ||
 				topEntry?.screen is OverlayScreen.OverlayEditPost
@@ -1094,7 +1149,22 @@ fun FlowNavHost(
 			}
 
 			Box(modifier = navHostModifier) {
-				NavHost(navController = navController, startDestination = startDestination) {
+				NavHost(
+					navController = navController,
+					startDestination = startDestination,
+					enterTransition = {
+						fadeIn(animationSpec = tween(durationMillis = 100, easing = FastOutSlowInEasing))
+					},
+					exitTransition = {
+						fadeOut(animationSpec = tween(durationMillis = 85, easing = FastOutSlowInEasing))
+					},
+					popEnterTransition = {
+						fadeIn(animationSpec = tween(durationMillis = 100, easing = FastOutSlowInEasing))
+					},
+					popExitTransition = {
+						fadeOut(animationSpec = tween(durationMillis = 85, easing = FastOutSlowInEasing))
+					}
+				) {
 				navigation<AuthDestinationsCluster>(
 					startDestination = LoginScreen
 				) {
@@ -1497,7 +1567,45 @@ fun FlowNavHost(
 						}
 					}
 
-					composable<ChatsScreen> {
+					composable<ChatsScreen> { backStackEntry ->
+						val openConversationId = backStackEntry.savedStateHandle
+							.get<String>(CHAT_DEEPLINK_CONVERSATION_ID_KEY)
+						val openMessageId = backStackEntry.savedStateHandle
+							.get<String>(CHAT_DEEPLINK_MESSAGE_ID_KEY)
+						val openInterlocutorId = backStackEntry.savedStateHandle
+							.get<String>(CHAT_DEEPLINK_INTERLOCUTOR_ID_KEY)
+						val openInterlocutorName = backStackEntry.savedStateHandle
+							.get<String>(CHAT_DEEPLINK_INTERLOCUTOR_NAME_KEY)
+
+						LaunchedEffect(openConversationId, openMessageId, openInterlocutorId, openInterlocutorName) {
+							val conversationId = openConversationId
+								?.trim()
+								?.toLongOrNull()
+								?.takeIf { id -> id > 0L }
+								?: return@LaunchedEffect
+							val messageAnchorId = openMessageId
+								?.trim()
+								?.toLongOrNull()
+								?.takeIf { id -> id > 0L }
+							backStackEntry.savedStateHandle.remove<String>(CHAT_DEEPLINK_CONVERSATION_ID_KEY)
+							backStackEntry.savedStateHandle.remove<String>(CHAT_DEEPLINK_MESSAGE_ID_KEY)
+							backStackEntry.savedStateHandle.remove<String>(CHAT_DEEPLINK_INTERLOCUTOR_ID_KEY)
+							backStackEntry.savedStateHandle.remove<String>(CHAT_DEEPLINK_INTERLOCUTOR_NAME_KEY)
+							pushOverlay(
+								OverlayScreen.OverlayChat(
+									interlocutorId = openInterlocutorId?.trim().orEmpty(),
+									interlocutorName = openInterlocutorName
+										?.trim()
+										?.takeIf(String::isNotEmpty)
+										?: "Чат",
+									interlocutorAvatarUri = null,
+									conversationId = conversationId,
+									messageAnchorId = messageAnchorId,
+									openMode = DirectChatOpenMode.FROM_MESSAGE_LINK
+								)
+							)
+						}
+
 						MainScreenScaffold(
 							navController = navController,
 							modifier = modifier,
@@ -1516,13 +1624,34 @@ fun FlowNavHost(
 											)
 										)
 									} else {
-										pushOverlay(
-											OverlayScreen.OverlayChat(
-												interlocutorId = chat.id,
-												interlocutorName = chat.name.value,
-												interlocutorAvatarUri = chat.avatarUrl?.toString()
+										chatOpenScope.launch {
+											val conversationId = chat.conversationId
+											val hasStoredOpenAnchor = conversationId
+												?.takeIf { id -> id > 0L }
+												?.let { id ->
+													directMessagesReadCursorStore
+														.getOpenViewportSnapshot(id)
+														.anchorMessageId
+														?.let { anchorId -> anchorId > 0L }
+														?: false
+												}
+												?: false
+											val openMode = when {
+												hasStoredOpenAnchor -> DirectChatOpenMode.FROM_LAST_SEEN
+												chat.unreadCount > 0 -> DirectChatOpenMode.FROM_UNREAD
+												else -> DirectChatOpenMode.FROM_LAST_SEEN
+											}
+											pushOverlay(
+												OverlayScreen.OverlayChat(
+													interlocutorId = chat.id,
+													interlocutorName = chat.name.value,
+													interlocutorAvatarUri = chat.avatarUrl?.toString(),
+													conversationId = conversationId,
+													openMode = openMode,
+													isSavedMessages = chat.isSavedMessages(),
+												)
 											)
-										)
+										}
 									}
 									},
 									isMockBuild = me.floow.app.BuildConfig.USE_MOCK_DATA,
@@ -1550,7 +1679,7 @@ fun FlowNavHost(
 								pushOverlay(OverlayScreen.OverlayProfile(userId = userId))
 							},
 							isMockBuild = me.floow.app.BuildConfig.USE_MOCK_DATA,
-							vm = koinViewModel(),
+							vm = koinViewModel(key = "chat-session-${chatScreen?.interlocutorId ?: ""}"),
 							modifier = modifier
 						)
 					}
@@ -1715,6 +1844,71 @@ fun FlowNavHost(
 				.padding(16.dp)
 		)
 	}
+}
+
+private const val CHAT_DEEPLINK_CONVERSATION_ID_KEY = "open_chat_conversation_id"
+private const val CHAT_DEEPLINK_MESSAGE_ID_KEY = "open_chat_message_id"
+private const val CHAT_DEEPLINK_INTERLOCUTOR_ID_KEY = "open_chat_interlocutor_id"
+private const val CHAT_DEEPLINK_INTERLOCUTOR_NAME_KEY = "open_chat_interlocutor_name"
+
+private suspend fun handleChatConversationDeepLinkIntent(
+	intent: Intent,
+	navController: NavHostController
+): Boolean {
+	val data = intent.data ?: return false
+	if (data.scheme != "me.floow.app" || data.host != "chat") return false
+
+	val conversationId = data.getQueryParameter("conversation_id")
+		?.trim()
+		?.takeIf(String::isNotEmpty)
+		?: return false
+	val messageId = data.getQueryParameter("message_id")
+		?.trim()
+		?.takeIf(String::isNotEmpty)
+	val interlocutorId = data.getQueryParameter("interlocutor_id")
+		?.trim()
+		?.takeIf(String::isNotEmpty)
+	val interlocutorName = data.getQueryParameter("interlocutor_name")
+		?.trim()
+		?.takeIf(String::isNotEmpty)
+
+	navController.navigate(ChatsScreen) {
+		popUpTo(navController.graph.findStartDestination().id) {
+			saveState = true
+		}
+		launchSingleTop = true
+		restoreState = true
+	}
+
+	repeat(20) {
+		val targetEntry = navController.currentBackStackEntry
+		if (targetEntry?.destination?.hasRoute(ChatsScreen::class) == true) {
+			targetEntry.savedStateHandle[CHAT_DEEPLINK_CONVERSATION_ID_KEY] = conversationId
+			messageId?.let { nonBlankMessageId ->
+				targetEntry.savedStateHandle[CHAT_DEEPLINK_MESSAGE_ID_KEY] = nonBlankMessageId
+			}
+			interlocutorId?.let { nonBlankInterlocutorId ->
+				targetEntry.savedStateHandle[CHAT_DEEPLINK_INTERLOCUTOR_ID_KEY] = nonBlankInterlocutorId
+			}
+			interlocutorName?.let { nonBlankInterlocutorName ->
+				targetEntry.savedStateHandle[CHAT_DEEPLINK_INTERLOCUTOR_NAME_KEY] = nonBlankInterlocutorName
+			}
+			return true
+		}
+		kotlinx.coroutines.delay(16L)
+	}
+
+	navController.currentBackStackEntry?.savedStateHandle?.set(CHAT_DEEPLINK_CONVERSATION_ID_KEY, conversationId)
+	messageId?.let { nonBlankMessageId ->
+		navController.currentBackStackEntry?.savedStateHandle?.set(CHAT_DEEPLINK_MESSAGE_ID_KEY, nonBlankMessageId)
+	}
+	interlocutorId?.let { nonBlankInterlocutorId ->
+		navController.currentBackStackEntry?.savedStateHandle?.set(CHAT_DEEPLINK_INTERLOCUTOR_ID_KEY, nonBlankInterlocutorId)
+	}
+	interlocutorName?.let { nonBlankInterlocutorName ->
+		navController.currentBackStackEntry?.savedStateHandle?.set(CHAT_DEEPLINK_INTERLOCUTOR_NAME_KEY, nonBlankInterlocutorName)
+	}
+	return true
 }
 
 private fun showNotImplementedToast(context: Context) {

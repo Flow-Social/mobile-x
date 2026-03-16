@@ -6,9 +6,14 @@ import coil.ImageLoader
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import me.floow.app.di.flowModules
+import me.floow.app.notifications.DirectMessagesReadSyncScheduler
 import me.floow.app.push.PushNotificationChannels
+import me.floow.app.push.PushServiceController
 import me.floow.app.push.PushTokenSyncScheduler
+import me.floow.app.presence.PresenceLifecycleObserver
 import me.floow.app.notifications.NotificationsReadSyncScheduler
+import me.floow.domain.data.repos.PresenceRepository
+import androidx.lifecycle.ProcessLifecycleOwner
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.context.GlobalContext
 import org.koin.core.context.startKoin
@@ -22,6 +27,10 @@ class FlowApplication : Application() {
 				androidContext(this@FlowApplication)
 				modules(flowModules())
 			}
+		}
+		val koin = GlobalContext.getKoinApplicationOrNull()?.koin
+		koin?.getOrNull<PresenceRepository>()?.let { presenceRepository: PresenceRepository ->
+			ProcessLifecycleOwner.get().lifecycle.addObserver(PresenceLifecycleObserver(presenceRepository))
 		}
 
 		val imageLoader = ImageLoader.Builder(this)
@@ -41,8 +50,10 @@ class FlowApplication : Application() {
 
 		Coil.setImageLoader(imageLoader)
 		PushNotificationChannels.ensureCreated(this)
+		PushServiceController.start(this)
 		PushTokenSyncScheduler.ensurePeriodic(this)
 		PushTokenSyncScheduler.enqueueNow(this)
 		NotificationsReadSyncScheduler.ensurePeriodic(this, channel = "replies")
+		DirectMessagesReadSyncScheduler.ensurePeriodic(this)
 	}
 }
