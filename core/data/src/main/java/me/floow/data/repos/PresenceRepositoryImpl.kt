@@ -27,6 +27,7 @@ private const val HEARTBEAT_INTERVAL_MS = 35_000L
 private const val REALTIME_RECONNECT_MIN_MS = 1_000L
 private const val REALTIME_RECONNECT_MAX_MS = 10_000L
 private const val OFFLINE_DEBOUNCE_MS = 5_000L
+private const val SNAPSHOT_REFRESH_INTERVAL_MS = 30_000L
 
 class PresenceRepositoryImpl(
 	private val logger: Logger,
@@ -42,6 +43,7 @@ class PresenceRepositoryImpl(
 	private var realtimeJob: Job? = null
 	private var heartbeatJob: Job? = null
 	private var offlineJob: Job? = null
+	private var snapshotJob: Job? = null
 	@Volatile
 	private var isForeground: Boolean = false
 
@@ -93,6 +95,8 @@ class PresenceRepositoryImpl(
 		heartbeatJob = null
 		realtimeJob?.cancel()
 		realtimeJob = null
+		snapshotJob?.cancel()
+		snapshotJob = null
 		offlineJob?.cancel()
 		offlineJob = scope.launch {
 			delay(OFFLINE_DEBOUNCE_MS)
@@ -114,9 +118,13 @@ class PresenceRepositoryImpl(
 		val limited = combined.take(MAX_PRESENCE_TARGETS)
 		if (!force && limited.isEmpty()) return
 		realtimeJob?.cancel()
+		snapshotJob?.cancel()
 		if (limited.isEmpty()) return
-		scope.launch {
-			refreshPresenceSnapshot(limited)
+		snapshotJob = scope.launch {
+			while (isActive) {
+				refreshPresenceSnapshot(limited)
+				delay(SNAPSHOT_REFRESH_INTERVAL_MS)
+			}
 		}
 		realtimeJob = scope.launch {
 			var backoff = REALTIME_RECONNECT_MIN_MS
