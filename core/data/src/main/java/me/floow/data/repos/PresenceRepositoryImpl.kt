@@ -30,7 +30,6 @@ private const val MAX_PRESENCE_TARGETS = 200
 private const val HEARTBEAT_INTERVAL_MS = 35_000L
 private const val REALTIME_RECONNECT_MIN_MS = 1_000L
 private const val REALTIME_RECONNECT_MAX_MS = 10_000L
-private const val OFFLINE_DEBOUNCE_MS = 5_000L
 
 class PresenceRepositoryImpl(
 	private val logger: Logger,
@@ -48,7 +47,6 @@ class PresenceRepositoryImpl(
 	private var realtimeSession: PresenceRealtimeSession? = null
 	private var realtimeJob: Job? = null
 	private var heartbeatJob: Job? = null
-	private var offlineJob: Job? = null
 
 	@Volatile
 	private var isForeground: Boolean = false
@@ -91,8 +89,6 @@ class PresenceRepositoryImpl(
 
 	override fun onAppForeground() {
 		isForeground = true
-		offlineJob?.cancel()
-		offlineJob = null
 		ensureRealtimeLoop()
 		if (heartbeatJob?.isActive == true) return
 		heartbeatJob = scope.launch {
@@ -118,9 +114,7 @@ class PresenceRepositoryImpl(
 		realtimeJob?.cancel()
 		realtimeJob = null
 		scope.launch { closeRealtimeSession() }
-		offlineJob?.cancel()
-		offlineJob = scope.launch {
-			delay(OFFLINE_DEBOUNCE_MS)
+		scope.launch {
 			if (isForeground || !authenticationManager.isSignedIn()) return@launch
 			val sessionId = sessionStore.getOrCreateSessionId()
 			when (val response = presenceApi.offline(sessionId)) {
