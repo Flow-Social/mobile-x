@@ -115,7 +115,7 @@ private fun Modifier.setBackgroundBoxImage(backgroundImagePainter: Painter?): Mo
 		this.then(
 			Modifier.paint(
 				painter = backgroundImagePainter,
-				contentScale = ContentScale.FillBounds
+				contentScale = ContentScale.Crop
 			)
 		)
 	}
