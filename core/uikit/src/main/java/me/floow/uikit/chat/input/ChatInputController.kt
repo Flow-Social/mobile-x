@@ -190,25 +190,29 @@ class ChatInputController internal constructor(
 						!isTextFieldFocused || imeWasOpenDuringCurrentSession
 					else -> false
 				}
-				if (shouldClose) {
-					// IME can report 0px transiently (screen lock/unlock, app resume). If we are focused
-					// and in keyboard mode, keep the "requested" state so the spacer doesn't collapse.
-					if (isTextFieldFocused && (uiState == ChatInputUiState.KeyboardVisible || uiState == ChatInputUiState.KeyboardClosing)) {
-						resetKeyboardSampling()
-						clearKeyboardHandoff()
-						if (uiState != ChatInputUiState.KeyboardRequested) {
-							uiState = ChatInputUiState.KeyboardRequested
-							keyboardRequestToken += 1
-						}
-						imeWasOpenDuringCurrentSession = false
-						logState("onImeHeightChanged(0) → keep_keyboard_requested")
-					} else {
-						resetKeyboardSampling()
-						clearKeyboardHandoff()
-						uiState = ChatInputUiState.Closed
-						imeWasOpenDuringCurrentSession = false
+			if (shouldClose) {
+				// IME can report 0px transiently (screen lock/unlock, app resume). If we are focused
+				// and in keyboard mode, keep the "requested" state so the spacer doesn't collapse.
+				if (
+					shouldRestoreKeyboardOnResume &&
+					isTextFieldFocused &&
+					(uiState == ChatInputUiState.KeyboardVisible || uiState == ChatInputUiState.KeyboardClosing)
+				) {
+					resetKeyboardSampling()
+					clearKeyboardHandoff()
+					if (uiState != ChatInputUiState.KeyboardRequested) {
+						uiState = ChatInputUiState.KeyboardRequested
+						keyboardRequestToken += 1
 					}
+					imeWasOpenDuringCurrentSession = false
+					logState("onImeHeightChanged(0) → keep_keyboard_requested")
+				} else {
+					resetKeyboardSampling()
+					clearKeyboardHandoff()
+					uiState = ChatInputUiState.Closed
+					imeWasOpenDuringCurrentSession = false
 				}
+			}
 				keepEmojiModeUntilImeHidden = false
 			}
 			logState("onImeHeightChanged($heightPx)")
