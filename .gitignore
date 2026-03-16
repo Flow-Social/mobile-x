@@ -12,7 +12,11 @@
 /.idea/assetWizardSettings.xml
 .DS_Store
 /build
+**/build/
 /captures
 .externalNativeBuild
 .cxx
 local.properties
+
+# Local release artifacts / staging folders (never commit)
+/app/production/
