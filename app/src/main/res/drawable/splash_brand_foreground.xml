@@ -7,8 +7,8 @@
         android:name="icon_group"
         android:pivotX="46"
         android:pivotY="46"
-        android:scaleX="0.72"
-        android:scaleY="0.72">
+        android:scaleX="0.84"
+        android:scaleY="0.84">
         <path
             android:name="fill_main"
             android:fillAlpha="0"

@@ -3,6 +3,6 @@
     android:duration="240"
     android:interpolator="@android:interpolator/overshoot"
     android:propertyName="scaleX"
-    android:valueFrom="0.72"
-    android:valueTo="1"
+    android:valueFrom="0.84"
+    android:valueTo="1.08"
     android:valueType="floatType" />

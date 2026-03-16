@@ -7,7 +7,6 @@ import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
-import android.os.SystemClock
 import android.util.TypedValue
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
@@ -33,10 +32,6 @@ import org.koin.android.ext.android.getKoin
 import java.util.Locale
 
 class MainActivity : ComponentActivity() {
-	private companion object {
-		const val MIN_SPLASH_VISIBLE_MS = 140L
-	}
-
 	private var launchBootstrapState: LaunchBootstrapState by mutableStateOf(LaunchBootstrapState.Loading)
 	private var didScheduleNotificationsPrompt = false
 	private val requestNotificationsPermissionLauncher =
@@ -48,7 +43,6 @@ class MainActivity : ComponentActivity() {
 
 	override fun onCreate(savedInstanceState: Bundle?) {
 		val splashScreen = installSplashScreen()
-		val splashShownAtMs = SystemClock.uptimeMillis()
 
 		super.onCreate(savedInstanceState)
 
@@ -56,8 +50,7 @@ class MainActivity : ComponentActivity() {
 		val launchBootstrapper = LaunchBootstrapper(authenticationManager)
 
 		splashScreen.setKeepOnScreenCondition {
-			launchBootstrapState is LaunchBootstrapState.Loading ||
-				SystemClock.uptimeMillis() - splashShownAtMs < MIN_SPLASH_VISIBLE_MS
+			launchBootstrapState is LaunchBootstrapState.Loading
 		}
 		splashScreen.setOnExitAnimationListener { splashProvider ->
 			val translationY = TypedValue.applyDimension(
