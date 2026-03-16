@@ -151,9 +151,9 @@ class ChatInputController internal constructor(
 		logState("syncPersistedKeyboardHeight($heightPx)")
 	}
 
-	fun onImeHeightChanged(heightPx: Int) {
-		imeHeightPx = heightPx.coerceAtLeast(0)
-		if (imeHeightPx > 0) {
+		fun onImeHeightChanged(heightPx: Int) {
+			imeHeightPx = heightPx.coerceAtLeast(0)
+			if (imeHeightPx > 0) {
 			imeWasOpenDuringCurrentSession = true
 			updateStableKeyboardHeight(imeHeightPx)
 			if (uiState == ChatInputUiState.SwitchingEmojiToKeyboard && imeHeightPx >= keyboardHandoffHeightPx) {
@@ -182,24 +182,37 @@ class ChatInputController internal constructor(
 					}
 				}
 			}
-		} else {
-			val shouldClose = when (uiState) {
-				ChatInputUiState.KeyboardVisible,
-				ChatInputUiState.KeyboardClosing -> true
-				ChatInputUiState.SwitchingEmojiToKeyboard ->
-					!isTextFieldFocused || imeWasOpenDuringCurrentSession
-				else -> false
+			} else {
+				val shouldClose = when (uiState) {
+					ChatInputUiState.KeyboardVisible,
+					ChatInputUiState.KeyboardClosing -> true
+					ChatInputUiState.SwitchingEmojiToKeyboard ->
+						!isTextFieldFocused || imeWasOpenDuringCurrentSession
+					else -> false
+				}
+				if (shouldClose) {
+					// IME can report 0px transiently (screen lock/unlock, app resume). If we are focused
+					// and in keyboard mode, keep the "requested" state so the spacer doesn't collapse.
+					if (isTextFieldFocused && (uiState == ChatInputUiState.KeyboardVisible || uiState == ChatInputUiState.KeyboardClosing)) {
+						resetKeyboardSampling()
+						clearKeyboardHandoff()
+						if (uiState != ChatInputUiState.KeyboardRequested) {
+							uiState = ChatInputUiState.KeyboardRequested
+							keyboardRequestToken += 1
+						}
+						imeWasOpenDuringCurrentSession = false
+						logState("onImeHeightChanged(0) → keep_keyboard_requested")
+					} else {
+						resetKeyboardSampling()
+						clearKeyboardHandoff()
+						uiState = ChatInputUiState.Closed
+						imeWasOpenDuringCurrentSession = false
+					}
+				}
+				keepEmojiModeUntilImeHidden = false
 			}
-			if (shouldClose) {
-				resetKeyboardSampling()
-				clearKeyboardHandoff()
-				uiState = ChatInputUiState.Closed
-				imeWasOpenDuringCurrentSession = false
-			}
-			keepEmojiModeUntilImeHidden = false
+			logState("onImeHeightChanged($heightPx)")
 		}
-		logState("onImeHeightChanged($heightPx)")
-	}
 
 	fun insertEmoji(emoji: String) {
 		val current = textFieldValue
@@ -343,42 +356,26 @@ class ChatInputController internal constructor(
 		logState("onTextFieldFocusChanged(isFocused=$isFocused)")
 	}
 
-	fun onHostPaused() {
-		val wasFocused = isTextFieldFocused
-		val wasKeyboardMode = inputMode == ChatInputMode.Keyboard || uiState == ChatInputUiState.KeyboardClosing
-		shouldRestoreKeyboardOnResume = wasFocused && wasKeyboardMode
-		isTextFieldFocused = false
-		if (wasKeyboardMode) {
-			keepEmojiModeUntilImeHidden = false
-			clearKeyboardHandoff()
-			uiState = ChatInputUiState.Closed
-			logState("onHostPaused() → forced_close restoreOnResume=$shouldRestoreKeyboardOnResume")
-			return
+		fun onHostPaused() {
+			// Do not force-close input on pause: screen lock / app switching can temporarily zero IME insets.
+			// Closing here causes "spacer disappears" and subsequent taps won't reopen keyboard until re-enter.
+			val wasKeyboardMode = inputMode == ChatInputMode.Keyboard || uiState == ChatInputUiState.KeyboardClosing
+			shouldRestoreKeyboardOnResume = isTextFieldFocused && wasKeyboardMode
+			logState("onHostPaused() restoreOnResume=$shouldRestoreKeyboardOnResume")
 		}
-		logState("onHostPaused()")
-	}
 
-	fun onHostResumed() {
-		if (shouldRestoreKeyboardOnResume) {
-			shouldRestoreKeyboardOnResume = false
-			imeWasOpenDuringCurrentSession = false
-			keepEmojiModeUntilImeHidden = false
-			uiState = ChatInputUiState.KeyboardRequested
-			keyboardRequestToken += 1
-			logState("onHostResumed() → restore_keyboard")
-			return
+		fun onHostResumed() {
+			if (shouldRestoreKeyboardOnResume) {
+				shouldRestoreKeyboardOnResume = false
+				imeWasOpenDuringCurrentSession = false
+				keepEmojiModeUntilImeHidden = false
+				uiState = ChatInputUiState.KeyboardRequested
+				keyboardRequestToken += 1
+				logState("onHostResumed() → restore_keyboard")
+				return
+			}
+			logState("onHostResumed()")
 		}
-		if ((inputMode == ChatInputMode.Keyboard || uiState == ChatInputUiState.KeyboardClosing) &&
-			imeHeightPx == 0 && !isTextFieldFocused
-		) {
-			keepEmojiModeUntilImeHidden = false
-			clearKeyboardHandoff()
-			uiState = ChatInputUiState.Closed
-			logState("onHostResumed() → forced_close")
-			return
-		}
-		logState("onHostResumed()")
-	}
 
 	fun handleBack(): Boolean {
 		return when (uiState) {
