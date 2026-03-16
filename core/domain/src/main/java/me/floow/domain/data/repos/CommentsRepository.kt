@@ -1,7 +1,9 @@
 package me.floow.domain.data.repos
 
+import kotlinx.coroutines.flow.Flow
 import me.floow.domain.data.GetDataResponse
 import me.floow.domain.models.Comment
+import me.floow.domain.models.CommentRealtimeEvent
 import me.floow.domain.models.CommentsPage
 import me.floow.domain.data.UpdateDataResponse
 
@@ -29,4 +31,10 @@ interface CommentsRepository {
 	suspend fun deleteComment(commentId: String): UpdateDataResponse
 
 	suspend fun markCommentsReadUpTo(postId: String, readUpToSeq: Long): GetDataResponse<Long>
+
+	fun subscribePostComments(
+		postId: String,
+		afterSeq: Long,
+		replayLimit: Int = 200
+	): Flow<CommentRealtimeEvent>
 }

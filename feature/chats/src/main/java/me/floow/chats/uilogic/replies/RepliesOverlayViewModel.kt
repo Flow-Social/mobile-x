@@ -18,20 +18,32 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.floow.chats.ReplyThreadNavigationTarget
+import me.floow.chats.uilogic.shared.mergePendingReadCursor
+import me.floow.chats.uilogic.shared.removeReadMessagesUpToCursor
+import me.floow.chats.uilogic.shared.resolveAnchorMessageIdByCursor
+import me.floow.chats.uilogic.shared.resolveMaxVisibleUnreadCursor
+import me.floow.chats.uilogic.shared.shouldApplyVisibleReadCandidate
+import me.floow.chats.uilogic.shared.shouldEnqueueReadCursor
+import me.floow.chats.uilogic.shared.toTimelineReadOpenMode
 import me.floow.domain.data.repos.NotificationsRealtimeRepository
 import me.floow.domain.data.repos.NotificationsReadCursorStore
 import me.floow.domain.data.repos.RepliesRealtimeState
+import me.floow.domain.readmodel.TimelineReadItem
+import me.floow.domain.readmodel.TimelineReadProjectorInput
+import me.floow.domain.readmodel.projectTimelineReadModel
 import me.floow.domain.models.UserNotification
 import me.floow.domain.models.UserNotificationsPage
 import me.floow.domain.utils.Logger
+import me.floow.domain.utils.toLocalDateTimeFromEpochMillis
 import me.floow.uikit.chat.model.ChatMessage
+import me.floow.uikit.chat.model.ChatAnchorRequest
+import me.floow.uikit.chat.model.ChatContextMenuAction
 import me.floow.uikit.chat.model.ChatScreenUiState
+import me.floow.uikit.chat.model.ChatViewportSnapshot
 import me.floow.uikit.chat.model.DatedChatMessages
 import me.floow.uikit.chat.model.PrimaryInMessage
 import me.floow.uikit.chat.model.ReplyInMessage
-import java.time.Instant
-import java.time.LocalDateTime
-import java.time.ZoneId
+import me.floow.uikit.chat.model.resolveDefaultContextMenuActions
 
 private const val REPLIES_INTERLOCUTOR_ID = "system_replies_inbox"
 private const val DEFAULT_REPLIES_INTERLOCUTOR_NAME = "Replies"
@@ -43,12 +55,6 @@ private const val OPEN_ANCHOR_SAVE_DELAY_MS = 200L
 private const val REPLIES_METRIC_OPEN_TO_ANCHOR = "RepliesMetrics.open_to_anchor_ms"
 private const val REPLIES_METRIC_ANCHOR_MISS_RATE = "RepliesMetrics.anchor_miss_rate"
 private const val REPLIES_METRIC_OVERLAY_FIRST_FRAME = "RepliesMetrics.overlay_first_frame_ms"
-
-enum class RepliesOverlayOpenMode {
-	FROM_UNREAD,
-	FROM_LAST_SEEN,
-	FROM_MESSAGE_LINK
-}
 
 data class RepliesOpenThreadEvent(
 	val eventId: Long,
@@ -135,7 +141,9 @@ private data class RepliesOverlayVmState(
 				chatInterlocutorAvatarUrl = null,
 				messageFieldValue = "",
 				chatInterlocutorName = title,
-				messageFieldReply = null
+				messageFieldReply = null,
+				peerIsOnline = false,
+				peerLastSeenAtMillis = null
 			)
 		}
 		if (isError) {
@@ -144,7 +152,9 @@ private data class RepliesOverlayVmState(
 				chatInterlocutorAvatarUrl = null,
 				messageFieldValue = "",
 				chatInterlocutorName = title,
-				messageFieldReply = null
+				messageFieldReply = null,
+				peerIsOnline = false,
+				peerLastSeenAtMillis = null
 			)
 		}
 		if (messages.isEmpty()) {
@@ -153,19 +163,25 @@ private data class RepliesOverlayVmState(
 				chatInterlocutorAvatarUrl = null,
 				messageFieldValue = "",
 				chatInterlocutorName = title,
-				messageFieldReply = null
+				messageFieldReply = null,
+				peerIsOnline = false,
+				peerLastSeenAtMillis = null
 			)
 		}
 			return ChatScreenUiState.HasData(
 				messages = messages,
 			chatInterlocutorId = REPLIES_INTERLOCUTOR_ID,
-			chatInterlocutorAvatarUrl = null,
-			messageFieldValue = "",
-			chatInterlocutorName = title,
-			messageFieldReply = null,
-				highlightedMessageId = openAnchorMessageId,
-				highlightedMessageRequestToken = openAnchorRequestToken,
-				keepHighlightedMessageAnchored = keepOpenAnchorLocked,
+				chatInterlocutorAvatarUrl = null,
+				messageFieldValue = "",
+				chatInterlocutorName = title,
+				messageFieldReply = null,
+				anchorRequest = openAnchorMessageId?.let { anchorId ->
+					ChatAnchorRequest(
+						messageId = anchorId,
+						requestToken = openAnchorRequestToken,
+						keepAnchored = keepOpenAnchorLocked
+					)
+				},
 				unreadBoundaryMessageId = sessionUnreadBoundaryMessageId,
 				scrollToBottomBadgeCount = unreadMessageIds.size,
 				canLoadMore = false,
@@ -179,6 +195,10 @@ class RepliesOverlayViewModel(
 	private val notificationsReadCursorStore: NotificationsReadCursorStore,
 	private val logger: Logger
 ) : ViewModel() {
+	fun resolveContextMenuActions(message: ChatMessage): List<ChatContextMenuAction> {
+		return message.resolveDefaultContextMenuActions(allowEditAndDelete = false)
+	}
+
 	private val _state = MutableStateFlow(RepliesOverlayVmState())
 	private val _openThreadEvents = MutableSharedFlow<RepliesOpenThreadEvent>(extraBufferCapacity = 1)
 	private var localReadUpToSeq: Long = 0L
@@ -190,6 +210,7 @@ class RepliesOverlayViewModel(
 	private var anchorSessionId: Long = 0L
 	private var hasUserStartedScroll: Boolean = false
 	private var canMarkVisibleAsRead: Boolean = false
+	private var isViewportAtBottom: Boolean = false
 	private var lastVisibleMessageIds: Set<Long> = emptySet()
 	private var currentFirstVisibleMessageId: Long? = null
 	private var currentFallbackActorName: String = ""
@@ -224,7 +245,9 @@ class RepliesOverlayViewModel(
 				chatInterlocutorAvatarUrl = null,
 				messageFieldValue = "",
 				chatInterlocutorName = DEFAULT_REPLIES_INTERLOCUTOR_NAME,
-				messageFieldReply = null
+				messageFieldReply = null,
+				peerIsOnline = false,
+				peerLastSeenAtMillis = null
 			)
 		)
 
@@ -325,22 +348,26 @@ class RepliesOverlayViewModel(
 	fun onSeeAllRequested() {
 		val current = _state.value
 		val unreadMessageIds = current.unreadMessageIds
-		if (unreadMessageIds.isEmpty()) return
+		val latestLoadedSeq = current.notificationSeqByMessageId.values.maxOrNull()
 		val maxUnreadSeq = unreadMessageIds
 			.mapNotNull(current.notificationSeqByMessageId::get)
 			.maxOrNull()
-			?: return
+		if (maxUnreadSeq == null && latestLoadedSeq == null) return
 
 		if (!hasUserStartedScroll) {
 			anchorSessionId += 1L
 			hasUserStartedScroll = true
 			canMarkVisibleAsRead = true
 		}
-		maxVisibleUnreadSeqCandidate = maxOf(maxVisibleUnreadSeqCandidate, maxUnreadSeq)
-		lastAppliedVisibleUnreadSeq = maxOf(lastAppliedVisibleUnreadSeq, maxUnreadSeq)
-		applyReadUpToLocally(maxUnreadSeq)
-		resolvedOpenAnchorSeq = maxUnreadSeq
-		enqueuePersistOpenAnchor(maxUnreadSeq)
+		if (maxUnreadSeq != null && maxUnreadSeq > 0L) {
+			maxVisibleUnreadSeqCandidate = maxOf(maxVisibleUnreadSeqCandidate, maxUnreadSeq)
+			lastAppliedVisibleUnreadSeq = maxOf(lastAppliedVisibleUnreadSeq, maxUnreadSeq)
+			applyReadUpToLocally(maxUnreadSeq)
+		}
+		if (latestLoadedSeq != null && latestLoadedSeq > 0L) {
+			resolvedOpenAnchorSeq = latestLoadedSeq
+			enqueuePersistOpenAnchor(latestLoadedSeq)
+		}
 		_state.update { state ->
 			state.copy(
 				openAnchorMessageId = null,
@@ -352,8 +379,17 @@ class RepliesOverlayViewModel(
 	fun onVisibleMessageIdsChanged(visibleMessageIds: Set<Long>) {
 		if (visibleMessageIds.isEmpty()) return
 		lastVisibleMessageIds = visibleMessageIds
-		if (!canMarkVisibleAsRead) return
+		if (!canMarkVisibleAsRead && !isViewportAtBottom) return
 		submitVisibleReadCandidate(visibleMessageIds)
+	}
+
+	fun onViewportSnapshotChanged(snapshot: ChatViewportSnapshot) {
+		isViewportAtBottom = snapshot.isAtBottom
+		if (snapshot.isAtBottom) {
+			canMarkVisibleAsRead = true
+		}
+		onVisibleMessageIdsChanged(snapshot.visibleMessageIds)
+		onFirstVisibleMessageIdChanged(snapshot.firstVisibleMessageId)
 	}
 
 	fun onFirstVisibleMessageIdChanged(messageId: Long?) {
@@ -389,6 +425,7 @@ class RepliesOverlayViewModel(
 
 	fun onOverlayClosed() {
 		isOverlayLoaded = false
+		isViewportAtBottom = false
 		applyVisibleReadJob?.cancel()
 		applyVisibleReadJob = null
 		applyVisibleReadCandidate(maxVisibleUnreadSeqCandidate)
@@ -414,12 +451,12 @@ class RepliesOverlayViewModel(
 	private fun submitVisibleReadCandidate(visibleMessageIds: Set<Long>) {
 		if (visibleMessageIds.isEmpty()) return
 		val current = _state.value
-		val candidateSeq = resolveMaxVisibleUnreadSeq(
+		val candidateSeq = resolveMaxVisibleUnreadCursor(
 			visibleMessageIds = visibleMessageIds,
 			unreadMessageIds = current.unreadMessageIds,
-			seqByMessageId = current.notificationSeqByMessageId
+			cursorByMessageId = current.notificationSeqByMessageId
 		)
-		if (candidateSeq <= maxVisibleUnreadSeqCandidate) return
+		if (!shouldApplyVisibleReadCandidate(candidateSeq, maxVisibleUnreadSeqCandidate)) return
 		maxVisibleUnreadSeqCandidate = candidateSeq
 		applyVisibleReadJob?.cancel()
 		applyVisibleReadJob = viewModelScope.launch {
@@ -498,8 +535,13 @@ class RepliesOverlayViewModel(
 		val fallbackActorNameSnapshot = currentFallbackActorName
 		val fallbackMessageTextSnapshot = currentFallbackMessageText
 
+		val itemsFingerprint = if (realtimeState.pageVersion > 0L) {
+			realtimeState.pageVersion
+		} else {
+			computeRepliesItemsFingerprint(realtimeState.page)
+		}
 		val staticSignature = TimelineStaticSignature(
-			itemsFingerprint = computeRepliesItemsFingerprint(realtimeState.page),
+			itemsFingerprint = itemsFingerprint,
 			fallbackActorName = fallbackActorNameSnapshot,
 			fallbackMessageText = fallbackMessageTextSnapshot
 		)
@@ -656,10 +698,10 @@ class RepliesOverlayViewModel(
 
 	private fun enqueueReadUpToSeq(readUpToSeq: Long) {
 		if (readUpToSeq <= 0L) return
-		if (readUpToSeq <= lastAppliedReadUpToSeq) return
+		if (!shouldEnqueueReadCursor(readUpToSeq, lastAppliedReadUpToSeq)) return
 		lastAppliedReadUpToSeq = readUpToSeq
 		localReadUpToSeq = maxOf(localReadUpToSeq, readUpToSeq)
-		pendingReadUpToSeq = maxOf(pendingReadUpToSeq ?: 0L, readUpToSeq)
+		pendingReadUpToSeq = mergePendingReadCursor(pendingReadUpToSeq, readUpToSeq)
 		flushReadJob?.cancel()
 		flushReadJob = viewModelScope.launch {
 			delay(READ_PIPELINE_FLUSH_DELAY_MS)
@@ -765,7 +807,7 @@ internal fun buildRepliesTimelineStatic(
 				replyMessageId = messageId * -1L,
 				replyMessageText = replyToText,
 				messageText = messageText,
-				dateTime = notification.createdAt.toLocalDateTime(),
+				dateTime = notification.createdAt.toLocalDateTimeFromEpochMillis(),
 				authorName = actorName,
 				authorUsername = notification.actor.username,
 				authorAvatarUrl = notification.actor.avatarUrl
@@ -774,7 +816,7 @@ internal fun buildRepliesTimelineStatic(
 			PrimaryInMessage(
 				id = messageId,
 				messageText = messageText,
-				dateTime = notification.createdAt.toLocalDateTime(),
+				dateTime = notification.createdAt.toLocalDateTimeFromEpochMillis(),
 				authorName = actorName,
 				authorUsername = notification.actor.username,
 				authorAvatarUrl = notification.actor.avatarUrl
@@ -880,63 +922,16 @@ private fun computeRepliesItemsFingerprint(page: UserNotificationsPage): Long {
 	return fingerprint * 31 + count
 }
 
-private fun resolveOpenAnchorSeq(
-	openMode: RepliesOverlayOpenMode,
-	firstUnreadSeq: Long?,
-	storedOpenAnchorSeq: Long?,
-	serverReadUpToSeq: Long?,
-	messageLinkOpenAnchorSeq: Long?
-): Long? {
-	return when (openMode) {
-		RepliesOverlayOpenMode.FROM_UNREAD -> {
-			firstUnreadSeq ?: storedOpenAnchorSeq ?: serverReadUpToSeq
-		}
-		RepliesOverlayOpenMode.FROM_LAST_SEEN -> {
-			storedOpenAnchorSeq ?: firstUnreadSeq ?: serverReadUpToSeq
-		}
-		RepliesOverlayOpenMode.FROM_MESSAGE_LINK -> {
-			messageLinkOpenAnchorSeq ?: firstUnreadSeq ?: storedOpenAnchorSeq ?: serverReadUpToSeq
-		}
-	}
-}
-
 internal fun resolveRepliesAnchorMessageId(
 	anchorSeq: Long?,
 	seqByMessageId: Map<Long, Long>
 ): Long? {
-	return resolveAnchorMessageIdBySeq(
-		targetSeq = anchorSeq,
-		seqByMessageId = seqByMessageId,
+	return resolveAnchorMessageIdByCursor(
+		targetCursor = anchorSeq,
+		cursorByMessageId = seqByMessageId,
 		preferCeil = true,
 		fallbackToOldest = true
 	)
-}
-
-private fun resolveAnchorMessageIdBySeq(
-	targetSeq: Long?,
-	seqByMessageId: Map<Long, Long>,
-	preferCeil: Boolean,
-	fallbackToOldest: Boolean
-): Long? {
-	if (seqByMessageId.isEmpty()) return null
-	val normalizedTargetSeq = targetSeq?.takeIf { seq -> seq > 0L }
-	if (normalizedTargetSeq != null) {
-		val exactMatch = seqByMessageId.entries.firstOrNull { (_, seq) -> seq == normalizedTargetSeq }?.key
-		if (exactMatch != null) return exactMatch
-		val floorSeq = seqByMessageId.values
-			.filter { seq -> seq <= normalizedTargetSeq }
-			.maxOrNull()
-		val ceilSeq = seqByMessageId.values
-			.filter { seq -> seq >= normalizedTargetSeq }
-			.minOrNull()
-		val preferredSeq = if (preferCeil) ceilSeq ?: floorSeq else floorSeq ?: ceilSeq
-		if (preferredSeq != null) {
-			return seqByMessageId.entries.firstOrNull { (_, seq) -> seq == preferredSeq }?.key
-		}
-	}
-	if (!fallbackToOldest) return null
-	val oldestLoadedSeq = seqByMessageId.values.minOrNull() ?: return null
-	return seqByMessageId.entries.firstOrNull { (_, seq) -> seq == oldestLoadedSeq }?.key
 }
 
 internal fun removeReadMessagesUpTo(
@@ -944,87 +939,47 @@ internal fun removeReadMessagesUpTo(
 	seqByMessageId: Map<Long, Long>,
 	readUpToSeq: Long
 ): Set<Long> {
-	if (messageIds.isEmpty()) return messageIds
-	return messageIds.filterTo(linkedSetOf()) { messageId ->
-		val messageSeq = seqByMessageId[messageId] ?: Long.MAX_VALUE
-		messageSeq > readUpToSeq
-	}
-}
-
-private fun resolveMaxVisibleUnreadSeq(
-	visibleMessageIds: Set<Long>,
-	unreadMessageIds: Set<Long>,
-	seqByMessageId: Map<Long, Long>
-): Long {
-	var maxSeq = 0L
-	visibleMessageIds.forEach { messageId ->
-		if (!unreadMessageIds.contains(messageId)) return@forEach
-		val seq = seqByMessageId[messageId] ?: return@forEach
-		if (seq > maxSeq) {
-			maxSeq = seq
-		}
-	}
-	return maxSeq
+	return removeReadMessagesUpToCursor(
+		messageIds = messageIds,
+		cursorByMessageId = seqByMessageId,
+		readUpToCursor = readUpToSeq
+	)
 }
 
 internal fun projectRepliesReadModel(
 	input: RepliesReadModelInput
 ): RepliesReadModelProjection {
-	val normalizedServerReadUpToSeq = input.serverReadUpToSeq.coerceAtLeast(0L)
-	val normalizedLocalReadUpToSeq = input.localReadUpToSeq.coerceAtLeast(0L)
-	val effectiveReadUpToSeq = maxOf(normalizedServerReadUpToSeq, normalizedLocalReadUpToSeq)
-
-	val firstUnreadSeq = input.firstUnreadSeq
-		?.takeIf { seq -> seq > normalizedServerReadUpToSeq }
-		?: input.seqByMessageId.values
-			.asSequence()
-			.filter { seq -> seq > normalizedServerReadUpToSeq }
-			.minOrNull()
-
-	val unreadMessageIds = input.seqByMessageId
-		.asSequence()
-		.filter { (_, seq) -> seq > effectiveReadUpToSeq }
-		.mapTo(linkedSetOf()) { (messageId, _) -> messageId }
-
-	val preferredOpenAnchorSeq = input.resolvedOpenAnchorSeq?.takeIf { seq -> seq > 0L }
-		?: resolveOpenAnchorSeq(
-			openMode = input.openMode,
-			firstUnreadSeq = firstUnreadSeq,
-			storedOpenAnchorSeq = input.storedOpenAnchorSeq?.takeIf { seq -> seq > 0L },
-			serverReadUpToSeq = normalizedServerReadUpToSeq.takeIf { seq -> seq > 0L },
-			messageLinkOpenAnchorSeq = input.messageLinkOpenAnchorSeq?.takeIf { seq -> seq > 0L }
+	val projection = projectTimelineReadModel(
+		input = TimelineReadProjectorInput(
+			items = input.seqByMessageId.map { (messageId, seq) ->
+				TimelineReadItem(
+					messageId = messageId,
+					cursor = seq,
+					isIncoming = true
+				)
+			},
+			serverReadUpToCursor = input.serverReadUpToSeq,
+			localReadUpToCursor = input.localReadUpToSeq,
+			firstUnreadCursor = input.firstUnreadSeq,
+			storedOpenAnchorCursor = input.storedOpenAnchorSeq?.takeIf { seq -> seq > 0L },
+			resolvedOpenAnchorCursor = input.resolvedOpenAnchorSeq?.takeIf { seq -> seq > 0L },
+			openMode = input.openMode.toTimelineReadOpenMode(),
+			messageLinkAnchorCursor = input.messageLinkOpenAnchorSeq?.takeIf { seq -> seq > 0L },
+			preferCeilOpenAnchor = input.openMode == RepliesOverlayOpenMode.FROM_UNREAD ||
+				input.openMode == RepliesOverlayOpenMode.FROM_MESSAGE_LINK,
+			fallbackToOldestOpenAnchor = true
 		)
-
-	val openAnchorMessageId = resolveAnchorMessageIdBySeq(
-		targetSeq = preferredOpenAnchorSeq,
-		seqByMessageId = input.seqByMessageId,
-		preferCeil = input.openMode == RepliesOverlayOpenMode.FROM_UNREAD ||
-			input.openMode == RepliesOverlayOpenMode.FROM_MESSAGE_LINK,
-		fallbackToOldest = true
 	)
-	val unreadBoundaryMessageId = resolveAnchorMessageIdBySeq(
-		targetSeq = firstUnreadSeq,
-		seqByMessageId = input.seqByMessageId,
-		preferCeil = true,
-		fallbackToOldest = false
-	)
-	val resolvedOpenAnchorSeq = openAnchorMessageId
-		?.let(input.seqByMessageId::get)
-		?: preferredOpenAnchorSeq
 
 	return RepliesReadModelProjection(
-		unreadMessageIds = unreadMessageIds,
-		unreadBoundaryMessageId = unreadBoundaryMessageId,
-		openAnchorMessageId = openAnchorMessageId,
-		openAnchorSeq = resolvedOpenAnchorSeq,
-		readUpToSeq = effectiveReadUpToSeq
+		unreadMessageIds = projection.unreadMessageIds,
+		unreadBoundaryMessageId = projection.unreadBoundaryMessageId,
+		openAnchorMessageId = projection.openAnchorMessageId,
+		openAnchorSeq = projection.openAnchorCursor,
+		readUpToSeq = projection.readUpToCursor
 	)
 }
 
 private fun isReplyNotification(notification: UserNotification): Boolean {
 	return notification.type in REPLY_NOTIFICATION_TYPES
-}
-
-private fun Long.toLocalDateTime(): LocalDateTime {
-	return LocalDateTime.ofInstant(Instant.ofEpochMilli(this), ZoneId.systemDefault())
 }

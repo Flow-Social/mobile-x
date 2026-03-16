@@ -3,9 +3,6 @@ package me.floow.comments.uilogic
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import java.time.Instant
-import java.time.LocalDateTime
-import java.time.ZoneId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -13,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -26,61 +24,31 @@ import me.floow.domain.data.UpdateDataResponse
 import me.floow.domain.data.repos.CommentsReadCursorStore
 import me.floow.domain.data.repos.CommentsRepository
 import me.floow.domain.models.Comment
-import me.floow.domain.models.CommentAuthor
-import me.floow.domain.models.CommentReply
-import me.floow.domain.models.PostContent
+import me.floow.domain.models.CommentRealtimeEvent
 import me.floow.domain.models.PostImageVariant
-import me.floow.domain.models.resolvedImageVariants
+import me.floow.domain.realtime.CommentTimelineMutation
+import me.floow.domain.realtime.reduceCommentRealtimeEvent
+import me.floow.domain.realtime.mergeRealtimeCursor
+import me.floow.domain.realtime.RealtimeViewCursorState
+import me.floow.domain.readmodel.resolveMaxVisibleUnreadCursor
 import me.floow.domain.utils.Logger
+import me.floow.uikit.chat.model.ChatContextMenuAction
+import me.floow.uikit.chat.model.ChatHighlightRequest
 import me.floow.uikit.chat.model.ChatMessage
+import me.floow.uikit.chat.model.ChatScrollRequest
 import me.floow.uikit.chat.model.ChatScreenUiState
 import me.floow.uikit.chat.model.DatedChatMessages
 import me.floow.uikit.chat.model.MessageFieldReply
-import me.floow.uikit.chat.model.PostPreviewMessage
-import me.floow.uikit.chat.model.PrimaryInMessage
-import me.floow.uikit.chat.model.PrimaryOutMessage
-import me.floow.uikit.chat.model.ReplyInMessage
-import me.floow.uikit.chat.model.ReplyOutMessage
+import me.floow.uikit.chat.model.DEFAULT_CHAT_MESSAGE_MAX_LENGTH
+import me.floow.uikit.chat.model.isWithinCodePointLimit
+import me.floow.uikit.chat.model.resolveDefaultContextMenuActions
+import me.floow.uikit.chat.model.trimToCodePointLimit
 
 private const val COMMENTS_PAGE_SIZE = 30
-private const val COMMENTS_ANCHOR_WINDOW_BEFORE = 20
-private const val COMMENTS_ANCHOR_WINDOW_AFTER = 40
-private const val INITIAL_TARGET_AUTOLOAD_MAX_PAGES = 200
-private const val COMMENT_MAX_LENGTH = 2256
 private const val UNDO_DELETE_TIMEOUT_MS = 4000L
 private const val COMMENT_SEND_TAG = "CommentsViewModel.sendComment"
 
-private data class AnchorWindowParams(
-	val before: Int?,
-	val after: Int?
-)
-
-internal data class InitialTargetSearchState(
-	val candidates: List<Long> = emptyList(),
-	val activeIndex: Int = 0,
-	val loadAttempts: Int = 0,
-	val isResolved: Boolean = true
-) {
-	val activeTarget: Long?
-		get() = candidates.getOrNull(activeIndex)
-
-	val hasFallback: Boolean
-		get() = activeIndex < candidates.lastIndex
-}
-
-internal data class InitialTargetSearchSnapshot(
-	val canLoadMore: Boolean,
-	val isLoadingMore: Boolean,
-	val isTargetPresent: Boolean
-)
-
-internal sealed interface InitialTargetSearchAction {
-	data object NoOp : InitialTargetSearchAction
-	data object LoadMore : InitialTargetSearchAction
-	data class ReloadWithAnchor(val anchorCommentId: Long) : InitialTargetSearchAction
-}
-
-private data class CommentsVmState(
+internal data class CommentsVmState(
 	val postId: String = "",
 	val postAuthorId: String = "",
 	val postAuthorName: String = "",
@@ -116,7 +84,9 @@ private data class CommentsVmState(
 					chatInterlocutorAvatarUrl = postAuthorAvatarUrl,
 					messageFieldValue = messageFieldValue,
 					chatInterlocutorName = title,
-					messageFieldReply = messageFieldReply
+					messageFieldReply = messageFieldReply,
+					peerIsOnline = false,
+					peerLastSeenAtMillis = null
 				)
 			}
 
@@ -126,7 +96,9 @@ private data class CommentsVmState(
 					chatInterlocutorAvatarUrl = postAuthorAvatarUrl,
 					messageFieldValue = messageFieldValue,
 					chatInterlocutorName = title,
-					messageFieldReply = messageFieldReply
+					messageFieldReply = messageFieldReply,
+					peerIsOnline = false,
+					peerLastSeenAtMillis = null
 				)
 			}
 
@@ -137,7 +109,9 @@ private data class CommentsVmState(
 						chatInterlocutorAvatarUrl = postAuthorAvatarUrl,
 						messageFieldValue = messageFieldValue,
 						chatInterlocutorName = title,
-						messageFieldReply = messageFieldReply
+						messageFieldReply = messageFieldReply,
+						peerIsOnline = false,
+						peerLastSeenAtMillis = null
 					)
 				}
 
@@ -148,10 +122,15 @@ private data class CommentsVmState(
 					messageFieldValue = messageFieldValue,
 					messages = groupedMessages,
 					messageFieldReply = messageFieldReply,
-					highlightedMessageId = highlightedMessageId,
+					highlightRequest = highlightedMessageId?.let { messageId ->
+						ChatHighlightRequest(messageId = messageId, requestToken = messageId)
+					},
 					typingUserNames = emptyList(),
 					pinnedMessages = emptyList(),
 					messageToEditId = messageToEditId,
+					scrollRequest = scrollToBottomRequestToken
+						.takeIf { token -> token > 0L }
+						?.let(::ChatScrollRequest),
 					scrollToBottomRequestToken = scrollToBottomRequestToken,
 					canLoadMore = nextCursor != null,
 					isLoadingMore = isLoadingMore
@@ -167,12 +146,19 @@ class CommentsViewModel(
 	private val authenticationManager: AuthenticationManager,
 	private val logger: Logger
 ) : ViewModel() {
+	fun resolveContextMenuActions(message: ChatMessage): List<ChatContextMenuAction> {
+		return message.resolveDefaultContextMenuActions()
+	}
+
 	private val _state = MutableStateFlow(CommentsVmState())
 	private val _isInitialTargetResolved = MutableStateFlow(true)
 	private var initialTargetSearchState = InitialTargetSearchState()
 	private var pendingDelete: Comment? = null
 	private var pendingDeleteOrder: Long? = null
 	private var pendingDeleteJob: Job? = null
+	private var realtimeJob: Job? = null
+	private var lastRealtimeSeq: Long = 0L
+	private var lastHandledResyncSeq: Long = 0L
 	private var pendingReadUpToSeq: Long? = null
 	private var lastQueuedReadUpToSeq: Long = 0L
 	private var enqueuePendingReadJob: Job? = null
@@ -207,7 +193,9 @@ class CommentsViewModel(
 				chatInterlocutorAvatarUrl = null,
 				messageFieldValue = "",
 				chatInterlocutorName = "",
-				messageFieldReply = null
+				messageFieldReply = null,
+				peerIsOnline = false,
+				peerLastSeenAtMillis = null
 			)
 		)
 
@@ -306,6 +294,10 @@ class CommentsViewModel(
 		pendingDeleteJob = null
 		pendingDelete = null
 		pendingDeleteOrder = null
+		realtimeJob?.cancel()
+		realtimeJob = null
+		lastRealtimeSeq = 0L
+		lastHandledResyncSeq = 0L
 		initialTargetSearchState = InitialTargetSearchState()
 		_isInitialTargetResolved.value = true
 		initialTargetStartedAtMs = null
@@ -341,7 +333,7 @@ class CommentsViewModel(
 		loadInitial(anchorCommentId = initialState.activeTarget?.let(::CommentId))
 	}
 
-	fun onInitialTargetSearchStateChanged(uiState: ChatScreenUiState) {
+	fun onInitialTargetSearchStateChanged() {
 		val currentSearchState = initialTargetSearchState
 		if (currentSearchState.isResolved) return
 		val targetCommentIdValue = currentSearchState.activeTarget ?: run {
@@ -349,7 +341,13 @@ class CommentsViewModel(
 			return
 		}
 		val targetCommentId = CommentId(targetCommentIdValue)
-		val hasDataState = uiState as? ChatScreenUiState.HasData ?: return
+		val currentState = _state.value
+		val isAwaitingFirstLoadResult = currentState.comments.isEmpty() &&
+			currentState.nextCursor.isNullOrBlank() &&
+			!currentState.isLoading &&
+			!currentState.isLoadingMore &&
+			!currentState.isError
+		if (isAwaitingFirstLoadResult) return
 
 		if (tryJumpToCommentId(targetCommentId)) {
 			reportInitialTargetResolution(found = true)
@@ -358,8 +356,8 @@ class CommentsViewModel(
 		}
 
 		val snapshot = InitialTargetSearchSnapshot(
-			canLoadMore = hasDataState.canLoadMore,
-			isLoadingMore = hasDataState.isLoadingMore,
+			canLoadMore = !currentState.nextCursor.isNullOrBlank(),
+			isLoadingMore = currentState.isLoading || currentState.isLoadingMore,
 			isTargetPresent = false
 		)
 		val (nextState, action) = advanceInitialTargetSearch(
@@ -418,8 +416,9 @@ class CommentsViewModel(
 					)
 				}
 			) {
-					is GetDataResponse.Success -> {
-						lastQueuedReadUpToSeq = maxOf(lastQueuedReadUpToSeq, result.data.lastReadSeq)
+				is GetDataResponse.Success -> {
+					lastQueuedReadUpToSeq = maxOf(lastQueuedReadUpToSeq, result.data.lastReadSeq)
+					lastRealtimeSeq = maxOf(lastRealtimeSeq, result.data.maxSeq)
 					val orderState = createInitialCommentOrder(result.data.items.map { it.id })
 					val orderedComments = sortCommentsByOrder(
 						comments = result.data.items,
@@ -440,6 +439,10 @@ class CommentsViewModel(
 							nextCursor = result.data.nextCursor
 						)
 					}
+					startRealtimeSubscriptionIfNeeded(
+						postId = current.postId,
+						afterSeq = lastRealtimeSeq
+					)
 				}
 
 				is GetDataResponse.Error -> {
@@ -472,9 +475,10 @@ class CommentsViewModel(
 
 		_state.update { it.copy(isLoadingMore = true) }
 		viewModelScope.launch {
-				when (val result = commentsRepository.getComments(current.postId, current.nextCursor, COMMENTS_PAGE_SIZE)) {
-					is GetDataResponse.Success -> {
-						lastQueuedReadUpToSeq = maxOf(lastQueuedReadUpToSeq, result.data.lastReadSeq)
+			when (val result = commentsRepository.getComments(current.postId, current.nextCursor, COMMENTS_PAGE_SIZE)) {
+				is GetDataResponse.Success -> {
+					lastQueuedReadUpToSeq = maxOf(lastQueuedReadUpToSeq, result.data.lastReadSeq)
+					lastRealtimeSeq = maxOf(lastRealtimeSeq, result.data.maxSeq)
 					_state.update { state ->
 						val merged = mergeCommentsById(
 							existing = state.comments,
@@ -505,6 +509,10 @@ class CommentsViewModel(
 							isLoadingMore = false
 						)
 					}
+					startRealtimeSubscriptionIfNeeded(
+						postId = current.postId,
+						afterSeq = lastRealtimeSeq
+					)
 				}
 
 				is GetDataResponse.Error -> {
@@ -516,7 +524,7 @@ class CommentsViewModel(
 	}
 
 	fun updateMessageInputField(newValue: String) {
-		val trimmed = if (newValue.length > COMMENT_MAX_LENGTH) newValue.take(COMMENT_MAX_LENGTH) else newValue
+		val trimmed = newValue.trimToCodePointLimit(DEFAULT_CHAT_MESSAGE_MAX_LENGTH)
 		_state.update { it.copy(messageFieldValue = trimmed) }
 	}
 
@@ -544,7 +552,7 @@ class CommentsViewModel(
 		val current = _state.value
 		val text = current.messageFieldValue
 		if (text.isBlank()) return
-		if (text.length > COMMENT_MAX_LENGTH) return
+		if (!text.isWithinCodePointLimit(DEFAULT_CHAT_MESSAGE_MAX_LENGTH)) return
 		if (current.postId.isBlank()) return
 
 		val now = System.currentTimeMillis()
@@ -681,7 +689,7 @@ class CommentsViewModel(
 	fun editComment(messageId: Long, newText: String) {
 		val updatedText = newText
 		if (updatedText.isBlank()) return
-		if (updatedText.length > COMMENT_MAX_LENGTH) return
+		if (!updatedText.isWithinCodePointLimit(DEFAULT_CHAT_MESSAGE_MAX_LENGTH)) return
 
 		val commentId = messageId.toString()
 		viewModelScope.launch {
@@ -791,14 +799,19 @@ class CommentsViewModel(
 		if (visibleMessageIds.isEmpty()) return
 		val current = _state.value
 		if (current.postId.isBlank()) return
-
-		val readUpToSeq = current.comments
-			.asSequence()
-			.map { comment -> commentToMessageId(comment) to comment.seq }
-			.filter { (messageId, _) -> visibleMessageIds.contains(messageId) }
-			.map { (_, seq) -> seq }
-			.maxOrNull()
-			?: return
+		val selfUserId = authenticationManager.getSelfUserIdOrNull()
+		val readProjection = projectCommentsReadModel(
+			comments = current.comments,
+			selfUserId = selfUserId,
+			serverReadUpToSeq = lastQueuedReadUpToSeq,
+			localReadUpToSeq = lastQueuedReadUpToSeq
+		)
+		val readUpToSeq = resolveMaxVisibleUnreadCursor(
+			visibleMessageIds = visibleMessageIds,
+			unreadMessageIds = readProjection.projection.unreadMessageIds,
+			cursorByMessageId = readProjection.cursorByMessageId
+		)
+		if (readUpToSeq <= 0L) return
 
 		enqueueReadUpToSeq(current.postId, readUpToSeq)
 	}
@@ -814,6 +827,79 @@ class CommentsViewModel(
 		val selfUserId = authenticationManager.getSelfUserIdOrNull()
 		return getAuthorIdByMessageId(messageId)
 			?.takeIf { authorId -> authorId.isNotBlank() && authorId != selfUserId }
+	}
+
+	private fun startRealtimeSubscriptionIfNeeded(postId: String, afterSeq: Long) {
+		if (postId.isBlank()) return
+		if (realtimeJob?.isActive == true) return
+		lastRealtimeSeq = maxOf(lastRealtimeSeq, afterSeq.coerceAtLeast(0L))
+		realtimeJob = viewModelScope.launch {
+			commentsRepository.subscribePostComments(
+				postId = postId,
+				afterSeq = lastRealtimeSeq
+			).collect { event ->
+				if (_state.value.postId != postId) {
+					return@collect
+				}
+				lastRealtimeSeq = mergeRealtimeCursor(
+					currentCursor = lastRealtimeSeq,
+					eventSeq = event.seq,
+					eventMaxCursor = event.maxSeq
+				)
+				applyRealtimeEvent(event)
+			}
+		}
+	}
+
+	private fun applyRealtimeEvent(event: CommentRealtimeEvent) {
+		val decision = reduceCommentRealtimeEvent(
+			state = RealtimeViewCursorState(
+				readCursor = lastQueuedReadUpToSeq,
+				lastHandledResyncCursor = lastHandledResyncSeq
+			),
+			event = event,
+			isLoading = _state.value.isLoading
+		)
+		lastQueuedReadUpToSeq = decision.cursorDecision.nextCursorState.readCursor
+		lastHandledResyncSeq = decision.cursorDecision.nextCursorState.lastHandledResyncCursor
+
+		if (decision.cursorDecision.shouldApplyReadProjection) {
+			val selfUserId = authenticationManager.getSelfUserIdOrNull()
+			_state.update { state ->
+				applyRealtimeReadUpTo(
+					state = state,
+					selfUserId = selfUserId,
+					readUpToSeq = decision.cursorDecision.nextCursorState.readCursor
+				)
+			}
+		}
+
+		when (val mutation = decision.mutation) {
+			is CommentTimelineMutation.Upsert -> {
+				_state.update { state ->
+					applyRealtimeCommentUpsert(state = state, comment = mutation.comment)
+				}
+			}
+			is CommentTimelineMutation.Delete -> {
+				if (pendingDelete?.id == mutation.commentId) {
+					pendingDeleteJob?.cancel()
+					pendingDeleteJob = null
+					pendingDelete = null
+					pendingDeleteOrder = null
+				}
+				_state.update { state ->
+					applyRealtimeCommentDelete(
+						state = state,
+						deletedCommentId = mutation.commentId
+					)
+				}
+			}
+			CommentTimelineMutation.None -> Unit
+		}
+
+		if (decision.cursorDecision.shouldHandleResync) {
+			loadInitial()
+		}
 	}
 
 	private fun resolveInitialTargetSearch() {
@@ -912,218 +998,10 @@ class CommentsViewModel(
 		return nextOptimisticCommentIdValue.toString()
 	}
 
-}
-
-internal fun <T> mergeByStableId(
-	existing: List<T>,
-	incoming: List<T>,
-	idSelector: (T) -> String
-): List<T> {
-	val mergedById = LinkedHashMap<String, T>(existing.size + incoming.size)
-	existing.forEach { item ->
-		mergedById[idSelector(item)] = item
-	}
-	incoming.forEach { item ->
-		mergedById[idSelector(item)] = item
-	}
-	return mergedById.values.toList()
-}
-
-internal fun mergeCommentsById(existing: List<Comment>, incoming: List<Comment>): List<Comment> {
-	return mergeByStableId(existing = existing, incoming = incoming, idSelector = { it.id })
-}
-
-internal fun buildInitialTargetCandidates(
-	primaryTargetCommentId: CommentId?,
-	fallbackTargetCommentId: CommentId?
-): List<Long> {
-	return resolveTargetCandidates(primaryTargetCommentId, fallbackTargetCommentId)
-		.map(CommentId::value)
-}
-
-internal fun advanceInitialTargetSearch(
-	state: InitialTargetSearchState,
-	snapshot: InitialTargetSearchSnapshot
-): Pair<InitialTargetSearchState, InitialTargetSearchAction> {
-	if (state.isResolved) return state to InitialTargetSearchAction.NoOp
-	if (snapshot.isTargetPresent) {
-		return state.copy(isResolved = true) to InitialTargetSearchAction.NoOp
+	override fun onCleared() {
+		realtimeJob?.cancel()
+		realtimeJob = null
+		super.onCleared()
 	}
 
-	if (state.activeTarget == null) {
-		return state.copy(isResolved = true) to InitialTargetSearchAction.NoOp
-	}
-	val canAutoPage = snapshot.canLoadMore && !snapshot.isLoadingMore
-	if (canAutoPage && state.loadAttempts < INITIAL_TARGET_AUTOLOAD_MAX_PAGES) {
-		return state.copy(loadAttempts = state.loadAttempts + 1) to InitialTargetSearchAction.LoadMore
-	}
-
-	if (!snapshot.canLoadMore && state.hasFallback) {
-		val nextIndex = state.activeIndex + 1
-		val nextTarget = state.candidates.getOrNull(nextIndex)
-		if (nextTarget == null) {
-			return state.copy(isResolved = true) to InitialTargetSearchAction.NoOp
-		}
-		return state.copy(
-			activeIndex = nextIndex,
-			loadAttempts = 0,
-			isResolved = false
-		) to InitialTargetSearchAction.ReloadWithAnchor(nextTarget)
-	}
-
-	if (!snapshot.canLoadMore || state.loadAttempts >= INITIAL_TARGET_AUTOLOAD_MAX_PAGES) {
-		return state.copy(isResolved = true) to InitialTargetSearchAction.NoOp
-	}
-
-	return state to InitialTargetSearchAction.NoOp
-}
-
-private fun resolveAnchorWindow(anchorCommentId: CommentId?): AnchorWindowParams {
-	if (anchorCommentId == null) {
-		return AnchorWindowParams(before = null, after = null)
-	}
-	return AnchorWindowParams(
-		before = COMMENTS_ANCHOR_WINDOW_BEFORE,
-		after = COMMENTS_ANCHOR_WINDOW_AFTER
-	)
-}
-
-private fun buildOptimisticComment(
-	state: CommentsVmState,
-	selfUserId: String,
-	temporaryCommentId: String,
-	text: String,
-	replyToId: Long?,
-	createdAt: Long
-): Comment {
-	val reply = replyToId?.let { replyId ->
-		state.comments.firstOrNull { comment -> comment.id == replyId.toString() }?.let { source ->
-			CommentReply(
-				id = source.id,
-				text = source.text,
-				authorId = source.author.id,
-				authorName = source.author.name?.value
-			)
-		}
-	}
-	return Comment(
-		id = temporaryCommentId,
-		postId = state.postId,
-		author = CommentAuthor(
-			id = selfUserId,
-			name = null,
-			username = null,
-			avatarUrl = null
-		),
-		text = text,
-		createdAt = createdAt,
-		updatedAt = createdAt,
-		replyTo = reply
-	)
-}
-
-private fun CommentsVmState.buildPostPreviewMessage(): PostPreviewMessage? {
-	val description = postDescription.orEmpty()
-	val variants = PostContent(
-		imageUrls = postImageUrls,
-		description = postDescription,
-		imageVariants = postImageVariants
-	).resolvedImageVariants()
-	if (description.isBlank() && variants.isEmpty()) return null
-	val dateTime = (if (postCreatedAt > 0) postCreatedAt else System.currentTimeMillis()).toLocalDateTime()
-	val messageId = ("post:" + postId).hashCode().toLong() * -1L
-	return PostPreviewMessage(
-		id = messageId,
-		messageText = description,
-		dateTime = dateTime,
-		imageVariants = variants,
-		likesCount = postLikesCount,
-		authorAvatarUrl = postAuthorAvatarUrl?.toString(),
-		authorName = postAuthorName,
-		authorUsername = postAuthorUsername
-	)
-}
-
-private fun Comment.toChatMessage(
-	selfUserId: String?,
-	messageIdByCommentId: Map<Long, Long>
-): ChatMessage {
-	val isMine = selfUserId != null && author.id == selfUserId
-	val dateTime = createdAt.toLocalDateTime()
-	val authorName = author.name?.value
-	val authorUsername = author.username?.value
-	val reply = replyTo
-	val messageId = id.toLongOrNull() ?: createdAt
-	return if (reply != null) {
-	val replyId = reply.id.toLongOrNull()
-		?.let { messageIdByCommentId[it] ?: it }
-		?: reply.id.hashCode().toLong()
-		if (isMine) {
-			ReplyOutMessage(
-				id = messageId,
-				messageText = text,
-				dateTime = dateTime,
-				replyMessageId = replyId,
-				replyMessageText = reply.text,
-				authorName = authorName,
-				authorUsername = authorUsername,
-				authorAvatarUrl = author.avatarUrl
-			)
-		} else {
-			ReplyInMessage(
-				id = messageId,
-				replyMessageId = replyId,
-				replyMessageText = reply.text,
-				messageText = text,
-				dateTime = dateTime,
-				authorName = authorName,
-				authorUsername = authorUsername,
-				authorAvatarUrl = author.avatarUrl
-			)
-		}
-	} else {
-		if (isMine) {
-			PrimaryOutMessage(
-				id = messageId,
-				messageText = text,
-				dateTime = dateTime,
-				authorName = authorName,
-				authorUsername = authorUsername,
-				authorAvatarUrl = author.avatarUrl
-			)
-		} else {
-			PrimaryInMessage(
-				id = messageId,
-				messageText = text,
-				dateTime = dateTime,
-				authorName = authorName,
-				authorUsername = authorUsername,
-				authorAvatarUrl = author.avatarUrl
-			)
-		}
-	}
-}
-
-private fun Long.toLocalDateTime(): LocalDateTime {
-	return LocalDateTime.ofInstant(Instant.ofEpochMilli(this), ZoneId.systemDefault())
-}
-
-private fun rebuildCommentMessageMaps(
-	comments: List<Comment>
-): Pair<Map<Long, Long>, Map<Long, Long>> {
-	val commentIdByMessageId = LinkedHashMap<Long, Long>(comments.size)
-	val messageIdByCommentId = LinkedHashMap<Long, Long>(comments.size)
-	for (comment in comments) {
-		val messageId = commentToMessageId(comment)
-		val commentId = comment.id.toLongOrNull()
-		if (commentId != null) {
-			commentIdByMessageId[messageId] = commentId
-			messageIdByCommentId[commentId] = messageId
-		}
-	}
-	return commentIdByMessageId to messageIdByCommentId
-}
-
-private fun commentToMessageId(comment: Comment): Long {
-	return comment.id.toLongOrNull() ?: comment.createdAt
 }

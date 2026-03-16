@@ -7,4 +7,8 @@
     <string name="notifications_channel_social">Social</string>
     <string name="notifications_channel_messages">Messages</string>
     <string name="notifications_channel_system">System</string>
+    <string name="notifications_you">You</string>
+    <string name="notifications_reply_action">Reply</string>
+    <string name="notifications_reply_hint">Write a reply</string>
+    <string name="notifications_mark_read_action">Mark read</string>
 </resources>

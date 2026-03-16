@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="chats_title">Chats</string>
+    <string name="chats_error_generic">Unable to load chats</string>
     <string name="replies_inbox_title">Replies</string>
     <string name="replies_fallback_actor_name">User</string>
     <string name="replies_fallback_message_text">New reply</string>
+    <string name="saved_messages_title">Избранное</string>
+    <string name="saved_messages_empty">Нет сообщений</string>
 </resources>

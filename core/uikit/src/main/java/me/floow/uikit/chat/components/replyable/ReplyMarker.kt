@@ -8,6 +8,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -18,10 +19,11 @@ internal fun ReplyMarker(
 	modifier: Modifier = Modifier
 ) {
 	Icon(
-		painter = painterResource(R.drawable.reply_icon),
+		painter = painterResource(R.drawable.reply_out_icon),
 		contentDescription = null,
-		tint = Color.Black,
+		tint = Color.White,
 		modifier = modifier
+			.graphicsLayer(scaleX = -1f)
 			.clip(RoundedCornerShape(8.dp))
 			.background(MaterialTheme.colorScheme.secondaryContainer)
 			.padding(

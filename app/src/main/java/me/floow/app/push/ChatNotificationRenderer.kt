@@ -10,6 +10,7 @@ import android.graphics.BitmapFactory
 import android.graphics.drawable.Drawable
 import android.os.Build
 import android.os.PowerManager
+import android.service.notification.StatusBarNotification
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
@@ -29,17 +30,18 @@ class ChatNotificationRenderer(
 		if (!hasNotificationsPermission()) return RenderOutcome.Failed
 		if (shouldSuppressChatNotification(payload)) return RenderOutcome.Suppressed
 
-		val notification = buildNotification(payload)
-		val tag = "chat:${payload.conversationId}"
+		val tag = buildNotificationTag(payload.conversationId)
+		val notificationId = buildConversationNotificationId(payload.conversationId)
+		val notification = buildNotification(payload, tag, notificationId)
 		val manager = NotificationManagerCompat.from(context)
-		manager.notify(tag, MAIN_NOTIFICATION_ID, notification)
+		manager.notify(tag, notificationId, notification)
 		manager.notify(tag, SUMMARY_NOTIFICATION_ID, buildSummaryNotification(payload))
 
 		DirectChatNotificationCenter.registerConversationNotification(
 			context = context,
 			conversationId = payload.conversationId,
 			notificationTag = tag,
-			notificationId = MAIN_NOTIFICATION_ID
+			notificationId = notificationId
 		)
 		DirectChatNotificationCenter.registerConversationNotification(
 			context = context,
@@ -52,13 +54,17 @@ class ChatNotificationRenderer(
 				context = context,
 				interlocutorId = payload.senderId,
 				notificationTag = tag,
-				notificationId = MAIN_NOTIFICATION_ID
+				notificationId = notificationId
 			)
 		}
 		return RenderOutcome.Rendered
 	}
 
-	private fun buildNotification(payload: ChatNotificationPayload): android.app.Notification {
+	private fun buildNotification(
+		payload: ChatNotificationPayload,
+		tag: String,
+		notificationId: Int
+	): android.app.Notification {
 		val contentIntent = PendingIntent.getActivity(
 			context,
 			buildPendingIntentRequestCode(payload.notificationId),
@@ -84,13 +90,7 @@ class ChatNotificationRenderer(
 			.setName(context.getString(R.string.notifications_you))
 			.build()
 
-		val messagingStyle = NotificationCompat.MessagingStyle(userPerson)
-			.setGroupConversation(payload.isGroup)
-		if (payload.isGroup) {
-			payload.conversationTitle?.takeIf(String::isNotEmpty)?.let { title ->
-				messagingStyle.setConversationTitle(title)
-			}
-		}
+		val messagingStyle = restoreMessagingStyle(tag, notificationId, userPerson, payload)
 		messagingStyle.addMessage(payload.messageText, payload.messageTimestampMs, senderPerson)
 
 		val builder = NotificationCompat.Builder(context, PushNotificationChannels.CHANNEL_MESSAGES)
@@ -123,6 +123,49 @@ class ChatNotificationRenderer(
 		return builder.build()
 	}
 
+	private fun restoreMessagingStyle(
+		tag: String,
+		notificationId: Int,
+		userPerson: Person,
+		payload: ChatNotificationPayload
+	): NotificationCompat.MessagingStyle {
+		val active = findActiveNotification(tag, notificationId)
+		if (active != null) {
+			val existing = NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(active.notification)
+			if (existing != null) {
+				val messages = existing.messages
+				if (messages.size >= MAX_MESSAGES_PER_NOTIFICATION) {
+					val trimmed = NotificationCompat.MessagingStyle(existing.user)
+						.setGroupConversation(existing.isGroupConversation)
+					existing.conversationTitle?.let { trimmed.setConversationTitle(it) }
+					messages.takeLast(MAX_MESSAGES_PER_NOTIFICATION - 1).forEach { msg ->
+						trimmed.addMessage(msg.text, msg.timestamp, msg.person)
+					}
+					return trimmed
+				}
+				return existing
+			}
+		}
+		val style = NotificationCompat.MessagingStyle(userPerson)
+			.setGroupConversation(payload.isGroup)
+		if (payload.isGroup) {
+			payload.conversationTitle?.takeIf(String::isNotEmpty)?.let { title ->
+				style.setConversationTitle(title)
+			}
+		}
+		return style
+	}
+
+	private fun findActiveNotification(tag: String, notificationId: Int): StatusBarNotification? {
+		val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
+			?: return null
+		return try {
+			manager.activeNotifications.firstOrNull { it.tag == tag && it.id == notificationId }
+		} catch (_: Exception) {
+			null
+		}
+	}
+
 	private fun buildSummaryNotification(payload: ChatNotificationPayload): android.app.Notification {
 		return NotificationCompat.Builder(context, PushNotificationChannels.CHANNEL_MESSAGES)
 			.setSmallIcon(R.drawable.ic_notification_small)
@@ -144,7 +187,7 @@ class ChatNotificationRenderer(
 			context,
 			buildActionRequestCode(payload.conversationId, "reply"),
 			intent,
-			PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+			PendingIntent.FLAG_UPDATE_CURRENT or replyPendingIntentMutabilityFlag()
 		)
 		val remoteInput = androidx.core.app.RemoteInput.Builder(ChatNotificationActionReceiver.KEY_TEXT_REPLY)
 			.setLabel(context.getString(R.string.notifications_reply_hint))
@@ -176,6 +219,14 @@ class ChatNotificationRenderer(
 			context.getString(R.string.notifications_mark_read_action),
 			pendingIntent
 		).build()
+	}
+
+	private fun replyPendingIntentMutabilityFlag(): Int {
+		return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+			PendingIntent.FLAG_MUTABLE
+		} else {
+			PendingIntent.FLAG_IMMUTABLE
+		}
 	}
 
 	private fun buildGroupKey(payload: ChatNotificationPayload): String {
@@ -264,11 +315,19 @@ class ChatNotificationRenderer(
 		) == PackageManager.PERMISSION_GRANTED
 	}
 
+	private fun buildNotificationTag(conversationId: Long): String {
+		return "chat:$conversationId"
+	}
+
+	private fun buildConversationNotificationId(conversationId: Long): Int {
+		return conversationId.toInt().let { if (it <= SUMMARY_NOTIFICATION_ID) it + SUMMARY_NOTIFICATION_ID + 1 else it }
+	}
+
 	private companion object {
 		const val AUTH_PREFS_NAME = "flowme.auth"
 		const val AUTH_USER_ID_PREF_KEY = "authUserId"
-		const val MAIN_NOTIFICATION_ID = 0
-		const val SUMMARY_NOTIFICATION_ID = 1
+		const val SUMMARY_NOTIFICATION_ID = 0
+		const val MAX_MESSAGES_PER_NOTIFICATION = 8
 	}
 }
 

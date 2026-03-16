@@ -1,14 +1,17 @@
 package me.floow.uikit.chat.components
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.KeyboardAlt
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -26,116 +29,187 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import me.floow.uikit.theme.LocalTypography
+import androidx.compose.ui.unit.sp
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import me.floow.uikit.R
+import me.floow.uikit.chat.input.ChatInputController
+import me.floow.uikit.chat.input.ChatInputMode
+import me.floow.uikit.chat.input.rememberChatInputController
+import me.floow.uikit.theme.LocalTypography
+
+private val ChatInputIconSize = 28.dp
+private val ChatInputKeyboardGlyphSize = 24.dp
+private val ChatInputGlyphSize = 28.dp
+private val ChatInputSidePadding = 14.dp
+private val ChatInputMinHeight = 54.dp
+private val ChatInputIconBottomInset = 12.dp
+private val ChatInputTextBottomInset = 15.dp
+private val ChatInputTextStartInset = 38.dp
+private val ChatInputTextEndInset = 38.dp
+private val ChatInputTextSize = 16.sp
 
 @Composable
 fun MessageInputField(
-	value: String,
-	onValueChange: (String) -> Unit,
-	onEmojiPickerClick: () -> Unit,
+	controller: ChatInputController,
 	onSendClick: () -> Unit,
 	sendButtonActive: Boolean,
 	isEditMode: Boolean = false,
 	showEmojiButton: Boolean = true,
-	maxLength: Int? = null,
-	focusRequestKey: Long? = null,
-	onFocusChanged: (Boolean) -> Unit = {},
-	modifier: Modifier = Modifier
+	modifier: Modifier = Modifier,
 ) {
 	val focusRequester = remember { FocusRequester() }
-	val keyboardController = LocalSoftwareKeyboardController.current
+	val focusManager = LocalFocusManager.current
+	val view = LocalView.current
+	val inputInteractionSource = remember { MutableInteractionSource() }
+	var isFocused by remember { mutableStateOf(false) }
 
-	LaunchedEffect(focusRequestKey) {
-		if (focusRequestKey == null) return@LaunchedEffect
+	LaunchedEffect(controller.keyboardRequestToken) {
+		if (controller.keyboardRequestToken == 0) return@LaunchedEffect
 		focusRequester.requestFocus()
-		keyboardController?.show()
+		val imeVisible = ViewCompat.getRootWindowInsets(view)
+			?.isVisible(WindowInsetsCompat.Type.ime()) == true
+		if (!imeVisible) {
+			ViewCompat.getWindowInsetsController(view)?.show(WindowInsetsCompat.Type.ime())
+		}
 	}
 
-	Row(
-		verticalAlignment = Alignment.CenterVertically,
+	LaunchedEffect(controller.hideImeToken) {
+		if (controller.hideImeToken == 0) return@LaunchedEffect
+		ViewCompat.getWindowInsetsController(view)?.hide(WindowInsetsCompat.Type.ime())
+		focusManager.clearFocus(force = true)
+	}
+
+	LaunchedEffect(controller.inputMode) {
+		if (controller.inputMode == ChatInputMode.Emoji) {
+			ViewCompat.getWindowInsetsController(view)?.hide(WindowInsetsCompat.Type.ime())
+		}
+	}
+
+	Box(
 		modifier = modifier
-			.padding(
-				top = 13.dp,
-				bottom = 16.dp,
-			)
-			.padding(horizontal = 16.dp)
+			.testTag("chat_input_row")
+			.defaultMinSize(minHeight = ChatInputMinHeight)
+			.padding(horizontal = ChatInputSidePadding)
+			.clickable(
+				interactionSource = inputInteractionSource,
+				indication = null,
+			) {
+				controller.onInputTapped()
+			},
 	) {
 		if (showEmojiButton) {
-			Icon(
-				painter = painterResource(
-					me.floow.uikit.R.drawable.emoji_picker_icon,
-				),
-				contentDescription = null,
-				tint = Color(0xFF8E959B),
+			val toggleStateDescription = if (controller.inputMode == ChatInputMode.Emoji) "keyboard" else "emoji"
+
+			Box(
+				contentAlignment = Alignment.Center,
 				modifier = Modifier
+					.align(Alignment.BottomStart)
+					.testTag("chat_input_toggle_button")
+					.semantics { stateDescription = toggleStateDescription }
+					.padding(bottom = ChatInputIconBottomInset)
+					.size(ChatInputIconSize)
 					.clip(CircleShape)
-					.clickable { onEmojiPickerClick() }
-			)
-
-			Spacer(
-				Modifier
-					.width(11.dp)
-			)
-		}
-
-		BasicTextField(
-			value = value,
-			onValueChange = { newValue ->
-				val trimmed = if (maxLength != null && newValue.length > maxLength) {
-					newValue.take(maxLength)
+					.clickable { controller.toggleEmoji() },
+			) {
+				if (controller.inputMode == ChatInputMode.Emoji) {
+					Icon(
+						imageVector = Icons.Outlined.KeyboardAlt,
+						contentDescription = toggleStateDescription,
+						tint = Color(0xFF8E959B),
+						modifier = Modifier.size(ChatInputKeyboardGlyphSize),
+					)
 				} else {
-					newValue
-				}
-				onValueChange(trimmed)
-			},
-			textStyle = LocalTypography.current.titleMedium.copy(
-				fontWeight = FontWeight.Normal,
-				color = MaterialTheme.colorScheme.onBackground
-			),
-			maxLines = 4,
-			cursorBrush = SolidColor(MaterialTheme.colorScheme.onBackground),
-			modifier = Modifier
-				.weight(1f)
-				.focusRequester(focusRequester)
-				.onFocusChanged { onFocusChanged(it.isFocused) }
-		) { innerTextField ->
-			Box {
-				if (value.isEmpty()) {
-					Text(
-						text = stringResource(R.string.message_input_field_placeholder),
-						color = Color.Gray,
-						style = LocalTypography.current.titleMedium,
-						fontWeight = FontWeight.Normal
+					Icon(
+						painter = painterResource(R.drawable.emoji_picker_icon),
+						contentDescription = toggleStateDescription,
+						tint = Color(0xFF8E959B),
+						modifier = Modifier.size(ChatInputGlyphSize),
 					)
 				}
-
-				innerTextField()
 			}
 		}
 
-		Spacer(
-			Modifier
-				.width(11.dp)
-		)
-
-		Icon(
-			painter = painterResource(
-				if (isEditMode) me.floow.uikit.R.drawable.done_icon else me.floow.uikit.R.drawable.send_icon,
-			),
-			tint = sendButtonColor(sendButtonActive),
-			contentDescription = null,
+		Box(
+			contentAlignment = Alignment.BottomStart,
 			modifier = Modifier
+				.align(Alignment.BottomStart)
+				.fillMaxWidth()
+				.padding(
+					start = if (showEmojiButton) ChatInputTextStartInset else 0.dp,
+					end = ChatInputTextEndInset,
+				)
+				.padding(bottom = ChatInputTextBottomInset)
+				.testTag("chat_input_text_field"),
+		) {
+			BasicTextField(
+				value = controller.textFieldValue,
+				onValueChange = controller::onTextFieldValueChange,
+				textStyle = LocalTypography.current.titleMedium.copy(
+					fontSize = ChatInputTextSize,
+					fontWeight = FontWeight.Normal,
+					color = MaterialTheme.colorScheme.onBackground,
+				),
+				maxLines = 8,
+				cursorBrush = SolidColor(MaterialTheme.colorScheme.onBackground),
+				modifier = Modifier
+					.fillMaxWidth()
+					.heightIn(min = 22.dp)
+					.focusRequester(focusRequester)
+					.onFocusChanged { focusState ->
+						isFocused = focusState.isFocused
+						controller.onTextFieldFocusChanged(focusState.isFocused)
+					}
+					.semantics {
+						stateDescription = controller.inputMode.name
+					},
+				interactionSource = inputInteractionSource,
+			) { innerTextField ->
+				Box {
+					if (controller.textFieldValue.text.isEmpty()) {
+						Text(
+							text = stringResource(R.string.message_input_field_placeholder),
+							color = Color.Gray,
+							style = LocalTypography.current.titleMedium.copy(fontSize = ChatInputTextSize),
+							fontWeight = FontWeight.Normal,
+						)
+					}
+					innerTextField()
+				}
+			}
+		}
+
+		Box(
+			contentAlignment = Alignment.Center,
+			modifier = Modifier
+				.align(Alignment.BottomEnd)
+				.testTag("chat_input_send_button")
+				.padding(bottom = ChatInputIconBottomInset)
+				.size(ChatInputIconSize)
+				.clip(CircleShape)
 				.clickable {
 					if (sendButtonActive) onSendClick()
-				}
-		)
+				},
+		) {
+			Icon(
+				painter = painterResource(
+					if (isEditMode) R.drawable.done_icon else R.drawable.send_icon,
+				),
+				tint = sendButtonColor(sendButtonActive),
+				contentDescription = null,
+				modifier = Modifier.size(ChatInputGlyphSize),
+			)
+		}
 	}
 }
 
@@ -147,14 +221,17 @@ private fun sendButtonColor(sendButtonActive: Boolean) =
 @Preview
 @Composable
 private fun MessageInputFieldPreview() {
-	var value by remember { mutableStateOf("") }
+	val controller = rememberChatInputController(
+		text = "",
+		maxLength = null,
+		fallbackPanelHeightPx = 0,
+		onTextChanged = {},
+	)
 
 	MessageInputField(
-		value = value,
-		onValueChange = { value = it },
+		controller = controller,
 		onSendClick = {},
-		onEmojiPickerClick = {},
-		sendButtonActive = value.isNotBlank(),
-		modifier = Modifier.fillMaxWidth()
+		sendButtonActive = controller.textFieldValue.text.isNotBlank(),
+		modifier = Modifier.fillMaxWidth(),
 	)
 }

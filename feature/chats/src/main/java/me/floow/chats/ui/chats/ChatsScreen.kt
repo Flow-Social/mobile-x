@@ -1,12 +1,12 @@
 package me.floow.chats.ui.chats
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -16,7 +16,9 @@ import me.floow.chats.uilogic.chats.Chat
 import me.floow.chats.uilogic.chats.ChatsScreenUiState
 import me.floow.uikit.R
 import me.floow.uikit.components.loading.FlowLoadingIndicator
+import me.floow.uikit.components.misc.BlankContentBox
 import me.floow.uikit.components.topbar.TitleTopBarWithActionButton
+import me.flowme.chats.R as ChatsR
 
 @Composable
 internal fun ChatsScreen(
@@ -28,7 +30,7 @@ internal fun ChatsScreen(
 	Scaffold(
 		topBar = {
 			TitleTopBarWithActionButton(
-				titleText = "Чаты",
+				titleText = stringResource(ChatsR.string.chats_title),
 				titleTextStyle = MaterialTheme.typography.titleMedium.copy(
 					fontSize = 18.sp,
 					fontWeight = FontWeight.Medium
@@ -58,22 +60,12 @@ internal fun ChatsScreen(
 
 			is ChatsScreenUiState.Error -> {
 				Box(commonModifier, Alignment.Center) {
-					Text(text = "error")
+					Text(text = stringResource(ChatsR.string.chats_error_generic))
 				}
 			}
 
 			is ChatsScreenUiState.NoChats -> {
-				Box(commonModifier, Alignment.Center) {
-					Column(horizontalAlignment = Alignment.CenterHorizontally) {
-						Image(
-							painter = painterResource(R.drawable.egirl_error),
-							contentDescription = null,
-							modifier = Modifier.size(260.dp)
-						)
-						Spacer(modifier = Modifier.height(22.dp))
-						Text(text = "пока в разработке!")
-					}
-				}
+				BlankContentBox(commonModifier)
 			}
 
 			is ChatsScreenUiState.HasData -> {

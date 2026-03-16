@@ -40,18 +40,46 @@ fun generateChatMessages(): List<ChatMessage> {
             0 -> {
                 val replyMessageId = (i - 1).toLong()
                 val replyMessageText = messageTexts[random.nextInt(messageTexts.size)]
-                chatMessages.add(ReplyInMessage(id, replyMessageId, replyMessageText, messageText, dateTime))
+                chatMessages.add(
+                    ReplyInMessage(
+                        id = id,
+                        replyMessageId = replyMessageId,
+                        replyMessageText = replyMessageText,
+                        messageText = messageText,
+                        dateTime = dateTime
+                    )
+                )
             }
             1 -> {
                 val replyMessageId = (i - 1).toLong()
                 val replyMessageText = messageTexts[random.nextInt(messageTexts.size)]
-                chatMessages.add(ReplyOutMessage(id, messageText, dateTime, replyMessageId, replyMessageText))
+                chatMessages.add(
+                    ReplyOutMessage(
+                        id = id,
+                        messageText = messageText,
+                        dateTime = dateTime,
+                        replyMessageId = replyMessageId,
+                        replyMessageText = replyMessageText
+                    )
+                )
             }
             2 -> {
-                chatMessages.add(PrimaryInMessage(id, messageText, dateTime))
+                chatMessages.add(
+                    PrimaryInMessage(
+                        id = id,
+                        messageText = messageText,
+                        dateTime = dateTime
+                    )
+                )
             }
             3 -> {
-                chatMessages.add(PrimaryOutMessage(id, messageText, dateTime))
+                chatMessages.add(
+                    PrimaryOutMessage(
+                        id = id,
+                        messageText = messageText,
+                        dateTime = dateTime
+                    )
+                )
             }
         }
     }

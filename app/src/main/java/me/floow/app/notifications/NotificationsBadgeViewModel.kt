@@ -3,11 +3,12 @@ package me.floow.app.notifications
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import me.floow.domain.data.repos.ChatsRepository
 import me.floow.domain.data.repos.NotificationsRealtimeRepository
 import me.floow.domain.data.repos.NotificationsReadCursorStore
 
@@ -19,16 +20,21 @@ data class NotificationsBadgeUiState(
 
 class NotificationsBadgeViewModel(
 	private val notificationsRealtimeRepository: NotificationsRealtimeRepository,
-	private val notificationsReadCursorStore: NotificationsReadCursorStore
+	private val notificationsReadCursorStore: NotificationsReadCursorStore,
+	private val chatsRepository: ChatsRepository
 ) : ViewModel() {
 	private var refreshJob: Job? = null
 
-	val state: StateFlow<NotificationsBadgeUiState> = notificationsRealtimeRepository.repliesState
-		.map { realtimeState ->
-			NotificationsBadgeUiState(
-				unreadCount = realtimeState.page.unreadCount.coerceAtLeast(0)
-			)
-		}
+	val state: StateFlow<NotificationsBadgeUiState> = combine(
+		notificationsRealtimeRepository.repliesState,
+		chatsRepository.observeConversations()
+	) { realtimeState, conversations ->
+		val repliesUnread = realtimeState.page.unreadCount.coerceAtLeast(0)
+		val directUnread = conversations.sumOf { conversation -> conversation.unreadCount.coerceAtLeast(0) }
+		NotificationsBadgeUiState(
+			unreadCount = (repliesUnread + directUnread).coerceAtLeast(0)
+		)
+	}
 		.stateIn(
 			viewModelScope,
 			SharingStarted.Eagerly,
@@ -37,6 +43,9 @@ class NotificationsBadgeViewModel(
 
 	fun startPolling() {
 		notificationsRealtimeRepository.start()
+		viewModelScope.launch {
+			chatsRepository.getConversations(limit = 50, cursor = null)
+		}
 	}
 
 	fun stopPolling(resetUnread: Boolean) {

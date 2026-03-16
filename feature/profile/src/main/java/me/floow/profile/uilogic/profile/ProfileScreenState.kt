@@ -17,6 +17,8 @@ sealed interface ProfileScreenState {
 		val description: String?,
 		val totalLikesReceived: Int,
 		val isSelf: Boolean,
+		val isOnline: Boolean = false,
+		val lastSeenAtMillis: Long? = null,
 		val posts: List<Post>,
 		val arePostsLoading: Boolean,
 		val arePostsError: Boolean,

@@ -4,9 +4,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.floow.chats.ui.chats.ChatsScreen
 import me.floow.chats.uilogic.chats.Chat
 import me.floow.chats.uilogic.chats.ChatsScreenViewModel
@@ -20,7 +20,7 @@ fun ChatsRoute(
 	vm: ChatsScreenViewModel,
 	modifier: Modifier = Modifier
 ) {
-	val state by vm.state.collectAsState()
+	val state by vm.state.collectAsStateWithLifecycle()
 
 	LaunchedEffect(isMockBuild) {
 		vm.setUseMockData(isMockBuild)

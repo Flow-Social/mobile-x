@@ -19,7 +19,12 @@ import me.floow.uikit.R
 import me.floow.uikit.theme.LocalTypography
 
 @Composable
-fun BlankContentBox(modifier: Modifier = Modifier) {
+fun BlankContentBox(
+	modifier: Modifier = Modifier,
+	titleRes: Int = R.string.there_is_nothing,
+	subtitleRes: Int = R.string.but_it_will_be_soon_we_promise,
+	imageRes: Int = R.drawable.blank_girl
+) {
 	Box(
 		contentAlignment = Alignment.Center,
 		modifier = modifier
@@ -29,14 +34,14 @@ fun BlankContentBox(modifier: Modifier = Modifier) {
 			modifier = Modifier
 		) {
 			Image(
-				painter = painterResource(R.drawable.blank_girl),
+				painter = painterResource(imageRes),
 				contentDescription = null,
 			)
 
 			Spacer(Modifier.height(24.dp))
 
 			Text(
-				text = stringResource(R.string.there_is_nothing),
+				text = stringResource(titleRes),
 				style = LocalTypography.current.titleLarge.copy(
 					fontSize = 24.sp,
 				),
@@ -45,7 +50,7 @@ fun BlankContentBox(modifier: Modifier = Modifier) {
 			Spacer(Modifier.height(10.dp))
 
 			Text(
-				text = stringResource(R.string.but_it_will_be_soon_we_promise),
+				text = stringResource(subtitleRes),
 				style = LocalTypography.current.bodyMedium,
 			)
 		}

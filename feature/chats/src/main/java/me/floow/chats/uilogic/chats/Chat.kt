@@ -1,23 +1,30 @@
 package me.floow.chats.uilogic.chats
 
-import android.net.Uri
 import me.floow.domain.values.ProfileName
-import java.time.LocalDateTime
 
 enum class LastSentMessageState {
 	Sent,
 	Read,
 }
 
+enum class ChatType {
+	DIRECT,
+	SYSTEM,
+	GROUP,
+	SAVED,
+}
+
 data class Chat(
 	val id: String,
+	val conversationId: Long? = null,
+	val type: ChatType,
 	val name: ProfileName,
 	val lastMessageText: String,
-	val lastMessageDateTime: LocalDateTime,
+	val lastMessageTimeMillis: Long,
 	val isOnline: Boolean,
 	val unreadCount: Int,
 	val chatMuted: Boolean,
-	val avatarUrl: Uri?,
-	val attachedMediaUrl: Uri?,
+	val avatarUrl: String?,
+	val attachedMediaUrl: String?,
 	val lastSentMessageState: LastSentMessageState?
 )

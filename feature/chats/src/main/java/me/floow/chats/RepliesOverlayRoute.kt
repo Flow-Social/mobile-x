@@ -121,21 +121,20 @@ fun RepliesOverlayRoute(
 		onCurrentReplyClick = {},
 		onCancelEdit = {},
 		onMessageInputFieldValueChange = {},
-		onEmojiPickerClick = {},
 		onSendClick = {},
-		onRequestScrollToBottom = {
-			vm.onSeeAllRequested()
-			onAllRepliesRead()
-		},
-		onUserStartedScroll = vm::onUserStartedScroll,
-		onVisibleMessageIdsChanged = vm::onVisibleMessageIdsChanged,
-		onFirstVisibleMessageIdChanged = vm::onFirstVisibleMessageIdChanged,
-		onLoadMore = {},
+			onRequestScrollToBottom = {
+				vm.onSeeAllRequested()
+				onAllRepliesRead()
+			},
+			onUserStartedScroll = vm::onUserStartedScroll,
+			onViewportSnapshotChanged = vm::onViewportSnapshotChanged,
+			onLoadMore = {},
 		onPostImageClick = { _, _ -> },
 		onPinMessage = {},
 		onUnpinMessage = {},
 		onDeleteMessage = {},
 		onEditMessage = { _, _ -> },
+		onRetryMessage = {},
 		onUndoDelete = {},
 		config = config,
 		state = state,

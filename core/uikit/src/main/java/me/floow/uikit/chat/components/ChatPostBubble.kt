@@ -73,7 +73,7 @@ fun ChatPostBubble(
 				Spacer(Modifier.height(8.dp))
 				Text(
 					text = description,
-					style = LocalTypography.current.bodyMedium,
+					style = LocalTypography.current.bodyMedium.copy(fontSize = 16.sp),
 					color = MaterialTheme.colorScheme.onSurface
 				)
 			}
