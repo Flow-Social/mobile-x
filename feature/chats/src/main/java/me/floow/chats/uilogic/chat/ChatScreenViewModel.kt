@@ -357,6 +357,7 @@ class ChatScreenViewModel(
 	private var realtimeJob: Job? = null
 	private var localMessagesJob: Job? = null
 	private var pinnedMessagesJob: Job? = null
+	private var anchorPersistJob: Job? = null
 	private var pendingColdRestoreAnchorMessageId: Long? = null
 	private var pendingColdRestoreOffsetPx: Int = 0
 	private var bufferedObservedMessagesPage: DirectChatMessagesPage? = null
@@ -936,12 +937,13 @@ class ChatScreenViewModel(
 		)
 		val roughInitialViewport = exactInitialViewport?.copy(itemScrollOffsetPx = 0)
 		val nextAnchorRequestToken = _state.value.currentAnchorRequestToken + 1L
-		_state.update { current ->
-			current.copy(
-				isLoading = false,
-				isError = false,
-				messages = renderedSnapshot.groupedMessages,
-				pinnedMessages = current.pinnedMessages,
+			_state.update { current ->
+				val shouldHideUnreadBoundaryInActiveChat = canProcessVisibleReadSignals()
+				current.copy(
+					isLoading = false,
+					isError = false,
+					messages = renderedSnapshot.groupedMessages,
+					pinnedMessages = current.pinnedMessages,
 				nextBeforeId = window.items.firstOrNull()?.id?.takeIf { window.hasOlderMessages },
 				canLoadMore = window.hasOlderMessages,
 				conversationId = conversation.id,
@@ -949,19 +951,19 @@ class ChatScreenViewModel(
 				chatInterlocutorName = conversation.displayPeerName(),
 				chatInterlocutorAvatarUrl = conversation.peer.avatarUrl.toSafeUriOrNull(),
 				initialViewport = roughInitialViewport,
-				anchorRequest = createAnchorRestoreRequest(
-					messageId = window.anchorMessageId,
-					requestToken = nextAnchorRequestToken,
-					initialOffsetPx = offsetPx,
-					keepAnchored = true
-				),
-				highlightRequest = null,
-				unreadMessageIds = projection.unreadMessageIds,
-				unreadBoundaryMessageId = projection.unreadBoundaryMessageId,
-				peerLastReadMessageId = maxOf(
-					current.peerLastReadMessageId,
-					conversation.peerLastReadMessageId?.coerceAtLeast(0L) ?: 0L,
-					window.peerLastReadMessageId?.coerceAtLeast(0L) ?: 0L
+					anchorRequest = createAnchorRestoreRequest(
+						messageId = window.anchorMessageId,
+						requestToken = nextAnchorRequestToken,
+						initialOffsetPx = offsetPx,
+						keepAnchored = true
+					),
+					highlightRequest = null,
+					unreadMessageIds = projection.unreadMessageIds,
+					unreadBoundaryMessageId = if (shouldHideUnreadBoundaryInActiveChat) null else projection.unreadBoundaryMessageId,
+					peerLastReadMessageId = maxOf(
+						current.peerLastReadMessageId,
+						conversation.peerLastReadMessageId?.coerceAtLeast(0L) ?: 0L,
+						window.peerLastReadMessageId?.coerceAtLeast(0L) ?: 0L
 				)
 			)
 		}
@@ -2027,6 +2029,8 @@ class ChatScreenViewModel(
 	fun onScreenClosed() {
 		if (!isScreenActive) return
 		isScreenActive = false
+		anchorPersistJob?.cancel()
+		anchorPersistJob = null
 		updateFocusPresenceTargets(isVisible = false)
 		applyVisibleReadCandidate(maxVisibleUnreadMessageIdCandidate)
 		isScreenVisibleToUser = false
@@ -2229,6 +2233,25 @@ class ChatScreenViewModel(
 				"bottomPinned=$isBottomPinned"
 		)
 		anchorController.remember(anchorMessageId, offsetPx, isBottomPinned)
+		scheduleAnchorPersist()
+	}
+
+	private fun scheduleAnchorPersist() {
+		if (useMockData) return
+		val conversationId = _state.value.conversationId ?: return
+		if (conversationId <= 0L) return
+		anchorPersistJob?.cancel()
+		anchorPersistJob = viewModelScope.launch(Dispatchers.IO) {
+			// Debounce rapid viewport updates; persist only after scroll settles.
+			delay(200L)
+			val anchor = anchorController.resolveDurableAnchor() ?: return@launch
+			if (anchor.messageId <= 0L) return@launch
+			persistOpenAnchorNow(
+				anchorMessageId = anchor.messageId,
+				offsetPx = anchor.offsetPx,
+				isBottomPinned = anchor.isBottomPinned
+			)
+		}
 	}
 
 	private suspend fun syncReadUpToNow(readUpToMessageId: Long, explicitConversationId: Long? = null): Boolean {
