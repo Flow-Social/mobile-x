@@ -51,20 +51,21 @@ class PresenceRepositoryImpl(
 		val normalized = normalizeUserIds(userIds)
 		if (normalized == chatListUserIds) return
 		chatListUserIds = normalized
-		refreshSubscriptions()
+		refreshSubscriptions(force = true)
 	}
 
 	override fun updateFocusUserIds(userIds: List<String>) {
 		val normalized = normalizeUserIds(userIds)
 		if (normalized == focusUserIds) return
 		focusUserIds = normalized
-		refreshSubscriptions()
+		refreshSubscriptions(force = true)
 	}
 
 	override fun onAppForeground() {
 		isForeground = true
 		offlineJob?.cancel()
 		offlineJob = null
+		restartRealtimeSubscriptions()
 		if (heartbeatJob?.isActive == true) return
 		heartbeatJob = scope.launch {
 			val sessionId = sessionStore.getOrCreateSessionId()
@@ -90,6 +91,8 @@ class PresenceRepositoryImpl(
 		isForeground = false
 		heartbeatJob?.cancel()
 		heartbeatJob = null
+		realtimeJob?.cancel()
+		realtimeJob = null
 		offlineJob?.cancel()
 		offlineJob = scope.launch {
 			delay(OFFLINE_DEBOUNCE_MS)
@@ -102,9 +105,14 @@ class PresenceRepositoryImpl(
 		}
 	}
 
-	private fun refreshSubscriptions() {
+	private fun restartRealtimeSubscriptions() {
+		refreshSubscriptions(force = true)
+	}
+
+	private fun refreshSubscriptions(force: Boolean) {
 		val combined = (focusUserIds + chatListUserIds).toList()
 		val limited = combined.take(MAX_PRESENCE_TARGETS)
+		if (!force && limited.isEmpty()) return
 		realtimeJob?.cancel()
 		if (limited.isEmpty()) return
 		scope.launch {
