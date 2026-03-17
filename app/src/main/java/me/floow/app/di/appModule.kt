@@ -14,7 +14,9 @@ import me.floow.app.notifications.NotificationsReadCursorStoreImpl
 import me.floow.app.notifications.NotificationsBadgeViewModel
 import me.floow.app.notifications.ScopedReadCursorStoreImpl
 import me.floow.app.push.ChatNotificationRenderer
+import me.floow.app.push.ChatNotificationVisibilityGate
 import me.floow.app.push.ChatPushAckSender
+import me.floow.app.push.ForegroundVisibleChatStore
 import me.floow.app.push.NotificationPipeline
 import me.floow.auth.models.GoogleOAuthInfo
 import me.floow.domain.app.AppController
@@ -40,8 +42,21 @@ val appModule = module {
 		single<NotificationsReadCursorStore> { NotificationsReadCursorStoreImpl(androidContext(), get()) }
 		single<DirectMessagesReadCursorStore> { DirectMessagesReadCursorStoreImpl(androidContext(), get()) }
 		single<DirectMessagesOutgoingRetryScheduler> { DirectMessagesOutgoingRetrySchedulerImpl(androidContext()) }
+		single { ForegroundVisibleChatStore() }
+		single {
+			val context = androidContext()
+			ChatNotificationVisibilityGate(
+				foregroundVisibleChatStore = get(),
+				selfUserIdProvider = {
+					context.getSharedPreferences("flowme.auth", android.content.Context.MODE_PRIVATE)
+						.getString("authUserId", null)
+						?.trim()
+						?.takeIf(String::isNotEmpty)
+				}
+			)
+		}
 		single { ChatPushAckSender(context = androidContext(), pushApi = get(), chatsRealtimeApi = get()) }
-		single { ChatNotificationRenderer(context = androidContext()) }
+		single { ChatNotificationRenderer(context = androidContext(), visibilityGate = get(), logger = get()) }
 		single { NotificationPipeline(context = androidContext(), renderer = get(), ackSender = get(), logger = get()) }
 		single {
 		val context = androidContext()

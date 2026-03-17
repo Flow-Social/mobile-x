@@ -5,56 +5,9 @@ import androidx.core.app.NotificationManagerCompat
 
 object DirectChatNotificationCenter {
 	private const val PREFS_NAME = "direct_chat_notifications"
-	private const val ACTIVE_CONVERSATION_ID_KEY = "active_conversation_id"
-	private const val ACTIVE_INTERLOCUTOR_ID_KEY = "active_interlocutor_id"
 	private const val CONVERSATION_NOTIFICATION_IDS_PREFIX = "conversation_notification_ids:"
 	private const val INTERLOCUTOR_NOTIFICATION_IDS_PREFIX = "interlocutor_notification_ids:"
 	private const val MAX_STORED_NOTIFICATION_IDS_PER_CONVERSATION = 40
-
-	fun setActiveChat(
-		context: Context,
-		conversationId: Long?,
-		interlocutorId: String?
-	) {
-		val normalizedConversationId = conversationId?.takeIf { it > 0L }
-		val normalizedInterlocutorId = interlocutorId
-			?.trim()
-			?.takeIf(String::isNotEmpty)
-		val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-		prefs.edit().apply {
-			if (normalizedConversationId != null) {
-				putLong(ACTIVE_CONVERSATION_ID_KEY, normalizedConversationId)
-			} else {
-				remove(ACTIVE_CONVERSATION_ID_KEY)
-			}
-			if (normalizedInterlocutorId != null) {
-				putString(ACTIVE_INTERLOCUTOR_ID_KEY, normalizedInterlocutorId)
-			} else {
-				remove(ACTIVE_INTERLOCUTOR_ID_KEY)
-			}
-		}.apply()
-	}
-
-	fun clearActiveChat(context: Context) {
-		val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-		prefs.edit()
-			.remove(ACTIVE_CONVERSATION_ID_KEY)
-			.remove(ACTIVE_INTERLOCUTOR_ID_KEY)
-			.apply()
-	}
-
-	fun getActiveConversationId(context: Context): Long? {
-		val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-		if (!prefs.contains(ACTIVE_CONVERSATION_ID_KEY)) return null
-		return prefs.getLong(ACTIVE_CONVERSATION_ID_KEY, 0L).takeIf { it > 0L }
-	}
-
-	fun getActiveInterlocutorId(context: Context): String? {
-		val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-		return prefs.getString(ACTIVE_INTERLOCUTOR_ID_KEY, null)
-			?.trim()
-			?.takeIf(String::isNotEmpty)
-	}
 
 	fun registerConversationNotification(
 		context: Context,
