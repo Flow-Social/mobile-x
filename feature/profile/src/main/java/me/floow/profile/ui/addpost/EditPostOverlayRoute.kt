@@ -11,10 +11,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import me.floow.profile.uilogic.addpost.EditPostSaveResult
 import me.floow.profile.uilogic.addpost.EditPostViewModel
 import me.floow.profile.uilogic.addpost.toCreatePostUiState
 import me.floow.uikit.components.media.transfer.PostMediaTransferStore
+import me.floow.uikit.util.SetStatusBarStyle
 
 @Composable
 fun EditPostOverlayRoute(
@@ -67,6 +69,11 @@ fun EditPostOverlayRoute(
 	}
 
 	val uiState = remember(state) { state.toCreatePostUiState() }
+
+	SetStatusBarStyle(
+		color = Color.Transparent,
+		darkIcons = false
+	)
 
 	CreatePostOverlayScreen(
 		uiState = uiState,

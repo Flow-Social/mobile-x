@@ -6,7 +6,6 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
@@ -16,9 +15,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.material3.MaterialTheme
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.collectLatest
@@ -28,8 +29,10 @@ import me.floow.profile.ui.profile.bump.ProfileBumpCoordinator
 import me.floow.profile.uilogic.bump.ProfileBumpViewModel
 import me.floow.profile.uilogic.profile.ProfileScreenState
 import me.floow.profile.uilogic.profile.ProfileScreenViewModel
+import me.floow.uikit.components.shell.MainShellDefaults
 import me.floow.uikit.components.media.transfer.PostMediaSourceSnapshot
 import me.floow.uikit.util.SetNavigationBarColor
+import me.floow.uikit.util.SetStatusBarStyle
 
 @Composable
 fun ProfileRoute(
@@ -52,6 +55,8 @@ fun ProfileRoute(
     val state: ProfileScreenState by viewModel.state.collectAsStateWithLifecycle()
     val successState = state as? ProfileScreenState.Success
     val bumpUiState by bumpViewModel.uiState.collectAsStateWithLifecycle()
+    val statusBarColor = MaterialTheme.colorScheme.background
+    val useDarkStatusIcons = statusBarColor.luminance() > 0.5f
 
     val context = LocalContext.current
     val appContext = remember(context) { context.applicationContext }
@@ -97,6 +102,13 @@ fun ProfileRoute(
             onBumpMatchNavigate(matchedUserId)
             bumpViewModel.resetToIdle()
         }
+    }
+
+    if (successState == null) {
+        SetStatusBarStyle(
+            color = statusBarColor,
+            darkIcons = useDarkStatusIcons
+        )
     }
 
     ProfileScreen(
@@ -178,9 +190,7 @@ fun ProfileRoute(
         state = state,
     )
 
-    SetNavigationBarColor(
-        NavigationBarDefaults.containerColor,
-    )
+    SetNavigationBarColor(MainShellDefaults.appBackgroundColor)
 }
 
 private fun hasBleRuntimePermissions(context: Context): Boolean {

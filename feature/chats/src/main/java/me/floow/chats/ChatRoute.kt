@@ -1,12 +1,14 @@
 package me.floow.chats
 
 import android.net.Uri
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.luminance
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -17,6 +19,7 @@ import me.floow.chats.uilogic.chat.DirectChatOpenMode
 import me.floow.uikit.chat.model.ChatInteractionAdapter
 import me.floow.uikit.chat.model.DEFAULT_CHAT_MESSAGE_MAX_LENGTH
 import me.floow.uikit.chat.model.ChatScreenConfig
+import me.floow.uikit.util.SetStatusBarStyle
 
 data class ChatRouteInitialData(
 	val chatInterlocutorId: String,
@@ -38,6 +41,8 @@ fun ChatRoute(
 	modifier: Modifier = Modifier
 ) {
 	val state by vm.state.collectAsStateWithLifecycle()
+	val statusBarColor = MaterialTheme.colorScheme.background
+	val useDarkStatusIcons = statusBarColor.luminance() > 0.5f
 	val config = remember(initialData.isSavedMessages) {
 		if (initialData.isSavedMessages) {
 			ChatScreenConfig(
@@ -99,6 +104,11 @@ fun ChatRoute(
 			vm.onScreenClosed()
 		}
 	}
+
+	SetStatusBarStyle(
+		color = statusBarColor,
+		darkIcons = useDarkStatusIcons
+	)
 
 	ChatScreen(
 		onBackClick = onBackClick,

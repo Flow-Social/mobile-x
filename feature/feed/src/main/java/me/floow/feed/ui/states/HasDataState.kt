@@ -32,6 +32,7 @@ import me.floow.uikit.components.media.viewer2.SharedImageOrigin
 import me.floow.uikit.components.media.viewer2.reduce
 import me.floow.uikit.components.media.viewer2.rememberFullscreenImageViewerState
 import me.floow.uikit.components.misc.PostActionsSheetContent
+import me.floow.uikit.components.shell.MainShellDefaults
 import me.floow.uikit.R
 import me.floow.uikit.util.SystemBarsScrim
 import me.floow.uikit.util.SetNavigationBarColor
@@ -108,7 +109,7 @@ internal fun HasDataState(
         navigationScrim = Color.Black.copy(alpha = 0.12f)
     )
     if (overlayPost == null) {
-        SetNavigationBarColor(NavigationBarDefaults.containerColor)
+        SetNavigationBarColor(MainShellDefaults.appBackgroundColor)
     }
 
     if (showDeleteDialog) {

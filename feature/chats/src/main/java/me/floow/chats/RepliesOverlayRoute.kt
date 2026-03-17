@@ -1,5 +1,6 @@
 package me.floow.chats
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -7,6 +8,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.flow.collectLatest
 import me.floow.chats.uilogic.replies.RepliesOverlayOpenMode
@@ -16,6 +18,7 @@ import me.floow.domain.models.resolveReplyTargetCommentCandidates
 import me.floow.uikit.chat.ChatScreen
 import me.floow.uikit.chat.model.ChatLayoutMode
 import me.floow.uikit.chat.model.ChatScreenConfig
+import me.floow.uikit.util.SetStatusBarStyle
 import me.flowme.chats.R
 import org.koin.androidx.compose.koinViewModel
 
@@ -46,6 +49,8 @@ fun RepliesOverlayRoute(
 	modifier: Modifier = Modifier
 ) {
 	val state by vm.state.collectAsState()
+	val statusBarColor = MaterialTheme.colorScheme.background
+	val useDarkStatusIcons = statusBarColor.luminance() > 0.5f
 	val repliesInboxTitle = stringResource(R.string.replies_inbox_title)
 	val repliesFallbackActorName = stringResource(R.string.replies_fallback_actor_name)
 	val repliesFallbackMessageText = stringResource(R.string.replies_fallback_message_text)
@@ -98,6 +103,11 @@ fun RepliesOverlayRoute(
 		showTopBarSubtitle = false,
 		showTopBarDropdown = false,
 		dividerColor = Color.Black.copy(alpha = 0.1f)
+	)
+
+	SetStatusBarStyle(
+		color = statusBarColor,
+		darkIcons = useDarkStatusIcons
 	)
 
 		ChatScreen(

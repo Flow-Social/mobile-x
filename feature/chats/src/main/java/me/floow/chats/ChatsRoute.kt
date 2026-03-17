@@ -1,7 +1,6 @@
 package me.floow.chats
 
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -10,6 +9,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.floow.chats.ui.chats.ChatsScreen
 import me.floow.chats.uilogic.chats.Chat
 import me.floow.chats.uilogic.chats.ChatsScreenViewModel
+import me.floow.uikit.components.shell.MainShellDefaults
 import me.floow.uikit.util.SetNavigationBarColor
 
 @Composable
@@ -27,7 +27,7 @@ fun ChatsRoute(
 		vm.load()
 	}
 
-	SetNavigationBarColor(NavigationBarDefaults.containerColor)
+	SetNavigationBarColor(MainShellDefaults.appBackgroundColor)
 
 	ChatsScreen(
 		onSearchClick = onSearchClick,

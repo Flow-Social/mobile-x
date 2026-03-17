@@ -1,9 +1,11 @@
 package me.floow.post.ui
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.luminance
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import me.floow.domain.cache.ProfileLocalStore
@@ -13,6 +15,7 @@ import me.floow.domain.data.UpdateDataResponse
 import me.floow.domain.data.repos.PostsRepository
 import me.floow.uikit.components.media.transfer.PostMediaSourceSnapshot
 import me.floow.uikit.components.media.transfer.PostMediaTransferStore
+import me.floow.uikit.util.SetStatusBarStyle
 import org.koin.compose.koinInject
 
 @Composable
@@ -47,12 +50,19 @@ fun PostRoute(
     val profileLocalStore: ProfileLocalStore = koinInject()
     val mediaTransferStore: PostMediaTransferStore = koinInject()
     val scope = rememberCoroutineScope()
+    val statusBarColor = MaterialTheme.colorScheme.background
+    val useDarkStatusIcons = statusBarColor.luminance() > 0.5f
     val initialMediaSnapshot = remember(postId, mediaTransferToken) {
         mediaTransferToken
             ?.let(mediaTransferStore::consume)
             ?.takeIf { it.postId == postId }
             ?: mediaTransferStore.peek(postId)?.takeIf { it.postId == postId }
     }
+
+    SetStatusBarStyle(
+        color = statusBarColor,
+        darkIcons = useDarkStatusIcons
+    )
 
     PostScreen(
         postId = postId,

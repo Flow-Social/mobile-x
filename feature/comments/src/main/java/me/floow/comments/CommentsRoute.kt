@@ -1,6 +1,7 @@
 package me.floow.comments
 
 import android.net.Uri
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -9,6 +10,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -32,6 +34,7 @@ import me.floow.uikit.components.media.viewer2.rememberFullscreenImageViewerStat
 import me.floow.uikit.components.media.viewer2.reduce
 import me.floow.uikit.components.media.transfer.PostMediaSourceSnapshot
 import me.floow.uikit.components.media.transfer.PostMediaTransferStore
+import me.floow.uikit.util.SetStatusBarStyle
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 
@@ -62,6 +65,8 @@ fun CommentsRoute(
 ) {
 	val state by vm.state.collectAsStateWithLifecycle()
 	val isInitialTargetResolved by vm.isInitialTargetResolved.collectAsStateWithLifecycle()
+	val statusBarColor = MaterialTheme.colorScheme.background
+	val useDarkStatusIcons = statusBarColor.luminance() > 0.5f
 	val commentsTitle = stringResource(R.string.comments_title)
 	val commentsPhotoSubtitle = stringResource(R.string.comments_photo_subtitle)
 	val viewerState = rememberFullscreenImageViewerState()
@@ -152,6 +157,11 @@ fun CommentsRoute(
 	) {
 		initialData.initialTargetCommentId != null || initialData.fallbackTargetCommentId != null
 	}
+
+	SetStatusBarStyle(
+		color = statusBarColor,
+		darkIcons = useDarkStatusIcons
+	)
 
 	ChatScreen(
 		onBackClick = onBackClick,
