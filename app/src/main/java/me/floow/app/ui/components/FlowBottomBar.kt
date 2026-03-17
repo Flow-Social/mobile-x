@@ -1,7 +1,6 @@
 package me.floow.app.ui.components
 
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -36,6 +35,7 @@ import me.floow.app.navigation.BottomNavigationItem
 import me.floow.app.navigation.ChatsScreen
 import me.floow.app.navigation.FeedScreen
 import me.floow.app.navigation.NavigationRoute
+import me.floow.uikit.components.shell.MainShellDefaults
 
 @Composable
 fun FlowBottomBar(
@@ -47,15 +47,12 @@ fun FlowBottomBar(
 	onClick: (route: NavigationRoute) -> Unit,
 	modifier: Modifier = Modifier
 ) {
-	val unselectedColor = if (isSystemInDarkTheme()) {
-		Color.White.copy(alpha = 0.5f)
-	} else {
-		Color.Black.copy(alpha = 0.5f)
-	}
+	val selectedColor = MainShellDefaults.bottomBarSelectedColor
+	val unselectedColor = MainShellDefaults.bottomBarUnselectedColor
 
 	NavigationBar(
 		modifier = modifier,
-		containerColor = NavigationBarDefaults.containerColor,
+		containerColor = MainShellDefaults.appBackgroundColor,
 		tonalElevation = 0.dp
 	) {
 		navigationItems.forEach { item ->
@@ -76,9 +73,9 @@ fun FlowBottomBar(
 					}
 				},
 				colors = NavigationBarItemDefaults.colors(
-					selectedIconColor = MaterialTheme.colorScheme.primary,
+					selectedIconColor = selectedColor,
 					unselectedIconColor = unselectedColor,
-					selectedTextColor = MaterialTheme.colorScheme.primary,
+					selectedTextColor = selectedColor,
 					unselectedTextColor = unselectedColor,
 					indicatorColor = Color.Transparent
 				),

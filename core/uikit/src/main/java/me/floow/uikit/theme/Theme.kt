@@ -8,6 +8,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -76,8 +77,47 @@ data class SystemBarStyle(
     val statusBarColor: Color? = null,
     val useDarkStatusBarIcons: Boolean? = null,
     val navigationBarColor: Color? = null,
-    val useDarkNavigationBarIcons: Boolean? = null
+    val useDarkNavigationBarIcons: Boolean? = null,
+    val isNavigationBarContrastEnforced: Boolean? = null
 )
+
+private fun SystemBarStyle.merge(override: SystemBarStyle): SystemBarStyle = copy(
+    statusBarColor = override.statusBarColor ?: statusBarColor,
+    useDarkStatusBarIcons = override.useDarkStatusBarIcons ?: useDarkStatusBarIcons,
+    navigationBarColor = override.navigationBarColor ?: navigationBarColor,
+    useDarkNavigationBarIcons = override.useDarkNavigationBarIcons ?: useDarkNavigationBarIcons,
+    isNavigationBarContrastEnforced = override.isNavigationBarContrastEnforced ?: isNavigationBarContrastEnforced
+)
+
+@Stable
+class SystemBarStyleController {
+    private val styleByToken = mutableStateMapOf<Any, SystemBarStyle>()
+    private val tokenOrder = mutableStateListOf<Any>()
+
+    var overrideStyle by mutableStateOf(SystemBarStyle())
+        private set
+
+    fun update(token: Any, style: SystemBarStyle) {
+        if (!styleByToken.containsKey(token)) {
+            tokenOrder.add(token)
+        }
+        styleByToken[token] = style
+        recompute()
+    }
+
+    fun remove(token: Any) {
+        if (styleByToken.remove(token) != null) {
+            tokenOrder.remove(token)
+            recompute()
+        }
+    }
+
+    private fun recompute() {
+        overrideStyle = tokenOrder.fold(SystemBarStyle()) { merged, token ->
+            merged.merge(styleByToken[token] ?: SystemBarStyle())
+        }
+    }
+}
 
 val LocalTypography = staticCompositionLocalOf {
     FlowTypography()
@@ -87,7 +127,7 @@ val LocalColorScheme = staticCompositionLocalOf {
     FlowColorScheme()
 }
 
-val LocalSystemBarStyle = staticCompositionLocalOf<MutableState<SystemBarStyle>> {
+val LocalSystemBarStyle = staticCompositionLocalOf<SystemBarStyleController> {
     error("LocalSystemBarStyle not provided")
 }
 
@@ -354,7 +394,7 @@ val typography = Typography(
 @Composable
 fun FlowTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
@@ -362,23 +402,36 @@ fun FlowTheme(
 
     val flowColorScheme = if (darkTheme) DarkFlowColorScheme else LightFlowColorScheme
     val flowTypography = FlowTypography()
-    val systemBarStyleState = remember { mutableStateOf(SystemBarStyle()) }
-    val systemBarStyle = systemBarStyleState.value
-
     val view = LocalView.current
+    val systemBarStyleController = remember { SystemBarStyleController() }
+    val systemBarStyle = systemBarStyleController.overrideStyle
+    val defaultNavigationBarContrastEnforced = remember(view) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !view.isInEditMode) {
+            (view.context as Activity).window.isNavigationBarContrastEnforced
+        } else {
+            false
+        }
+    }
 
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
 			window.setBackgroundDrawable(ColorDrawable(colorScheme.surfaceContainer.toArgb()))
-            window.statusBarColor = (systemBarStyle.statusBarColor ?: colorScheme.background).toArgb()
+            val appliedStatusBarColor = systemBarStyle.statusBarColor ?: colorScheme.background
             val navigationBarElevation = NavigationBarDefaults.Elevation
-            window.navigationBarColor = (systemBarStyle.navigationBarColor
-                ?: colorScheme.surfaceColorAtElevation(navigationBarElevation)).toArgb()
+            val appliedNavigationBarColor = systemBarStyle.navigationBarColor
+                ?: colorScheme.surfaceColorAtElevation(navigationBarElevation)
+
+            window.statusBarColor = appliedStatusBarColor.toArgb()
+            window.navigationBarColor = appliedNavigationBarColor.toArgb()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                window.isNavigationBarContrastEnforced =
+                    systemBarStyle.isNavigationBarContrastEnforced ?: defaultNavigationBarContrastEnforced
+            }
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars =
-                systemBarStyle.useDarkStatusBarIcons ?: !darkTheme
+                systemBarStyle.useDarkStatusBarIcons ?: (appliedStatusBarColor.luminance() > 0.5f)
             WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars =
-                systemBarStyle.useDarkNavigationBarIcons ?: !darkTheme
+                systemBarStyle.useDarkNavigationBarIcons ?: (appliedNavigationBarColor.luminance() > 0.5f)
         }
     }
 
@@ -392,7 +445,7 @@ fun FlowTheme(
                 LocalTypography provides flowTypography,
                 LocalColorScheme provides flowColorScheme,
                 LocalRippleConfiguration provides flowRippleTheme,
-                LocalSystemBarStyle provides systemBarStyleState
+                LocalSystemBarStyle provides systemBarStyleController
             ) {
                 content()
             }

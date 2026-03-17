@@ -7,9 +7,7 @@ import android.widget.Toast
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -23,8 +21,8 @@ import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import me.floow.profile.uilogic.edit.EditProfileViewModel
-import me.floow.uikit.theme.LocalSystemBarStyle
 import me.floow.uikit.util.SetNavigationBarColor
+import me.floow.uikit.util.SetStatusBarStyle
 
 data class EditProfileRouteInitialData(
 	val name: String,
@@ -44,7 +42,6 @@ fun EditProfileRoute(
 ) {
 	val statusBarColor = MaterialTheme.colorScheme.background
 	val useDarkStatusIcons = statusBarColor.luminance() > 0.5f
-	val systemBarStyle = LocalSystemBarStyle.current
 	val state by vm.state.collectAsState()
 	val context = LocalContext.current
 	val hapticFeedback = LocalHapticFeedback.current
@@ -76,20 +73,10 @@ fun EditProfileRoute(
 		}
 	}
 
-	SideEffect {
-		systemBarStyle.value = systemBarStyle.value.copy(
-			statusBarColor = statusBarColor,
-			useDarkStatusBarIcons = useDarkStatusIcons
-		)
-	}
-	DisposableEffect(systemBarStyle) {
-		onDispose {
-			systemBarStyle.value = systemBarStyle.value.copy(
-				statusBarColor = null,
-				useDarkStatusBarIcons = null
-			)
-		}
-	}
+	SetStatusBarStyle(
+		color = statusBarColor,
+		darkIcons = useDarkStatusIcons
+	)
 
 	EditProfileScreen(
 		state = state,

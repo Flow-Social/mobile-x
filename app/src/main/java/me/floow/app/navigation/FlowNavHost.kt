@@ -71,6 +71,7 @@ import me.floow.app.push.DirectChatNotificationCenter
 import me.floow.app.push.PushTokenSyncScheduler
 import me.floow.app.navigation.bottomNavigationItems
 import me.floow.app.ui.components.MainScreenScaffold
+import me.floow.app.ui.components.MainScreenScaffoldMode
 import me.floow.chats.ChatRoute
 import me.floow.chats.ChatRouteInitialData
 import me.floow.chats.ChatsRoute
@@ -1250,10 +1251,10 @@ fun FlowNavHost(
 								}
 							}
 
-						MainScreenScaffold(
-							navController = navController,
-							modifier = modifier,
-							feedUndoEnabled = feedCanUndo,
+							MainScreenScaffold(
+								navController = navController,
+								modifier = modifier,
+								feedUndoEnabled = feedCanUndo,
 							onFeedUndoClick = { feedViewModel.undoLastSwipe() },
 							chatsUnreadCount = chatsUnreadCount
 						) { padding ->
@@ -1510,12 +1511,12 @@ fun FlowNavHost(
 						}
 						val refreshPostsSignal by refreshPostsFlow.collectAsState()
 
-						MainScreenScaffold(
-							navController = navController,
-							modifier = modifier,
-							disableTopInset = true,
-							chatsUnreadCount = chatsUnreadCount
-						) { padding ->
+							MainScreenScaffold(
+								navController = navController,
+								modifier = modifier,
+								shellMode = MainScreenScaffoldMode.Immersive,
+								chatsUnreadCount = chatsUnreadCount
+							) { padding ->
 							ProfileRoute(
 								goToProfileEditScreen = { name, username, description, avatarUrl, backgroundUrl ->
 									pushOverlay(OverlayScreen.OverlayEditProfile(
@@ -1605,9 +1606,9 @@ fun FlowNavHost(
 							)
 						}
 
-						MainScreenScaffold(
-							navController = navController,
-							modifier = modifier,
+							MainScreenScaffold(
+								navController = navController,
+								modifier = modifier,
 							chatsUnreadCount = chatsUnreadCount
 						) {
 							ChatsRoute(

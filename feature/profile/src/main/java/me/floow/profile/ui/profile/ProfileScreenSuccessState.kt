@@ -33,9 +33,7 @@ import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -78,7 +76,6 @@ import me.floow.profile.uilogic.profile.ProfileScreenState
 import me.floow.domain.utils.toLocalDateTimeFromEpochMillis
 import me.floow.uikit.components.media.transfer.PostMediaSourceSnapshot
 import me.floow.uikit.theme.FlowTheme
-import me.floow.uikit.theme.LocalSystemBarStyle
 import androidx.compose.material3.SheetValue
 import androidx.compose.foundation.BorderStroke
 
@@ -90,6 +87,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import me.floow.uikit.components.misc.PostActionsSheetContent
 import me.floow.uikit.components.media.ProgressiveImage
 import me.floow.uikit.components.media.ProgressiveImageMode
+import me.floow.uikit.util.SetStatusBarStyle
 import java.time.format.DateTimeFormatter
 
 private data class PostMenuContext(
@@ -159,23 +157,12 @@ fun ProfileScreenSuccessState(
     } else {
         false
     }
-    val systemBarStyle = LocalSystemBarStyle.current
     val haptic = LocalHapticFeedback.current
     var heroBoundsInWindow by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
-    SideEffect {
-        systemBarStyle.value = systemBarStyle.value.copy(
-            statusBarColor = statusBarColor,
-            useDarkStatusBarIcons = useDarkStatusIcons
-        )
-    }
-    DisposableEffect(systemBarStyle) {
-        onDispose {
-            systemBarStyle.value = systemBarStyle.value.copy(
-                statusBarColor = null,
-                useDarkStatusBarIcons = null
-            )
-        }
-    }
+    SetStatusBarStyle(
+        color = statusBarColor,
+        darkIcons = useDarkStatusIcons
+    )
     LaunchedEffect(scaffoldState.bottomSheetState) {
         var lastCurrent = scaffoldState.bottomSheetState.currentValue
         var lastTarget = scaffoldState.bottomSheetState.targetValue
