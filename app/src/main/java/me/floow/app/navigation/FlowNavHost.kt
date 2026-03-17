@@ -253,11 +253,10 @@ fun FlowNavHost(
 
 	LaunchedEffect(deepLinkIntent, isSignedIn) {
 		val intent = deepLinkIntent ?: return@LaunchedEffect
-		if (isSignedIn) {
-			val handledChatDeepLink = handleChatConversationDeepLinkIntent(intent, navController)
-			if (!handledChatDeepLink) {
-				navController.handleDeepLink(intent)
-			}
+		if (!isSignedIn) return@LaunchedEffect
+		val handledChatDeepLink = handleChatConversationDeepLinkIntent(intent, navController)
+		if (!handledChatDeepLink) {
+			navController.handleDeepLink(intent)
 		}
 		deepLinkDispatcher.clear()
 	}

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Flow.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#FF1F1F25</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_icon_animated</item>
+        <item name="windowSplashScreenAnimationDuration">320</item>
+        <item name="postSplashScreenTheme">@style/Theme.Flow</item>
+        <item name="android:windowBackground">#FF1F1F25</item>
+        <item name="android:colorBackground">#FF1F1F25</item>
+        <item name="android:windowSplashScreenBehavior">icon_preferred</item>
+    </style>
+</resources>

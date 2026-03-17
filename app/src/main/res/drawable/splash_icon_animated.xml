@@ -1,0 +1,18 @@
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/splash_brand_foreground">
+    <target
+        android:name="icon_group"
+        android:animation="@animator/splash_icon_scale_x" />
+    <target
+        android:name="icon_group"
+        android:animation="@animator/splash_icon_scale_y" />
+    <target
+        android:name="fill_main"
+        android:animation="@animator/splash_icon_fill_alpha" />
+    <target
+        android:name="fill_secondary"
+        android:animation="@animator/splash_icon_fill_alpha" />
+    <target
+        android:name="stroke_main"
+        android:animation="@animator/splash_icon_stroke_alpha" />
+</animated-vector>
