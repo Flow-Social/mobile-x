@@ -2,7 +2,6 @@ package me.floow.database.localstore
 
 import androidx.room.withTransaction
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import me.floow.database.AppDatabase
 import me.floow.database.dao.DirectChatsDao
@@ -77,13 +76,10 @@ class DirectChatsLocalStoreImpl(
 		limit: Int
 	): Flow<DirectChatMessagesPage> {
 		val sanitizedLimit = limit.coerceAtLeast(1)
-		return combine(
-			dao.observeMessagesDesc(
-				conversationId = conversationId,
-				limit = sanitizedLimit
-			),
-			dao.observeConversationById(conversationId)
-		) { descItems, conversation ->
+		return dao.observeMessagesDesc(
+			conversationId = conversationId,
+			limit = sanitizedLimit
+		).map { descItems ->
 			val ascendingItems = descItems
 				.asReversed()
 				.map { entity -> entity.toDomain() }
@@ -95,7 +91,7 @@ class DirectChatsLocalStoreImpl(
 			DirectChatMessagesPage(
 				items = ascendingItems,
 				nextBeforeId = nextBeforeId,
-				peerLastReadMessageId = conversation?.peerLastReadMessageId
+				peerLastReadMessageId = null
 			)
 		}
 	}

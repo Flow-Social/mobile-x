@@ -1,4 +1,5 @@
 package me.floow.uikit.chat.states
+import android.os.Trace
 import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -111,6 +112,26 @@ import java.time.format.DateTimeFormatter
 private const val DEFAULT_OLDER_MESSAGES_PREFETCH_WINDOW = 8
 private const val MEDIUM_SCROLL_OLDER_MESSAGES_PREFETCH_WINDOW = 14
 private const val FAST_SCROLL_OLDER_MESSAGES_PREFETCH_WINDOW = 24
+
+private data class ChatViewportCoordinatorSnapshot(
+	val firstVisibleItemIndex: Int,
+	val firstVisibleItemScrollOffset: Int,
+	val visibleItemKeys: Set<Any>,
+	val visibleMessageIds: Set<Long>,
+	val viewportAnchorMessageId: Long?,
+	val viewportAnchorOffsetPx: Int,
+	val visibleReadCandidateId: Long?,
+	val isAtBottom: Boolean
+)
+
+private inline fun <T> traceChatUiSection(name: String, block: () -> T): T {
+	runCatching { Trace.beginSection(name) }
+	return try {
+		block()
+	} finally {
+		runCatching { Trace.endSection() }
+	}
+}
 
 @OptIn(ExperimentalFoundationApi::class, FlowPreview::class)
 @Composable
@@ -499,6 +520,7 @@ fun HasDataState(
 	var olderMessagesPrefetchWindowSize by remember(stableSessionKey) {
 		mutableStateOf(DEFAULT_OLDER_MESSAGES_PREFETCH_WINDOW)
 	}
+	var visibleTimelineKeys by remember(stableSessionKey) { mutableStateOf(emptySet<Any>()) }
 	val oldestLoadedPrefetchMessageIds by remember(state.messages, olderMessagesPrefetchWindowSize) {
 		derivedStateOf {
 			state.messages
@@ -565,9 +587,55 @@ fun HasDataState(
 		var lastIndex = lazyListState.firstVisibleItemIndex
 		var lastOffset = lazyListState.firstVisibleItemScrollOffset
 		var lastEventAtMs = 0L
-		snapshotFlow { lazyListState.firstVisibleItemIndex to lazyListState.firstVisibleItemScrollOffset }
+		snapshotFlow {
+			traceChatUiSection("chat.viewportCoordinator.snapshot") {
+				val messageIdByKeySnapshot = latestMessageIdByKey
+				val incomingKeysSnapshot = latestIncomingUiKeys
+				val layoutInfo = lazyListState.layoutInfo
+				val visibleItems = layoutInfo.visibleItemsInfo
+				val firstVisibleIndex = lazyListState.firstVisibleItemIndex
+				val firstVisibleOffset = lazyListState.firstVisibleItemScrollOffset
+				val visibleKeys = visibleItems.map { it.key }.toSet()
+				val visibleMessageIds = visibleItems
+					.mapNotNull { item -> messageIdByKeySnapshot[item.key] }
+					.toSet()
+				val readCandidateId = visibleItems
+					.asSequence()
+					.mapNotNull { item ->
+						if (item.key in incomingKeysSnapshot) {
+							messageIdByKeySnapshot[item.key]
+						} else {
+							null
+						}
+					}
+					.maxOrNull()
+				val atBottom = if (isReverseLayout) {
+					firstVisibleIndex == 0 && firstVisibleOffset <= 32
+				} else {
+					val total = layoutInfo.totalItemsCount
+					if (total == 0) false else (layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0) >= total - 1
+				}
+				val viewportAnchor = resolveViewportAnchorMessage(
+					lazyListState = lazyListState,
+					isReverseLayout = isReverseLayout,
+					messageIdByKey = messageIdByKeySnapshot
+				)
+				ChatViewportCoordinatorSnapshot(
+					firstVisibleItemIndex = firstVisibleIndex,
+					firstVisibleItemScrollOffset = firstVisibleOffset,
+					visibleItemKeys = visibleKeys,
+					visibleMessageIds = visibleMessageIds,
+					viewportAnchorMessageId = viewportAnchor.messageId,
+					viewportAnchorOffsetPx = viewportAnchor.offsetPx,
+					visibleReadCandidateId = readCandidateId,
+					isAtBottom = atBottom
+				)
+			}
+		}
 			.distinctUntilChanged()
-			.collectLatest { (index, offset) ->
+			.collectLatest { snapshot ->
+				val index = snapshot.firstVisibleItemIndex
+				val offset = snapshot.firstVisibleItemScrollOffset
 				val now = System.currentTimeMillis()
 				val elapsedMs = (now - lastEventAtMs).coerceAtLeast(1L)
 				val indexDelta = index - lastIndex
@@ -589,6 +657,20 @@ fun HasDataState(
 						) -> MEDIUM_SCROLL_OLDER_MESSAGES_PREFETCH_WINDOW
 					else -> DEFAULT_OLDER_MESSAGES_PREFETCH_WINDOW
 				}
+				visibleTimelineKeys = snapshot.visibleItemKeys
+				rowBoundsByMessageKey.keys.retainAll(snapshot.visibleItemKeys.filterIsInstance<String>().toSet())
+				bubbleBoundsByMessageKey.keys.retainAll(snapshot.visibleItemKeys.filterIsInstance<String>().toSet())
+				onViewportSnapshotChanged(
+					ChatViewportSnapshot(
+						visibleMessageIds = snapshot.visibleMessageIds,
+						firstVisibleMessageId = snapshot.viewportAnchorMessageId,
+						firstVisibleOffsetPx = snapshot.viewportAnchorOffsetPx,
+						firstVisibleItemIndex = index,
+						firstVisibleItemScrollOffsetPx = offset,
+						visibleReadCandidateId = snapshot.visibleReadCandidateId,
+						isAtBottom = snapshot.isAtBottom
+					)
+				)
 				lastIndex = index
 				lastOffset = offset
 				lastEventAtMs = now
@@ -984,66 +1066,6 @@ fun HasDataState(
 			}
 	}
 
-	LaunchedEffect(lazyListState, isReverseLayout) {
-		snapshotFlow {
-			val messageIdByKeySnapshot = latestMessageIdByKey
-			val incomingKeysSnapshot = latestIncomingUiKeys
-			val layoutInfo = lazyListState.layoutInfo
-			val visibleItems = layoutInfo.visibleItemsInfo
-			val visibleMessageIds = visibleItems
-				.mapNotNull { item -> messageIdByKeySnapshot[item.key] }
-				.toSet()
-			val readCandidateId = visibleItems
-				.asSequence()
-				.mapNotNull { item ->
-					if (item.key in incomingKeysSnapshot) {
-						messageIdByKeySnapshot[item.key]
-					} else {
-						null
-					}
-				}
-				.maxOrNull()
-			val atBottom = if (isReverseLayout) {
-				val firstIndex = lazyListState.firstVisibleItemIndex
-				val firstOffset = lazyListState.firstVisibleItemScrollOffset
-				firstIndex == 0 && firstOffset <= 32
-			} else {
-				val total = layoutInfo.totalItemsCount
-				if (total == 0) {
-					false
-				} else {
-					val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-					lastVisible >= total - 1
-				}
-			}
-			val viewportAnchor = resolveViewportAnchorMessage(
-				lazyListState = lazyListState,
-				isReverseLayout = isReverseLayout,
-				messageIdByKey = messageIdByKeySnapshot
-			)
-			Triple(
-				visibleMessageIds,
-				viewportAnchor.messageId,
-				Triple(viewportAnchor.offsetPx, readCandidateId, atBottom)
-			)
-			}
-				.distinctUntilChanged()
-				.collectLatest { (visibleMessageIds, firstVisibleMessageId, offsetCandidateBottom) ->
-					val (firstVisibleOffsetPx, readCandidateId, atBottom) = offsetCandidateBottom
-					onViewportSnapshotChanged(
-					ChatViewportSnapshot(
-						visibleMessageIds = visibleMessageIds,
-						firstVisibleMessageId = firstVisibleMessageId,
-						firstVisibleOffsetPx = firstVisibleOffsetPx,
-						firstVisibleItemIndex = lazyListState.firstVisibleItemIndex,
-						firstVisibleItemScrollOffsetPx = lazyListState.firstVisibleItemScrollOffset,
-						visibleReadCandidateId = readCandidateId,
-						isAtBottom = atBottom
-					)
-				)
-			}
-	}
-
 	val dateSeparatorModifier = Modifier
 		.fillMaxWidth()
 		.height(32.dp)
@@ -1106,11 +1128,20 @@ fun HasDataState(
 								message.id > state.peerLastReadMessageId
 							val showIncomingAvatar = !isOut && interactionPolicy.showAuthorHeaderForInMessages
 							val showMessageAction = !isSelectionMode && !isOut && !isPostPreview && onMessageActionClick != null
-							val contextMenuAnchorModifier = Modifier.onGloballyPositioned { coordinates ->
-								rowBoundsByMessageKey[message.uiKey] = coordinates.boundsInRoot()
+							val shouldMeasureBounds = message.uiKey in visibleTimelineKeys
+							val contextMenuAnchorModifier = if (shouldMeasureBounds) {
+								Modifier.onGloballyPositioned { coordinates ->
+									rowBoundsByMessageKey[message.uiKey] = coordinates.boundsInRoot()
+								}
+							} else {
+								Modifier
 							}
-							val contextMenuHighlightModifier = Modifier.onGloballyPositioned { coordinates ->
-								bubbleBoundsByMessageKey[message.uiKey] = coordinates.boundsInRoot()
+							val contextMenuHighlightModifier = if (shouldMeasureBounds) {
+								Modifier.onGloballyPositioned { coordinates ->
+									bubbleBoundsByMessageKey[message.uiKey] = coordinates.boundsInRoot()
+								}
+							} else {
+								Modifier
 							}
 							val incomingBubbleModifier = if (showMessageAction) {
 								Modifier

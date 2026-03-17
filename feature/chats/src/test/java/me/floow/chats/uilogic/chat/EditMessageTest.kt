@@ -22,6 +22,7 @@ class EditMessageTest {
 		val groups = listOf(DatedChatMessages(datetime = t.toLocalDate(), messages = msgs.toList()))
 		return ChatScreenVmState(
 			messages = groups,
+			flatMessagesSnapshot = msgs.toList(),
 			pinnedMessages = msgs.filter { it.isPinned },
 			conversationId = 1L,
 			chatInterlocutorId = "peer",
@@ -183,6 +184,14 @@ class EditMessageTest {
 	}
 
 	@Test
+	fun `applyLocalEdit updates flat snapshot text when cache exists`() {
+		val msg = PrimaryOutMessage(id = 55L, messageText = "cached old", dateTime = t)
+		val state = stateWithMessages(msg)
+		val result = applyLocalEdit(state, messageId = 55L, text = "cached new")
+		assertEquals("cached new", result.flatMessagesSnapshot!!.first { it.id == 55L }.messageText)
+	}
+
+	@Test
 	fun `applyLocalEdit clears messageToEditId and messageFieldValue`() {
 		val msg = PrimaryOutMessage(id = 6L, messageText = "x", dateTime = t)
 		val state = stateWithMessages(msg).copy(messageToEditId = 6L, messageFieldValue = "x")
@@ -261,7 +270,7 @@ internal fun applyLocalEdit(
 	messageId: Long,
 	text: String,
 ): ChatScreenVmState {
-	val updatedMessages = flattenMessages(state.messages).map { message ->
+	val updatedMessages = state.currentFlatMessages().map { message ->
 		if (message.id != messageId) message else when (message) {
 			is PrimaryOutMessage -> message.copy(messageText = text)
 			is ReplyOutMessage -> message.copy(messageText = text)
@@ -279,8 +288,7 @@ internal fun applyLocalEdit(
 			is me.floow.uikit.chat.model.PostPreviewMessage -> pinned
 		}
 	}
-	return state.copy(
-		messages = groupMessagesByDate(updatedMessages),
+	return state.withFlatMessages(updatedMessages).copy(
 		pinnedMessages = updatedPinned,
 		messageToEditId = null,
 		messageFieldValue = "",

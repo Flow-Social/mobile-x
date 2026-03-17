@@ -57,7 +57,9 @@ class ChatsScreenViewModel(
 
 	private val _state = MutableStateFlow(ChatsScreenVmState())
 	private var useMockData: Boolean = false
+	private var directChatsBase: List<Chat> = emptyList()
 	private var directChats: List<Chat> = emptyList()
+	private var directChatIndexByUserId: Map<String, Int> = emptyMap()
 	private var latestRepliesState: RepliesRealtimeState = RepliesRealtimeState()
 	private var directChatsLoading: Boolean = false
 	private var directChatsLoadFailed: Boolean = false
@@ -81,8 +83,8 @@ class ChatsScreenViewModel(
 		viewModelScope.launch {
 			presenceRepository.presences.collectLatest { presences ->
 				presenceByUserId = presences
-				if (directChats.isNotEmpty()) {
-					directChats = applyPresenceToChats(directChats)
+				if (directChatsBase.isNotEmpty()) {
+					directChats = applyPresenceToChats(directChatsBase)
 					publishState()
 				}
 			}
@@ -91,12 +93,17 @@ class ChatsScreenViewModel(
 			chatsRepository.observeConversations().collectLatest { conversations ->
 				if (useMockData) return@collectLatest
 				val selfUserId = authenticationManager.getSelfUserIdOrNull()
-				directChats = conversations
+				directChatsBase = conversations
 					.map { conversation -> conversation.toChatListItem(logger, selfUserId) }
 					.sortedWith(
 						compareByDescending<Chat> { it.isSavedMessages() }
 							.thenByDescending { it.lastMessageTimeMillis }
 					)
+				directChatIndexByUserId = directChatsBase
+					.mapIndexedNotNull { index, chat ->
+						chat.id.takeIf { chat.type == ChatType.DIRECT }?.let { userId -> userId to index }
+					}
+					.toMap()
 					presenceRepository.setTargets(
 						owner = PRESENCE_OWNER_CHAT_LIST,
 						userIds = conversations
@@ -104,7 +111,7 @@ class ChatsScreenViewModel(
 							.filterNot { it == selfUserId }
 							.distinct()
 					)
-				directChats = applyPresenceToChats(directChats)
+				directChats = applyPresenceToChats(directChatsBase)
 				publishState()
 			}
 		}
@@ -145,12 +152,17 @@ class ChatsScreenViewModel(
 			val selfUserId = authenticationManager.getSelfUserIdOrNull()
 			when (val response = chatsRepository.getConversations(limit = 50, cursor = null)) {
 				is GetDataResponse.Success -> {
-					directChats = response.data.items
+					directChatsBase = response.data.items
 					.map { conversation -> conversation.toChatListItem(logger, selfUserId) }
 					.sortedWith(
 						compareByDescending<Chat> { it.isSavedMessages() }
 							.thenByDescending { it.lastMessageTimeMillis }
 					)
+				directChatIndexByUserId = directChatsBase
+					.mapIndexedNotNull { index, chat ->
+						chat.id.takeIf { chat.type == ChatType.DIRECT }?.let { userId -> userId to index }
+					}
+					.toMap()
 				presenceRepository.setTargets(
 					owner = PRESENCE_OWNER_CHAT_LIST,
 					userIds = response.data.items
@@ -158,7 +170,7 @@ class ChatsScreenViewModel(
 						.filterNot { it == selfUserId }
 						.distinct()
 				)
-				directChats = applyPresenceToChats(directChats)
+				directChats = applyPresenceToChats(directChatsBase)
 				directChatsLoadFailed = false
 				lastSuccessfulRemoteSyncAtMs = System.currentTimeMillis()
 				}
@@ -213,12 +225,16 @@ class ChatsScreenViewModel(
 	}
 
 	private fun applyPresenceToChats(chats: List<Chat>): List<Chat> {
-		if (presenceByUserId.isEmpty()) return chats
-		return chats.map { chat ->
-			if (chat.type != ChatType.DIRECT) return@map chat
-			val presence = presenceByUserId[chat.id] ?: return@map chat
-			chat.copy(isOnline = presence.isOnline)
+		if (chats.isEmpty() || presenceByUserId.isEmpty()) return chats
+		var updatedChats: MutableList<Chat>? = null
+		directChatIndexByUserId.forEach { (userId, index) ->
+			val currentChat = chats.getOrNull(index) ?: return@forEach
+			val nextIsOnline = presenceByUserId[userId]?.isOnline ?: false
+			if (currentChat.isOnline == nextIsOnline) return@forEach
+			val target = updatedChats ?: chats.toMutableList().also { updatedChats = it }
+			target[index] = currentChat.copy(isOnline = nextIsOnline)
 		}
+		return updatedChats ?: chats
 	}
 
 	private fun publishState() {

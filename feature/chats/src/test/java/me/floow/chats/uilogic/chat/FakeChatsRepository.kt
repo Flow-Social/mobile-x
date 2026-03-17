@@ -1,5 +1,6 @@
 package me.floow.chats.uilogic.chat
 
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import me.floow.domain.data.GetDataResponse
@@ -19,10 +20,34 @@ class FakeChatsRepository : ChatsRepository {
 	var deleteMessageResult: UpdateDataResponse = UpdateDataResponse.Success
 	val deletedMessageIds = mutableListOf<Long>()
 	val typingEvents = mutableListOf<Pair<Long, Boolean>>()
+	val observeMessagesCalls = mutableListOf<Pair<Long, Int>>()
+	val refreshLatestMessagesWindowCalls = mutableListOf<Pair<Long, Int>>()
+	val getMessagesAroundCalls = mutableListOf<Triple<Long, Long, Pair<Int, Int>>>()
+	val getAnchoredMessagesWindowCalls = mutableListOf<Triple<Long, Long, Pair<Int, Int>>>()
+	var observedMessagesPage = DirectChatMessagesPage(
+		items = emptyList(),
+		nextBeforeId = null,
+		peerLastReadMessageId = null
+	)
+	val observedMessagesFlow = MutableStateFlow(observedMessagesPage)
+	var getConversationResult: GetDataResponse<DirectChatConversation> =
+		GetDataResponse.Error(me.floow.domain.data.GetDataError.Other)
+	var refreshLatestMessagesWindowResult: GetDataResponse<DirectChatMessagesPage> =
+		GetDataResponse.Error(me.floow.domain.data.GetDataError.Other)
+	var getMessagesAroundResult: GetDataResponse<DirectChatAnchoredMessagesWindow> =
+		GetDataResponse.Error(me.floow.domain.data.GetDataError.Other)
+	var getAnchoredMessagesWindowResult: GetDataResponse<DirectChatAnchoredMessagesWindow> =
+		GetDataResponse.Error(me.floow.domain.data.GetDataError.Other)
+	val observedConversationsFlow = MutableStateFlow<List<DirectChatConversation>>(emptyList())
+	var getConversationsResult: GetDataResponse<DirectChatConversationsPage> =
+		GetDataResponse.Error(me.floow.domain.data.GetDataError.Other)
 
-	override fun observeConversations(): Flow<List<DirectChatConversation>> = emptyFlow()
+	override fun observeConversations(): Flow<List<DirectChatConversation>> = observedConversationsFlow
 
-	override fun observeMessages(conversationId: Long, limit: Int): Flow<DirectChatMessagesPage> = emptyFlow()
+	override fun observeMessages(conversationId: Long, limit: Int): Flow<DirectChatMessagesPage> {
+		observeMessagesCalls += conversationId to limit
+		return observedMessagesFlow
+	}
 
 	override fun observePinnedMessages(conversationId: Long, limit: Int): Flow<List<DirectChatMessage>> = emptyFlow()
 
@@ -32,11 +57,9 @@ class FakeChatsRepository : ChatsRepository {
 	override suspend fun getOrCreateSavedMessagesConversation() =
 		GetDataResponse.Error<DirectChatConversation>(me.floow.domain.data.GetDataError.Other)
 
-	override suspend fun getConversations(limit: Int, cursor: String?) =
-		GetDataResponse.Error<DirectChatConversationsPage>(me.floow.domain.data.GetDataError.Other)
+	override suspend fun getConversations(limit: Int, cursor: String?) = getConversationsResult
 
-	override suspend fun getConversation(conversationId: Long) =
-		GetDataResponse.Error<DirectChatConversation>(me.floow.domain.data.GetDataError.Other)
+	override suspend fun getConversation(conversationId: Long) = getConversationResult
 
 	override suspend fun getMessages(conversationId: Long, limit: Int, beforeId: Long?) =
 		GetDataResponse.Error<DirectChatMessagesPage>(me.floow.domain.data.GetDataError.Other)
@@ -46,17 +69,25 @@ class FakeChatsRepository : ChatsRepository {
 		anchorId: Long,
 		olderLimit: Int,
 		newerLimit: Int,
-	) = GetDataResponse.Error<DirectChatAnchoredMessagesWindow>(me.floow.domain.data.GetDataError.Other)
+	): GetDataResponse<DirectChatAnchoredMessagesWindow> {
+		getMessagesAroundCalls += Triple(conversationId, anchorId, olderLimit to newerLimit)
+		return getMessagesAroundResult
+	}
 
 	override suspend fun getAnchoredMessagesWindow(
 		conversationId: Long,
 		anchorMessageId: Long,
 		olderLimit: Int,
 		newerLimit: Int,
-	) = GetDataResponse.Error<DirectChatAnchoredMessagesWindow>(me.floow.domain.data.GetDataError.Other)
+	): GetDataResponse<DirectChatAnchoredMessagesWindow> {
+		getAnchoredMessagesWindowCalls += Triple(conversationId, anchorMessageId, olderLimit to newerLimit)
+		return getAnchoredMessagesWindowResult
+	}
 
-	override suspend fun refreshLatestMessagesWindow(conversationId: Long, limit: Int) =
-		GetDataResponse.Error<DirectChatMessagesPage>(me.floow.domain.data.GetDataError.Other)
+	override suspend fun refreshLatestMessagesWindow(conversationId: Long, limit: Int): GetDataResponse<DirectChatMessagesPage> {
+		refreshLatestMessagesWindowCalls += conversationId to limit
+		return refreshLatestMessagesWindowResult
+	}
 
 	override suspend fun sendMessage(
 		conversationId: Long,

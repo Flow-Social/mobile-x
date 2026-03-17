@@ -42,6 +42,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -68,6 +71,7 @@ import me.floow.app.deeplink.DeepLinkDispatcher
 import me.floow.app.notifications.NotificationsBadgeViewModel
 import me.floow.app.notifications.DirectChatsSyncCoordinator
 import me.floow.app.push.DirectChatNotificationCenter
+import me.floow.app.push.ForegroundVisibleChatStore
 import me.floow.app.push.PushTokenSyncScheduler
 import me.floow.app.navigation.bottomNavigationItems
 import me.floow.app.ui.components.MainScreenScaffold
@@ -223,6 +227,7 @@ fun FlowNavHost(
 	val usernameToIdCache: me.floow.domain.cache.UsernameToIdCache = koinInject()
 	val notificationsBadgeViewModel: NotificationsBadgeViewModel = koinViewModel(key = "notifications-badge-root")
 	val directChatsSyncCoordinator: DirectChatsSyncCoordinator = koinInject()
+	val foregroundVisibleChatStore: ForegroundVisibleChatStore = koinInject()
 	val authState by authenticationManager.authenticationStateFlow.collectAsState()
 	val notificationsBadgeState by notificationsBadgeViewModel.state.collectAsState()
 	val isSignedIn = authState.let { authenticationManager.isSignedIn() }
@@ -1072,6 +1077,7 @@ fun FlowNavHost(
 
 	BoxWithConstraints(modifier = modifier) {
 		val density = LocalDensity.current
+		val lifecycleOwner = LocalLifecycleOwner.current
 		val widthPx = with(density) { maxWidth.toPx() }
 		val parallaxFactor = 0.12f
 		val stateHolder = rememberSaveableStateHolder()
@@ -1099,31 +1105,54 @@ fun FlowNavHost(
 			val topEntry = overlayStack.lastOrNull()
 			LaunchedEffect(topEntry?.id, topEntry?.screen) {
 				val topChat = topEntry?.screen as? OverlayScreen.OverlayChat
-				if (topChat != null) {
-					DirectChatNotificationCenter.setActiveChat(
-						context = context.applicationContext,
-						conversationId = topChat.conversationId,
-						interlocutorId = topChat.interlocutorId
-					)
-					topChat.conversationId
-						?.takeIf { it > 0L }
-						?.let { conversationId ->
-							DirectChatNotificationCenter.cancelConversationNotifications(
-								context = context.applicationContext,
-								conversationId = conversationId
-							)
-						}
-					topChat.interlocutorId
-						.trim()
-						.takeIf(String::isNotEmpty)
-						?.let { interlocutorId ->
-							DirectChatNotificationCenter.cancelInterlocutorNotifications(
-								context = context.applicationContext,
-								interlocutorId = interlocutorId
-							)
-						}
+				topChat?.conversationId
+					?.takeIf { it > 0L }
+					?.let { conversationId ->
+						DirectChatNotificationCenter.cancelConversationNotifications(
+							context = context.applicationContext,
+							conversationId = conversationId
+						)
+					}
+				topChat?.interlocutorId
+					?.trim()
+					?.takeIf(String::isNotEmpty)
+					?.let { interlocutorId ->
+						DirectChatNotificationCenter.cancelInterlocutorNotifications(
+							context = context.applicationContext,
+							interlocutorId = interlocutorId
+						)
+					}
+			}
+			DisposableEffect(lifecycleOwner, topEntry?.id, topEntry?.screen) {
+				fun syncVisibleChat() {
+					val topChat = topEntry?.screen as? OverlayScreen.OverlayChat
+					if (topChat != null) {
+						foregroundVisibleChatStore.setVisibleChat(
+							conversationId = topChat.conversationId,
+							interlocutorId = topChat.interlocutorId
+						)
+					} else {
+						foregroundVisibleChatStore.clearVisibleChat()
+					}
+				}
+
+				if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+					syncVisibleChat()
 				} else {
-					DirectChatNotificationCenter.clearActiveChat(context.applicationContext)
+					foregroundVisibleChatStore.clearVisibleChat()
+				}
+
+				val observer = LifecycleEventObserver { _, event ->
+					when (event) {
+						Lifecycle.Event.ON_RESUME -> syncVisibleChat()
+						Lifecycle.Event.ON_PAUSE -> foregroundVisibleChatStore.clearVisibleChat()
+						else -> Unit
+					}
+				}
+				lifecycleOwner.lifecycle.addObserver(observer)
+				onDispose {
+					lifecycleOwner.lifecycle.removeObserver(observer)
+					foregroundVisibleChatStore.clearVisibleChat()
 				}
 			}
 			val topParallaxEnabled = topEntry?.let { overlayParallaxEnabled[it.id] } ?: true

@@ -7,6 +7,8 @@ import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import me.floow.app.di.flowModules
 import me.floow.app.notifications.DirectMessagesReadSyncScheduler
+import me.floow.app.push.ChatNotificationLifecycleObserver
+import me.floow.app.push.ForegroundVisibleChatStore
 import me.floow.app.push.PushNotificationChannels
 import me.floow.app.push.PushServiceController
 import me.floow.app.push.PushTokenSyncScheduler
@@ -31,6 +33,11 @@ class FlowApplication : Application() {
 		val koin = GlobalContext.getKoinApplicationOrNull()?.koin
 		koin?.getOrNull<PresenceRepository>()?.let { presenceRepository: PresenceRepository ->
 			ProcessLifecycleOwner.get().lifecycle.addObserver(PresenceLifecycleObserver(presenceRepository))
+		}
+		koin?.getOrNull<ForegroundVisibleChatStore>()?.let { foregroundVisibleChatStore ->
+			ProcessLifecycleOwner.get().lifecycle.addObserver(
+				ChatNotificationLifecycleObserver(foregroundVisibleChatStore)
+			)
 		}
 
 		val imageLoader = ImageLoader.Builder(this)

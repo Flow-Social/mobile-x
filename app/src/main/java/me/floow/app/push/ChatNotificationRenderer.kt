@@ -19,16 +19,34 @@ import androidx.core.graphics.drawable.IconCompat
 import androidx.core.graphics.drawable.toBitmap
 import me.floow.app.MainActivity
 import me.floow.app.R
+import me.floow.domain.utils.Logger
 import java.net.HttpURLConnection
 import java.net.URL
 
 class ChatNotificationRenderer(
-	private val context: Context
+	private val context: Context,
+	private val visibilityGate: ChatNotificationVisibilityGate,
+	private val logger: Logger
 ) {
 	fun render(payload: ChatNotificationPayload): RenderOutcome {
 		PushNotificationChannels.ensureCreated(context)
 		if (!hasNotificationsPermission()) return RenderOutcome.Failed
-		if (shouldSuppressChatNotification(payload)) return RenderOutcome.Suppressed
+		val visibilityDecision = visibilityGate.evaluate(payload)
+		if (visibilityDecision.shouldSuppress) {
+			logger.d(
+				"ChatNotificationRenderer",
+				"suppress_notification conversation=${payload.conversationId} " +
+					"message=${payload.messageId} sender=${payload.senderId} " +
+					"reason=${visibilityDecision.reason}"
+			)
+			return RenderOutcome.Suppressed
+		}
+		logger.d(
+			"ChatNotificationRenderer",
+			"render_notification conversation=${payload.conversationId} " +
+				"message=${payload.messageId} sender=${payload.senderId} " +
+				"reason=${visibilityDecision.reason}"
+		)
 
 		val tag = buildNotificationTag(payload.conversationId)
 		val notificationId = buildConversationNotificationId(payload.conversationId)
@@ -290,23 +308,6 @@ class ChatNotificationRenderer(
 		}
 	}
 
-	private fun shouldSuppressChatNotification(payload: ChatNotificationPayload): Boolean {
-		val activeConversationId = DirectChatNotificationCenter.getActiveConversationId(context)
-		if (payload.conversationId == activeConversationId && payload.conversationId > 0L) return true
-		val activeInterlocutorId = DirectChatNotificationCenter.getActiveInterlocutorId(context)
-		if (!payload.senderId.isNullOrBlank() && payload.senderId == activeInterlocutorId) return true
-		val selfUserId = getSelfUserIdOrNull()
-		if (!payload.senderId.isNullOrBlank() && payload.senderId == selfUserId) return true
-		return false
-	}
-
-	private fun getSelfUserIdOrNull(): String? {
-		return context.getSharedPreferences(AUTH_PREFS_NAME, Context.MODE_PRIVATE)
-			.getString(AUTH_USER_ID_PREF_KEY, null)
-			?.trim()
-			?.takeIf(String::isNotEmpty)
-	}
-
 	private fun hasNotificationsPermission(): Boolean {
 		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
 		return ContextCompat.checkSelfPermission(
@@ -324,8 +325,6 @@ class ChatNotificationRenderer(
 	}
 
 	private companion object {
-		const val AUTH_PREFS_NAME = "flowme.auth"
-		const val AUTH_USER_ID_PREF_KEY = "authUserId"
 		const val SUMMARY_NOTIFICATION_ID = 0
 		const val MAX_MESSAGES_PER_NOTIFICATION = 8
 	}
