@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
@@ -43,8 +44,8 @@ internal fun ProfileScreenTopBar(
             Box(
                 modifier = modifier
                     .fillMaxWidth()
-                    .height(80.dp)
-                    .padding(horizontal = 24.dp)
+                    .height(TopAppBarDefaults.TopAppBarExpandedHeight)
+                    .padding(horizontal = 16.dp)
                     .zIndex(2f),
                 contentAlignment = Alignment.CenterEnd
             ) {

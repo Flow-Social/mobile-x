@@ -12,14 +12,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import me.floow.uikit.R
@@ -41,20 +44,23 @@ fun TitleTopBarWithActionButtonWithNavBack(
 ) {
 	Column(modifier) {
 		Row(
-			Modifier
+			modifier = Modifier
 				.fillMaxWidth()
-				.height(80.dp)
-				.padding(horizontal = 24.dp),
-			verticalAlignment = Alignment.CenterVertically,
+				.height(TopAppBarDefaults.TopAppBarExpandedHeight)
+				.padding(horizontal = 16.dp),
+			verticalAlignment = Alignment.CenterVertically
 		) {
-			IconButton(
-				onClick = onBackClick,
-				modifier = Modifier.size(24.dp)
+			Box(
+				modifier = Modifier
+					.size(24.dp)
+					.clickable { onBackClick() }
 			) {
 				Icon(
 					painter = painterResource(R.drawable.nav_back_icon),
 					contentDescription = null,
-					modifier = Modifier.size(16.dp)
+					modifier = Modifier
+						.align(Alignment.Center)
+						.size(16.dp)
 				)
 			}
 
@@ -62,41 +68,57 @@ fun TitleTopBarWithActionButtonWithNavBack(
 
 			Text(
 				text = titleText,
-				style = LocalTypography.current.titleLarge
+				style = LocalTypography.current.titleLarge,
+				maxLines = 1,
+				overflow = TextOverflow.Ellipsis,
+				modifier = Modifier.weight(1f)
 			)
 
-			Spacer(Modifier.weight(1f))
-
-            if (showActionButton) {
-                if (useOutlinedActionButton) {
-                    WideOutlinedIconButton(
-                        onClick = onActionButtonClick,
-                        buttonWidth = 60.dp,
-                        modifier = Modifier
-                    ) {
-                        icon()
-                    }
-                } else {
-                    if (wrapActionInIconButton) {
-                        IconButton(onClick = onActionButtonClick) {
-                            icon()
-                        }
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                                .clickable(onClick = onActionButtonClick),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            icon()
-                        }
-                    }
-                }
-            }
+			TopBarAction(
+				showActionButton = showActionButton,
+				useOutlinedActionButton = useOutlinedActionButton,
+				wrapActionInIconButton = wrapActionInIconButton,
+				onActionButtonClick = onActionButtonClick,
+				icon = icon
+			)
 		}
 
 		if (showDivider) {
 			HorizontalDivider()
+		}
+	}
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TopBarAction(
+	showActionButton: Boolean,
+	useOutlinedActionButton: Boolean,
+	wrapActionInIconButton: Boolean,
+	onActionButtonClick: () -> Unit,
+	icon: @Composable () -> Unit,
+) {
+	if (!showActionButton) return
+
+	if (useOutlinedActionButton) {
+		WideOutlinedIconButton(
+			onClick = onActionButtonClick,
+			buttonWidth = 60.dp
+		) {
+			icon()
+		}
+	} else if (wrapActionInIconButton) {
+		IconButton(onClick = onActionButtonClick) {
+			icon()
+		}
+	} else {
+		Box(
+			modifier = Modifier
+				.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+				.clickable(onClick = onActionButtonClick),
+			contentAlignment = Alignment.Center
+		) {
+			icon()
 		}
 	}
 }
