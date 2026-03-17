@@ -7,10 +7,12 @@
 		<item name="postSplashScreenTheme">@style/Theme.Flow</item>
 		<item name="android:windowBackground">@color/flow_background</item>
 		<item name="android:colorBackground">@color/flow_background</item>
+		<item name="android:windowLightStatusBar">true</item>
     </style>
 
 	<style name="Theme.Flow" parent="android:Theme.Material.Light.NoActionBar">
 		<item name="android:windowBackground">@color/flow_background</item>
 		<item name="android:colorBackground">@color/flow_background</item>
+		<item name="android:windowLightStatusBar">true</item>
 	</style>
 </resources>

@@ -7,6 +7,7 @@
         <item name="postSplashScreenTheme">@style/Theme.Flow</item>
         <item name="android:windowBackground">@color/flow_background</item>
         <item name="android:colorBackground">@color/flow_background</item>
+        <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowSplashScreenBehavior">icon_preferred</item>
     </style>
 </resources>
