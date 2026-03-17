@@ -19,6 +19,7 @@ class PinUnpinFlowTest {
 		val groups = listOf(DatedChatMessages(datetime = t.toLocalDate(), messages = msgs.toList()))
 		return ChatScreenVmState(
 			messages = groups,
+			flatMessagesSnapshot = msgs.toList(),
 			pinnedMessages = msgs.filter { it.isPinned },
 			conversationId = 1L,
 			chatInterlocutorId = "peer",
@@ -117,6 +118,18 @@ class PinUnpinFlowTest {
 		val inTimeline = flattenMessages(result.messages).first { it.id == 21L }
 		assertFalse(inTimeline.isPinned)
 		assertFalse(result.pinnedMessages.any { it.id == 21L })
+	}
+
+	@Test
+	fun `applyPinnedFlagToState updates flat snapshot cache`() {
+		val msg = PrimaryInMessage(id = 22L, messageText = "cache", dateTime = t, isPinned = false)
+		val state = stateWith(msg)
+
+		val pinned = applyPinnedFlagToState(state, 22L, isPinned = true)
+		val unpinned = applyPinnedFlagToState(pinned, 22L, isPinned = false)
+
+		assertTrue(pinned.flatMessagesSnapshot!!.first { it.id == 22L }.isPinned)
+		assertFalse(unpinned.flatMessagesSnapshot!!.first { it.id == 22L }.isPinned)
 	}
 
 	// ─── Optimistic unpin: message removed before API response ───────────────

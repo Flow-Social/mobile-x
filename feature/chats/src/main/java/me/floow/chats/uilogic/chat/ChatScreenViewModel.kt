@@ -1,6 +1,7 @@
 package me.floow.chats.uilogic.chat
 
 import android.net.Uri
+import android.os.Trace
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -109,29 +110,34 @@ data class ChatScreenVmState(
 	val canLoadMore: Boolean = false,
 	val selectedMessageIds: Set<Long> = emptySet(),
 	val peerIsOnline: Boolean = false,
-	val peerLastSeenAtMillis: Long? = null
+	val peerLastSeenAtMillis: Long? = null,
+	val flatMessagesSnapshot: List<ChatMessage>? = null
 ) {
 	fun toUiState(): ChatScreenUiState {
-		val flattenedMessages = flattenMessages(messages)
-		val existingMessageIds = flattenedMessages.mapTo(linkedSetOf(), ChatMessage::id)
-		val effectiveSelectedMessageIds = selectedMessageIds.filterTo(linkedSetOf()) { it in existingMessageIds }
-		val selectedMessages = flattenedMessages.filter { it.id in effectiveSelectedMessageIds }
-		val canCopySelection = selectedMessages.isNotEmpty() &&
-			selectedMessages.none { it.messageText.isBlank() || it is PostPreviewMessage }
-		val canDeleteSelection = selectedMessages.isNotEmpty() &&
-			selectedMessages.all { it is PrimaryOutMessage || it is ReplyOutMessage }
-		val selectionCopyText = if (canCopySelection) {
-			selectedMessages.joinToString(separator = "\n\n") { it.messageText.trim() }
+		val selectionState = if (selectedMessageIds.isEmpty()) {
+			ChatSelectionState()
 		} else {
-			""
+			val flattenedMessages = flatMessagesSnapshot ?: flattenMessages(messages)
+			val existingMessageIds = flattenedMessages.mapTo(linkedSetOf(), ChatMessage::id)
+			val effectiveSelectedMessageIds = selectedMessageIds.filterTo(linkedSetOf()) { it in existingMessageIds }
+			val selectedMessages = flattenedMessages.filter { it.id in effectiveSelectedMessageIds }
+			val canCopySelection = selectedMessages.isNotEmpty() &&
+				selectedMessages.none { it.messageText.isBlank() || it is PostPreviewMessage }
+			val canDeleteSelection = selectedMessages.isNotEmpty() &&
+				selectedMessages.all { it is PrimaryOutMessage || it is ReplyOutMessage }
+			val selectionCopyText = if (canCopySelection) {
+				selectedMessages.joinToString(separator = "\n\n") { it.messageText.trim() }
+			} else {
+				""
+			}
+			ChatSelectionState(
+				selectedMessageIds = effectiveSelectedMessageIds,
+				selectedCount = effectiveSelectedMessageIds.size,
+				canCopy = canCopySelection,
+				canDelete = canDeleteSelection,
+				copyText = selectionCopyText
+			)
 		}
-		val selectionState = ChatSelectionState(
-			selectedMessageIds = effectiveSelectedMessageIds,
-			selectedCount = effectiveSelectedMessageIds.size,
-			canCopy = canCopySelection,
-			canDelete = canDeleteSelection,
-			copyText = selectionCopyText
-		)
 		return when {
 			isLoading -> {
 				ChatScreenUiState.Loading(
@@ -291,8 +297,8 @@ class ChatScreenViewModel(
 		scope = viewModelScope,
 		chatsRepository = chatsRepository,
 		onRestoreDeleted = { message ->
-			val updated = mergeMessages(flattenMessages(_state.value.messages), listOf(message))
-			_state.update { it.copy(messages = groupMessagesByDate(updated), lastDeletedMessage = null) }
+			val updated = mergeMessages(_state.value.currentFlatMessages(), listOf(message))
+			_state.update { it.withFlatMessages(updated).copy(lastDeletedMessage = null) }
 		},
 		onClearDeletedMessage = {
 			_state.update { it.copy(lastDeletedMessage = null) }
@@ -386,6 +392,15 @@ class ChatScreenViewModel(
 	private fun nextTimelineSessionToken(): Long {
 		timelineSessionTokenSeed += 1L
 		return timelineSessionTokenSeed
+	}
+
+	private inline fun <T> traceChatVmSection(name: String, block: () -> T): T {
+		runCatching { Trace.beginSection(name) }
+		return try {
+			block()
+		} finally {
+			runCatching { Trace.endSection() }
+		}
 	}
 
 	private fun createAnchorRestoreRequest(
@@ -622,111 +637,129 @@ class ChatScreenViewModel(
 		}
 
 		viewModelScope.launch {
-			_state.update { current ->
-				current.copy(
-					isLoading = current.messages == null,
-					isError = false,
-					isLoadingMore = false,
-					messages = current.messages,
-					nextBeforeId = current.nextBeforeId,
-					canLoadMore = current.canLoadMore,
-					unreadMessageIds = current.unreadMessageIds,
-					unreadBoundaryMessageId = current.unreadBoundaryMessageId,
-					peerLastReadMessageId = current.peerLastReadMessageId
-				)
-			}
-
-			val conversation = resolveConversationOrNull()
-			if (conversation == null) {
+			traceChatVmSection("chat.loadData") {
 				_state.update { current ->
 					current.copy(
-						isLoading = false,
-						isError = true,
-						messages = emptyList(),
-						canLoadMore = false
+						isLoading = current.messages == null,
+						isError = false,
+						isLoadingMore = false,
+						messages = current.messages,
+						flatMessagesSnapshot = current.flatMessagesSnapshot,
+						nextBeforeId = current.nextBeforeId,
+						canLoadMore = current.canLoadMore,
+						unreadMessageIds = current.unreadMessageIds,
+						unreadBoundaryMessageId = current.unreadBoundaryMessageId,
+						peerLastReadMessageId = current.peerLastReadMessageId
 					)
 				}
-				return@launch
-			}
 
-			localReadUpToMessageId = directMessagesReadCursorStore
-				.getLocalLastReadMessageId(conversation.id)
-				.coerceAtLeast(0L)
-			val storedViewportSnapshot = directMessagesReadCursorStore
-				.getOpenViewportSnapshot(conversation.id)
-			currentOpenAnchorMessageId = storedViewportSnapshot.anchorMessageId
-				?.coerceAtLeast(0L)
-				?: 0L
-			currentOpenAnchorOffsetPx = storedViewportSnapshot.anchorOffsetPx.coerceAtLeast(0)
-			currentOpenAnchorBottomPinned = storedViewportSnapshot.isBottomPinned
-			logAnchor(
-				"load_data conversation=${conversation.id} localRead=$localReadUpToMessageId " +
-					"storedAnchor=$currentOpenAnchorMessageId storedOffset=$currentOpenAnchorOffsetPx " +
-					"storedBottomPinned=$currentOpenAnchorBottomPinned " +
-					"messageLink=$messageLinkAnchorId openMode=$openMode"
-			)
-			val durableOpenAnchor = resolveDurableOpenAnchor(messageLinkAnchorId)
-				?.takeUnless {
-					it.isBottomPinned &&
-						messageLinkAnchorId == null &&
-						openMode == DirectChatOpenMode.FROM_LAST_SEEN
-				}
-			val localAnchorWindow = durableOpenAnchor
-				?.takeIf { shouldWarmupAnchorBeforeShowing() }
-				?.let { anchor ->
-					getLocalAnchoredMessagesWindow(
-						conversationId = conversation.id,
-						targetAnchor = anchor
-					)
-				}
-			if (durableOpenAnchor != null && localAnchorWindow != null) {
-				val appliedLocalStart = applyAnchoredLocalStart(
-					conversation = conversation,
-					window = localAnchorWindow,
-					offsetPx = durableOpenAnchor.offsetPx
-				)
-				if (appliedLocalStart) {
-					observeCachedMessages(conversation)
-					subscribeRealtime(
-						conversationId = conversation.id,
-						afterSeq = localAnchorWindow.latestCachedMessageId.coerceAtLeast(0L)
-					)
-					refreshPinnedMessages(conversation.id, conversation.peer.id)
-					return@launch
-				}
-			}
-			val warmupAnchor = durableOpenAnchor?.takeIf { shouldWarmupAnchorBeforeShowing() }
-			val messagesResponse = preloadMessagesForOpen(
-				conversationId = conversation.id,
-				targetAnchor = warmupAnchor
-			)
-			val stateAfterPreload = _state.value
-			// Prevent duplicate restore scheduling:
-			// the first restore may already settle while preload is in flight.
-			if (stateAfterPreload.anchorRequest == null && stateAfterPreload.messages == null) {
-				issueTimelineRestoreRequest(
-					targetMessageId = durableOpenAnchor?.messageId,
-					initialOffsetPx = durableOpenAnchor?.offsetPx ?: 0,
-					highlightAnchored = messageLinkAnchorId != null && openMode == DirectChatOpenMode.FROM_MESSAGE_LINK,
-					resetSession = true,
-				)
-			}
-			observeCachedMessages(conversation)
-
-			when (messagesResponse) {
-				is GetDataResponse.Success -> {
-					subscribeRealtime(conversation.id, messagesResponse.data.latestMessageId)
-					refreshPinnedMessages(conversation.id, conversation.peer.id)
-				}
-
-				is GetDataResponse.Error -> {
+				val conversation = resolveConversationOrNull()
+				if (conversation == null) {
 					_state.update { current ->
 						current.copy(
 							isLoading = false,
 							isError = true,
 							messages = emptyList(),
+							flatMessagesSnapshot = emptyList(),
 							canLoadMore = false
 						)
+					}
+					return@traceChatVmSection
+				}
+
+				localReadUpToMessageId = directMessagesReadCursorStore
+					.getLocalLastReadMessageId(conversation.id)
+					.coerceAtLeast(0L)
+				val storedViewportSnapshot = directMessagesReadCursorStore
+					.getOpenViewportSnapshot(conversation.id)
+				anchorController.restoreFrom(storedViewportSnapshot)
+				currentOpenAnchorMessageId = storedViewportSnapshot.anchorMessageId
+					?.coerceAtLeast(0L)
+					?: 0L
+				currentOpenAnchorOffsetPx = storedViewportSnapshot.anchorOffsetPx.coerceAtLeast(0)
+				currentOpenAnchorBottomPinned = storedViewportSnapshot.isBottomPinned
+				logAnchor(
+					"load_data conversation=${conversation.id} localRead=$localReadUpToMessageId " +
+						"storedAnchor=$currentOpenAnchorMessageId storedOffset=$currentOpenAnchorOffsetPx " +
+						"storedBottomPinned=$currentOpenAnchorBottomPinned " +
+						"messageLink=$messageLinkAnchorId openMode=$openMode"
+				)
+				val durableOpenAnchor = resolveDurableOpenAnchor(messageLinkAnchorId)
+					?.takeUnless {
+						it.isBottomPinned &&
+							messageLinkAnchorId == null &&
+							openMode == DirectChatOpenMode.FROM_LAST_SEEN
+					}
+				val warmupAnchor = durableOpenAnchor?.takeIf { shouldWarmupAnchorBeforeShowing() }
+				val localAnchorWindow = warmupAnchor?.let { anchor ->
+					getLocalAnchoredMessagesWindow(
+						conversationId = conversation.id,
+						targetAnchor = anchor
+					)
+				}
+				if (durableOpenAnchor != null && localAnchorWindow != null) {
+					val appliedLocalStart = applyAnchoredLocalStart(
+						conversation = conversation,
+						window = localAnchorWindow,
+						offsetPx = durableOpenAnchor.offsetPx
+					)
+					if (appliedLocalStart) {
+						observeCachedMessages(conversation)
+						subscribeRealtime(
+							conversationId = conversation.id,
+							afterSeq = localAnchorWindow.latestCachedMessageId.coerceAtLeast(0L)
+						)
+						syncChatMetadata(conversation.id)
+						refreshConversationWindow(conversation.id, conversation.peer.id)
+						return@traceChatVmSection
+					}
+				}
+
+				observeCachedMessages(conversation)
+				subscribeRealtime(
+					conversationId = conversation.id,
+					afterSeq = latestPersistableMessageId(_state.value.messages) ?: 0L
+				)
+				syncChatMetadata(conversation.id)
+
+				val preloadTargetAnchor = when {
+					messageLinkAnchorId != null -> durableOpenAnchor
+					else -> null
+				}
+
+				if (preloadTargetAnchor == null) {
+					refreshConversationWindow(conversation.id, conversation.peer.id)
+					return@traceChatVmSection
+				}
+
+				when (
+					val messagesResponse = preloadMessagesForOpen(
+						conversationId = conversation.id,
+						targetAnchor = preloadTargetAnchor
+					)
+				) {
+					is GetDataResponse.Success -> {
+						issueTimelineRestoreRequest(
+							targetMessageId = durableOpenAnchor?.messageId,
+							initialOffsetPx = durableOpenAnchor?.offsetPx ?: 0,
+							highlightAnchored = messageLinkAnchorId != null && openMode == DirectChatOpenMode.FROM_MESSAGE_LINK,
+							resetSession = _state.value.messages == null,
+						)
+						refreshPinnedMessages(conversation.id, conversation.peer.id)
+					}
+
+					is GetDataResponse.Error -> {
+						if (_state.value.messages == null) {
+							_state.update { current ->
+								current.copy(
+									isLoading = false,
+									isError = true,
+									messages = emptyList(),
+									flatMessagesSnapshot = emptyList(),
+									canLoadMore = false
+								)
+							}
+						}
 					}
 				}
 			}
@@ -939,10 +972,9 @@ class ChatScreenViewModel(
 		val nextAnchorRequestToken = _state.value.currentAnchorRequestToken + 1L
 			_state.update { current ->
 				val shouldHideUnreadBoundaryInActiveChat = canProcessVisibleReadSignals()
-				current.copy(
+				current.withRenderedSnapshot(renderedSnapshot).copy(
 					isLoading = false,
 					isError = false,
-					messages = renderedSnapshot.groupedMessages,
 					pinnedMessages = current.pinnedMessages,
 				nextBeforeId = window.items.firstOrNull()?.id?.takeIf { window.hasOlderMessages },
 				canLoadMore = window.hasOlderMessages,
@@ -1030,6 +1062,8 @@ class ChatScreenViewModel(
 		conversation: DirectChatConversation,
 		page: DirectChatMessagesPage
 	) {
+		runCatching { Trace.beginSection("chat.applyObservedMessagesPage") }
+		try {
 		syncPendingOutgoingFromMessages(page.items)
 		resolveConfirmedOutgoingOverlays(page.items.filter { message -> message.id > 0L })
 		val pendingRestoreAnchor = pendingColdRestoreAnchorMessageId
@@ -1043,7 +1077,7 @@ class ChatScreenViewModel(
 		}
 		if (!isScreenActive) return
 		val currentState = _state.value
-		val currentMessages = flattenMessages(currentState.messages)
+		val currentMessages = currentState.currentFlatMessages()
 		val pendingOutgoingOptimisticIdsSnapshot = pendingOutgoingClientMessageIds.keys.toSet()
 		val pendingOutgoingClientMessageIdsSnapshot = pendingOutgoingClientMessageIds.toMap()
 		val openAnchorMessageIdSnapshot = resolveDurableOpenAnchor(messageLinkAnchorId)?.messageId
@@ -1094,10 +1128,9 @@ class ChatScreenViewModel(
 		_state.update { current ->
 			val shouldPreservePaginationCursor = observedProjection.preservePaginationCursor ||
 				(current.canLoadMore && current.nextBeforeId != null && observedProjection.nextBeforeId == null)
-			current.copy(
+			current.withRenderedSnapshot(renderedSnapshot).copy(
 				isLoading = false,
 				isError = false,
-				messages = renderedSnapshot.groupedMessages,
 				pinnedMessages = current.pinnedMessages,
 				nextBeforeId = if (shouldPreservePaginationCursor) current.nextBeforeId else observedProjection.nextBeforeId,
 				canLoadMore = if (shouldPreservePaginationCursor) current.canLoadMore else observedProjection.canLoadMore,
@@ -1115,6 +1148,9 @@ class ChatScreenViewModel(
 			)
 		}
 		if (!hasReportedAnchorMetric) reportOpenMetricsIfNeeded(projection)
+		} finally {
+			runCatching { Trace.endSection() }
+		}
 	}
 
 	fun loadMore() {
@@ -1233,7 +1269,7 @@ class ChatScreenViewModel(
 							peerUserId = state.chatInterlocutorId,
 								peerName = state.chatInterlocutorName,
 								peerAvatarUrl = state.chatInterlocutorAvatarUrl,
-								messages = flattenMessages(state.messages),
+								messages = state.currentFlatMessages(),
 								serverReadUpToMessageId = confirmedReadUpToMessageId,
 								localReadUpToMessageId = localReadUpToMessageId,
 								openAnchorMessageId = resolveDurableOpenAnchor()?.messageId,
@@ -1241,8 +1277,7 @@ class ChatScreenViewModel(
 								messageLinkAnchorMessageId = messageLinkAnchorId,
 								firstUnreadMessageIdOverride = firstUnreadOverride
 							)
-						state.copy(
-							messages = snapshot?.groupedMessages ?: state.messages,
+						state.withRenderedSnapshot(snapshot).copy(
 							pinnedMessages = state.pinnedMessages,
 							unreadMessageIds = snapshot?.projection?.unreadMessageIds ?: state.unreadMessageIds,
 							unreadBoundaryMessageId = if (shouldHideUnreadBoundaryInActiveChat) null else snapshot?.projection?.unreadBoundaryMessageId,
@@ -1328,7 +1363,7 @@ class ChatScreenViewModel(
 		val selectedIds = _state.value.selectedMessageIds
 			.ifEmpty { return }
 			.sorted()
-		val currentMessages = flattenMessages(_state.value.messages)
+		val currentMessages = _state.value.currentFlatMessages()
 		val selectedMessages = selectedIds.mapNotNull { selectedId ->
 			currentMessages.firstOrNull { it.id == selectedId }
 		}
@@ -1483,14 +1518,11 @@ class ChatScreenViewModel(
 		}
 
 		_state.update { state ->
-			val oldMessages = flattenMessages(state.messages)
+			val oldMessages = state.currentFlatMessages()
 			val combined = mergeMessages(oldMessages, listOf(newMessage))
-			val groupedMessages = groupMessagesByDate(combined)
-			state.copy(
+			state.withFlatMessages(combined).copy(
 				messageFieldValue = "",
 				messageFieldReply = null,
-				messages = groupedMessages,
-				pinnedMessages = state.pinnedMessages,
 				scrollToBottomRequestToken = System.currentTimeMillis()
 			)
 		}
@@ -1520,7 +1552,7 @@ class ChatScreenViewModel(
 
 	private fun navigateToMessage(messageId: Long) {
 		val targetMessageId = messageId.takeIf { it > 0L } ?: return
-		val currentMessages = flattenMessages(_state.value.messages)
+		val currentMessages = _state.value.currentFlatMessages()
 		if (currentMessages.any { it.id == targetMessageId }) {
 			issueJumpRequest(targetMessageId)
 			return
@@ -1605,7 +1637,7 @@ class ChatScreenViewModel(
 	}
 
 	fun togglePinMessage(messageId: Long) {
-		val currentMessages = flattenMessages(_state.value.messages)
+		val currentMessages = _state.value.currentFlatMessages()
 		val target = currentMessages.firstOrNull { it.id == messageId } ?: return
 		if (target.isPinned) {
 			unpinMessage(messageId)
@@ -1616,7 +1648,7 @@ class ChatScreenViewModel(
 
 	fun pinMessage(messageId: Long) {
 		val conversationId = _state.value.conversationId ?: return
-		val currentMessages = flattenMessages(_state.value.messages)
+		val currentMessages = _state.value.currentFlatMessages()
 		val target = currentMessages.firstOrNull { it.id == messageId } ?: return
 		if (target.isPinned) return
 
@@ -1663,7 +1695,7 @@ class ChatScreenViewModel(
 		val conversationId = _state.value.conversationId ?: return
 		val currentPinned = _state.value.pinnedMessages
 		val target = currentPinned.firstOrNull { it.id == messageId }
-			?: flattenMessages(_state.value.messages).firstOrNull { it.id == messageId }
+			?: _state.value.currentFlatMessages().firstOrNull { it.id == messageId }
 			?: return
 		if (!target.isPinned && currentPinned.none { it.id == messageId }) return
 
@@ -1710,15 +1742,11 @@ class ChatScreenViewModel(
 
 	fun deleteMessage(message: ChatMessage) {
 		if (useMockData) {
-			val currentMessages = flattenMessages(_state.value.messages)
+			val currentMessages = _state.value.currentFlatMessages()
 			val messageToDelete = currentMessages.find { it.id == message.id } ?: return
 			val updatedMessages = currentMessages.filterNot { it.id == message.id }
 			_state.update {
-				it.copy(
-					messages = groupMessagesByDate(updatedMessages),
-					pinnedMessages = it.pinnedMessages,
-					lastDeletedMessage = messageToDelete
-				)
+				it.withFlatMessages(updatedMessages).copy(lastDeletedMessage = messageToDelete)
 			}
 			schedulePendingDeleteCommit(message.id, conversationId = null)
 			return
@@ -1746,15 +1774,11 @@ class ChatScreenViewModel(
 			return
 		}
 
-		val currentMessages = flattenMessages(_state.value.messages)
+		val currentMessages = _state.value.currentFlatMessages()
 		val messageToDelete = currentMessages.find { it.id == message.id } ?: return
 		val updatedMessages = currentMessages.filterNot { it.id == message.id }
 		_state.update {
-			it.copy(
-				messages = groupMessagesByDate(updatedMessages),
-				pinnedMessages = it.pinnedMessages,
-				lastDeletedMessage = messageToDelete
-			)
+			it.withFlatMessages(updatedMessages).copy(lastDeletedMessage = messageToDelete)
 		}
 		schedulePendingDeleteCommit(message.id, conversationId)
 	}
@@ -1768,15 +1792,11 @@ class ChatScreenViewModel(
 		outgoingController.cancelPendingDelete()
 		val restored = _state.value.lastDeletedMessage ?: return
 		val updatedMessages = mergeMessages(
-			base = flattenMessages(_state.value.messages),
+			base = _state.value.currentFlatMessages(),
 			incoming = listOf(restored)
 		)
 		_state.update {
-			it.copy(
-				messages = groupMessagesByDate(updatedMessages),
-				pinnedMessages = it.pinnedMessages,
-				lastDeletedMessage = null
-			)
+			it.withFlatMessages(updatedMessages).copy(lastDeletedMessage = null)
 		}
 	}
 
@@ -1798,7 +1818,7 @@ class ChatScreenViewModel(
 		val trimmedText = newText.trim()
 		if (!trimmedText.isWithinCodePointLimit(DEFAULT_CHAT_MESSAGE_MAX_LENGTH)) return
 		val currentState = _state.value
-		val previousText = flattenMessages(currentState.messages)
+		val previousText = currentState.currentFlatMessages()
 			.firstOrNull { it.id == messageId }
 			?.messageText
 			?: return
@@ -1834,7 +1854,7 @@ class ChatScreenViewModel(
 		messageId: Long,
 		text: String,
 	): ChatScreenVmState {
-		val updatedMessages = flattenMessages(state.messages).map { message ->
+		val updatedMessages = state.currentFlatMessages().map { message ->
 			if (message.id != messageId) message else when (message) {
 				is PrimaryOutMessage -> message.copy(messageText = text)
 				is ReplyOutMessage -> message.copy(messageText = text)
@@ -1852,8 +1872,7 @@ class ChatScreenViewModel(
 				is PostPreviewMessage -> pinned
 			}
 		}
-		return state.copy(
-			messages = groupMessagesByDate(updatedMessages),
+		return state.withFlatMessages(updatedMessages).copy(
 			pinnedMessages = updatedPinned,
 			messageToEditId = null,
 			messageFieldValue = "",
@@ -2200,7 +2219,7 @@ class ChatScreenViewModel(
 				val unreadProjection = projectDirectChatReadModel(
 					input = DirectChatReadModelInput(
 					peerUserId = state.chatInterlocutorId,
-					messages = flattenMessages(state.messages),
+					messages = state.currentFlatMessages(),
 					serverReadUpToMessageId = confirmedReadUpToMessageId,
 					localReadUpToMessageId = effectiveLocalReadUpToMessageId,
 					firstUnreadMessageId = null,
@@ -2620,30 +2639,28 @@ class ChatScreenViewModel(
 		return resolvedConversation
 	}
 
-		private fun loadMockData() {
-			viewModelScope.launch {
-				_state.update { it.copy(isLoading = true) }
-				delay(300L)
-				val messages = generateChatMessages()
-				val groupedMessages = groupMessagesByDate(messages)
-				_state.update { state ->
-					state.copy(
-						isLoading = false,
-						isError = false,
-						messages = groupedMessages,
-						pinnedMessages = state.pinnedMessages,
-						canLoadMore = false,
-						nextBeforeId = null
-					)
-				}
+	private fun loadMockData() {
+		viewModelScope.launch {
+			_state.update { it.copy(isLoading = true) }
+			delay(300L)
+			val messages = generateChatMessages()
+			_state.update { state ->
+				state.withFlatMessages(messages).copy(
+					isLoading = false,
+					isError = false,
+					pinnedMessages = state.pinnedMessages,
+					canLoadMore = false,
+					nextBeforeId = null
+				)
 			}
 		}
+	}
 
-		private fun nextOptimisticMessageId(): Long {
-			val id = optimisticMessageIdSeed
-			optimisticMessageIdSeed -= 1L
-			return id
-		}
+	private fun nextOptimisticMessageId(): Long {
+		val id = optimisticMessageIdSeed
+		optimisticMessageIdSeed -= 1L
+		return id
+	}
 
 	private fun buildOptimisticOutgoingMessage(
 		id: Long,
@@ -2754,7 +2771,7 @@ class ChatScreenViewModel(
 						DirectChatUpsertKind.CREATED -> {
 							val isOutgoing = selfUserId?.let { mutation.message.sender.id == it }
 								?: (mutation.message.sender.id != peerId)
-							val oldMessages = flattenMessages(_state.value.messages)
+							val oldMessages = _state.value.currentFlatMessages()
 							if (isOutgoing) {
 								resolveOutgoingConfirmation(
 									baseMessages = oldMessages,
@@ -2777,7 +2794,7 @@ class ChatScreenViewModel(
 						DirectChatUpsertKind.UPDATED,
 						DirectChatUpsertKind.PINNED_UPDATED -> {
 							mergeMessages(
-								flattenMessages(_state.value.messages),
+								_state.value.currentFlatMessages(),
 								listOf(
 									mutation.message.toUiMessage(
 										peerUserId = peerId,
@@ -2804,8 +2821,7 @@ class ChatScreenViewModel(
 						messageLinkAnchorMessageId = messageLinkAnchorId,
 						firstUnreadMessageIdOverride = firstUnreadOverride
 					)
-					state.copy(
-						messages = snapshot?.groupedMessages ?: state.messages,
+					state.withRenderedSnapshot(snapshot).copy(
 						pinnedMessages = state.pinnedMessages,
 						unreadMessageIds = snapshot?.projection?.unreadMessageIds ?: state.unreadMessageIds,
 						unreadBoundaryMessageId = if (shouldHideUnreadBoundaryInActiveChat) null else snapshot?.projection?.unreadBoundaryMessageId,
@@ -2840,7 +2856,7 @@ class ChatScreenViewModel(
 						peerUserId = removedState.chatInterlocutorId,
 						peerName = removedState.chatInterlocutorName,
 						peerAvatarUrl = removedState.chatInterlocutorAvatarUrl,
-						messages = flattenMessages(removedState.messages),
+						messages = removedState.currentFlatMessages(),
 						serverReadUpToMessageId = confirmedReadUpToMessageId,
 						localReadUpToMessageId = localReadUpToMessageId,
 						openAnchorMessageId = resolveDurableOpenAnchor()?.messageId,
@@ -2848,8 +2864,7 @@ class ChatScreenViewModel(
 						messageLinkAnchorMessageId = messageLinkAnchorId,
 						firstUnreadMessageIdOverride = firstUnreadOverride
 					)
-					removedState.copy(
-						messages = snapshot?.groupedMessages ?: removedState.messages,
+					removedState.withRenderedSnapshot(snapshot).copy(
 						pinnedMessages = removedState.pinnedMessages,
 						unreadMessageIds = snapshot?.projection?.unreadMessageIds ?: removedState.unreadMessageIds,
 						unreadBoundaryMessageId = if (shouldHideUnreadBoundaryInActiveChat) null else snapshot?.projection?.unreadBoundaryMessageId
@@ -2907,6 +2922,6 @@ class ChatScreenViewModel(
 	}
 
 	private fun logAnchor(message: String) {
-		Log.d(CHAT_ANCHOR_DEBUG_TAG, message)
+		runCatching { Log.d(CHAT_ANCHOR_DEBUG_TAG, message) }
 	}
 }

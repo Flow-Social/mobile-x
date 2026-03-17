@@ -1,6 +1,7 @@
 package me.floow.chats.uilogic.chat
 
 import android.net.Uri
+import android.os.Trace
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.floow.chats.uilogic.shared.toTimelineReadOpenMode
@@ -445,38 +446,70 @@ internal suspend fun buildRenderedMessagesSnapshot(
 	messageLinkAnchorMessageId: Long?,
 	firstUnreadMessageIdOverride: Long? = null
 ): DirectChatRenderedMessagesSnapshot = withContext(Dispatchers.Default) {
-	val groupedMessages = groupMessagesByDate(messages)
-	val projection = projectDirectChatReadModel(
-		input = DirectChatReadModelInput(
-			peerUserId = conversation.peer.id,
-			messages = messages,
-			serverReadUpToMessageId = serverReadUpToMessageId,
-			localReadUpToMessageId = localReadUpToMessageId,
-			firstUnreadMessageId = firstUnreadMessageIdOverride
-				?.takeIf {
-					it > maxOf(
-						serverReadUpToMessageId.coerceAtLeast(0L),
-						localReadUpToMessageId.coerceAtLeast(0L)
-					)
-				}
-				?: inferUnreadBoundaryMessageId(
-					messages = messages,
-					lastReadMessageId = maxOf(
-						serverReadUpToMessageId.coerceAtLeast(0L),
-						localReadUpToMessageId.coerceAtLeast(0L)
+	traceChatSection("chat.buildRenderedMessagesSnapshot") {
+		val groupedMessages = groupMessagesByDate(messages)
+		val projection = projectDirectChatReadModel(
+			input = DirectChatReadModelInput(
+				peerUserId = conversation.peer.id,
+				messages = messages,
+				serverReadUpToMessageId = serverReadUpToMessageId,
+				localReadUpToMessageId = localReadUpToMessageId,
+				firstUnreadMessageId = firstUnreadMessageIdOverride
+					?.takeIf {
+						it > maxOf(
+							serverReadUpToMessageId.coerceAtLeast(0L),
+							localReadUpToMessageId.coerceAtLeast(0L)
+						)
+					}
+					?: inferUnreadBoundaryMessageId(
+						messages = messages,
+						lastReadMessageId = maxOf(
+							serverReadUpToMessageId.coerceAtLeast(0L),
+							localReadUpToMessageId.coerceAtLeast(0L)
+						),
+						peerUserId = conversation.peer.id
 					),
-					peerUserId = conversation.peer.id
-				),
-			openAnchorMessageId = openAnchorMessageId,
-			openMode = openMode,
-			messageLinkAnchorMessageId = messageLinkAnchorMessageId
+				openAnchorMessageId = openAnchorMessageId,
+				openMode = openMode,
+				messageLinkAnchorMessageId = messageLinkAnchorMessageId
+			)
 		)
+		DirectChatRenderedMessagesSnapshot(
+			messages = messages,
+			groupedMessages = groupedMessages,
+			projection = projection
+		)
+	}
+}
+
+internal fun ChatScreenVmState.currentFlatMessages(): List<ChatMessage> {
+	return flatMessagesSnapshot ?: flattenMessages(messages)
+}
+
+internal fun ChatScreenVmState.withRenderedSnapshot(
+	renderedSnapshot: DirectChatRenderedMessagesSnapshot?
+): ChatScreenVmState {
+	if (renderedSnapshot == null) return copy(flatMessagesSnapshot = null)
+	return copy(
+		messages = renderedSnapshot.groupedMessages,
+		flatMessagesSnapshot = renderedSnapshot.messages
 	)
-	DirectChatRenderedMessagesSnapshot(
-		messages = messages,
-		groupedMessages = groupedMessages,
-		projection = projection
+}
+
+internal fun ChatScreenVmState.withFlatMessages(messages: List<ChatMessage>): ChatScreenVmState {
+	return copy(
+		messages = groupMessagesByDate(messages),
+		flatMessagesSnapshot = messages.sortedBy(ChatMessage::dateTime)
 	)
+}
+
+internal inline fun <T> traceChatSection(name: String, block: () -> T): T {
+	runCatching { Trace.beginSection(name) }
+	return try {
+		block()
+	} finally {
+		runCatching { Trace.endSection() }
+	}
 }
 
 internal fun removeMessageFromState(
@@ -484,12 +517,10 @@ internal fun removeMessageFromState(
 	messageId: Long,
 	readUpToMessageId: Long
 ): ChatScreenVmState {
-	val oldMessages = flattenMessages(state.messages)
+	val oldMessages = state.currentFlatMessages()
 	if (oldMessages.none { it.id == messageId }) return state
 	val updatedMessages = oldMessages.filterNot { it.id == messageId }
-	val groupedMessages = groupMessagesByDate(updatedMessages)
-	return state.copy(
-		messages = groupedMessages,
+	return state.withFlatMessages(updatedMessages).copy(
 		pinnedMessages = state.pinnedMessages.filterNot { message -> message.id == messageId },
 		lastDeletedMessage = null,
 		messageToEditId = state.messageToEditId.takeUnless { it == messageId },
@@ -521,15 +552,21 @@ internal fun applyPinnedFlagToState(
 	val updatedPinned = state.pinnedMessages
 		.filterNot { message -> message.id == messageId }
 		.toMutableList()
-	val updatedMessage = updatedGroups
-		?.asSequence()
-		?.flatMap { group -> group.messages.asSequence() }
+	val updatedMessage = state.flatMessagesSnapshot
 		?.firstOrNull { message -> message.id == messageId }
+		?.withPinned(isPinned)
+		?: updatedGroups
+			?.asSequence()
+			?.flatMap { group -> group.messages.asSequence() }
+			?.firstOrNull { message -> message.id == messageId }
 	if (isPinned && updatedMessage != null) {
 		updatedPinned.add(updatedMessage)
 	}
 	return state.copy(
 		messages = updatedGroups,
+		flatMessagesSnapshot = state.flatMessagesSnapshot?.map { message ->
+			if (message.id == messageId) message.withPinned(isPinned) else message
+		},
 		pinnedMessages = updatedPinned
 	)
 }
