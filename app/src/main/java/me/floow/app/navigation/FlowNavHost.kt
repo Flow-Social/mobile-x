@@ -1347,9 +1347,9 @@ fun FlowNavHost(
 					}
 
 					composable<ProfileScreen>(
-						deepLinks = listOf(
-							navDeepLink { uriPattern = "$profileDeeplinkUri/{userId}" }
-						)
+						deepLinks = profileDeepLinkPatterns.map { baseUrl ->
+							navDeepLink { uriPattern = "$baseUrl/{userId}" }
+						}
 					) { backStackEntry ->
 						val profileScreenRoute = backStackEntry.toRoute<ProfileScreen>()
 								ProfileRoute(
@@ -1391,9 +1391,9 @@ fun FlowNavHost(
 						}
 
 					composable<PostDeepLinkScreen>(
-						deepLinks = listOf(
-							navDeepLink { uriPattern = "$profileDeeplinkUri/{username}/{postId}" }
-						)
+						deepLinks = profileDeepLinkPatterns.map { baseUrl ->
+							navDeepLink { uriPattern = "$baseUrl/{username}/{postId}" }
+						}
 					) { backStackEntry ->
 						val postDeepLinkScreen = backStackEntry.toRoute<PostDeepLinkScreen>()
 

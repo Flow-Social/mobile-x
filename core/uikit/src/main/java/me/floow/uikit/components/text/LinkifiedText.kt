@@ -19,10 +19,10 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
+import me.floow.domain.deeplink.DeepLinkUrls
 private const val TAG_PROFILE = "profile"
 private const val TAG_POST = "post"
 private const val TAG_TRAILING = "trailing"
-private const val BASE_URL = "https://flow-social.github.io"
 
 private data class LinkMatch(
     val start: Int,
@@ -137,7 +137,11 @@ private fun findLinks(text: String): List<LinkMatch> {
     val matches = mutableListOf<LinkMatch>()
 
     val deeplinkPattern = Regex(
-        Regex.escape(BASE_URL) + "/([a-z0-9_]+)/([A-Za-z0-9_-]+)",
+        DeepLinkUrls.SUPPORTED_BASE_URLS.joinToString(
+            separator = "|",
+            prefix = "(?:",
+            postfix = ")"
+        ) { Regex.escape(it) } + "/([a-z0-9_]+)/([A-Za-z0-9_-]+)",
         RegexOption.IGNORE_CASE
     )
     val mentionPattern = Regex("@([a-z0-9_]+)", RegexOption.IGNORE_CASE)

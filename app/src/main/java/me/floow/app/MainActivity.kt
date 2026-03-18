@@ -27,6 +27,7 @@ import kotlinx.coroutines.launch
 import me.floow.app.push.PushTokenSyncScheduler
 import me.floow.app.ui.App
 import me.floow.domain.auth.AuthenticationManager
+import me.floow.domain.deeplink.DeepLinkUrls
 import me.floow.uikit.theme.FlowTheme
 import org.koin.android.ext.android.getKoin
 import java.util.Locale
@@ -95,7 +96,7 @@ class MainActivity : ComponentActivity() {
 	override fun onNewIntent(intent: Intent) {
 		val authenticationManager: AuthenticationManager = getKoin().get()
 
-		intent.data?.getQueryParameter("code")?.let { code ->
+		extractGoogleOAuthCode(intent)?.let { code ->
 			lifecycleScope.launch {
 				authenticationManager.handleGoogleOAuthCode(code)
 			}
@@ -107,13 +108,18 @@ class MainActivity : ComponentActivity() {
 
 	private fun pushDeepLinkIntent(intent: Intent) {
 		val data = intent.data ?: return
-		val isHttpsFloow = data.scheme == "https" && data.host == "floow.me"
-		val isHttpsFlowSocial = data.scheme == "https" && data.host == "flow-social.github.io"
+		val isSupportedWebDeepLink = DeepLinkUrls.isSupportedWebUrl(data.toString())
 		val isCustomScheme = data.scheme == "me.floow.app"
-		if (!isHttpsFloow && !isHttpsFlowSocial && !isCustomScheme) return
+		if (!isSupportedWebDeepLink && !isCustomScheme) return
 
 		val dispatcher: DeepLinkDispatcher = getKoin().get()
 		dispatcher.push(intent)
+	}
+
+	private fun extractGoogleOAuthCode(intent: Intent): String? {
+		val data = intent.data ?: return null
+		if (data.scheme != GOOGLE_OAUTH_SCHEME) return null
+		return runCatching { data.getQueryParameter("code") }.getOrNull()
 	}
 
 	override fun attachBaseContext(newBase: Context?) {
@@ -154,5 +160,10 @@ class MainActivity : ComponentActivity() {
 	private fun isLauncherMainIntent(intent: Intent?): Boolean {
 		if (intent?.action != Intent.ACTION_MAIN) return false
 		return intent.categories?.contains(Intent.CATEGORY_LAUNCHER) == true
+	}
+
+	private companion object {
+		const val GOOGLE_OAUTH_SCHEME =
+			"com.googleusercontent.apps.291755427997-hjaabnfaa435ikjlsocejeg5p9elraj8"
 	}
 }

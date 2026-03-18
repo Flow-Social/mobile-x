@@ -3,12 +3,9 @@ package me.floow.app.launch
 import android.content.Intent
 import android.net.Uri
 import me.floow.app.navigation.AuthDestinationsCluster
-import me.floow.app.navigation.ChatsScreen
 import me.floow.app.navigation.EditProfileScreen
 import me.floow.app.navigation.MainDestinationsCluster
 import me.floow.app.navigation.NavigationRoute
-import me.floow.app.navigation.PostDeepLinkScreen
-import me.floow.app.navigation.ProfileScreen
 import me.floow.domain.auth.AuthenticationManager
 import me.floow.domain.deeplink.DeepLinkUrls
 
@@ -50,32 +47,12 @@ internal class LaunchBootstrapper(
 	private fun resolveSignedInDeepLink(intent: Intent?): LaunchBootstrapResult? {
 		val data = intent?.data ?: return null
 
-		if (data.isChatDeepLink()) {
-			return LaunchBootstrapResult(
-				startDestination = ChatsScreen,
-				shouldDispatchInitialIntentAfterLaunch = true
-			)
-		}
+		if (!data.isChatDeepLink() && !data.isFlowWebDeepLink()) return null
 
-		if (!data.isFlowWebDeepLink()) return null
-
-		val segments = data.pathSegments
-			.orEmpty()
-			.map(String::trim)
-			.filter(String::isNotEmpty)
-
-		return when {
-			segments.size >= 2 -> LaunchBootstrapResult(
-				startDestination = PostDeepLinkScreen(
-					postId = segments[1],
-					username = segments[0]
-				)
-			)
-			segments.size == 1 -> LaunchBootstrapResult(
-				startDestination = ProfileScreen(userId = segments[0])
-			)
-			else -> null
-		}
+		return LaunchBootstrapResult(
+			startDestination = MainDestinationsCluster,
+			shouldDispatchInitialIntentAfterLaunch = true
+		)
 	}
 
 	private fun Uri.isChatDeepLink(): Boolean {
@@ -85,6 +62,6 @@ internal class LaunchBootstrapper(
 
 	private fun Uri.isFlowWebDeepLink(): Boolean {
 		if (scheme != "https") return false
-		return toString().startsWith(DeepLinkUrls.BASE_URL)
+		return DeepLinkUrls.isSupportedWebUrl(toString())
 	}
 }
