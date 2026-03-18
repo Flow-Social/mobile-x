@@ -652,8 +652,8 @@ fun FlowNavHost(
 					sharePost = { url ->
 						shareText(url)
 					},
-					onBumpMatchNavigate = { matchedUserId ->
-						pushOverlay(OverlayScreen.OverlayProfile(userId = matchedUserId))
+					onBumpMatchNavigate = { result ->
+						pushOverlay(OverlayScreen.OverlayProfile(userId = result.matchedUserId))
 					},
 						bumpEnabled = me.floow.app.BuildConfig.BUMP_ENABLED,
 						onBackClick = onClose,
@@ -1377,8 +1377,8 @@ fun FlowNavHost(
 							sharePost = { url ->
 								shareText(url)
 							},
-								onBumpMatchNavigate = { matchedUserId ->
-									pushOverlay(OverlayScreen.OverlayProfile(userId = matchedUserId))
+								onBumpMatchNavigate = { result ->
+									pushOverlay(OverlayScreen.OverlayProfile(userId = result.matchedUserId))
 								},
 								bumpEnabled = me.floow.app.BuildConfig.BUMP_ENABLED,
 								onBackClick = { navController.popBackStack() },
@@ -1581,8 +1581,8 @@ fun FlowNavHost(
 								sharePost = { url ->
 									shareText(url)
 								},
-								onBumpMatchNavigate = { matchedUserId ->
-									pushOverlay(OverlayScreen.OverlayProfile(userId = matchedUserId))
+								onBumpMatchNavigate = { result ->
+									pushOverlay(OverlayScreen.OverlayProfile(userId = result.matchedUserId))
 								},
 								bumpEnabled = me.floow.app.BuildConfig.BUMP_ENABLED,
 								refreshPostsSignal = refreshPostsSignal,

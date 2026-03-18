@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import me.floow.domain.deeplink.DeepLinkUrls
 import me.floow.profile.ui.profile.bump.ProfileBumpCoordinator
+import me.floow.profile.uilogic.bump.BumpMatchResult
 import me.floow.profile.uilogic.bump.ProfileBumpViewModel
 import me.floow.profile.uilogic.profile.ProfileScreenState
 import me.floow.profile.uilogic.profile.ProfileScreenViewModel
@@ -44,7 +45,7 @@ fun ProfileRoute(
     sharePost: (url: String) -> Unit,
     onEditPost: (me.floow.domain.models.Post, PostMediaSourceSnapshot?) -> Unit = { _, _ -> },
     onBackClick: () -> Unit = {},
-    onBumpMatchNavigate: (String) -> Unit = {},
+    onBumpMatchNavigate: (BumpMatchResult) -> Unit = {},
     refreshPostsSignal: Boolean = false,
     consumeRefreshPostsSignal: () -> Unit = {},
     bumpEnabled: Boolean = false,
@@ -96,10 +97,10 @@ fun ProfileRoute(
     }
 
     LaunchedEffect(bumpViewModel) {
-        bumpViewModel.openMatchedProfile.collectLatest { matchedUserId ->
+        bumpViewModel.matchCompleted.collectLatest { result ->
             bumpViewModel.hideSheet()
             bumpMatchSignal += 1
-            onBumpMatchNavigate(matchedUserId)
+            onBumpMatchNavigate(result)
             bumpViewModel.resetToIdle()
         }
     }

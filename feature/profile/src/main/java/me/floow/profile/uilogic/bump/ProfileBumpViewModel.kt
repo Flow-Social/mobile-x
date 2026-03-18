@@ -29,12 +29,13 @@ private const val CANCEL_SESSION_TIMEOUT_MS = 2_000L
 
 class ProfileBumpViewModel(
     private val bumpRepository: BumpRepository,
+    private val sendBumpHelloUseCase: SendBumpHelloUseCase,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(ProfileBumpUiState())
     val uiState: StateFlow<ProfileBumpUiState> = _uiState.asStateFlow()
 
-    private val _openMatchedProfile = MutableSharedFlow<String>()
-    val openMatchedProfile: SharedFlow<String> = _openMatchedProfile.asSharedFlow()
+    private val _matchCompleted = MutableSharedFlow<BumpMatchResult>()
+    val matchCompleted: SharedFlow<BumpMatchResult> = _matchCompleted.asSharedFlow()
 
     private var pollJob: Job? = null
     private var timeoutJob: Job? = null
@@ -292,7 +293,7 @@ class ProfileBumpViewModel(
                 if (!matchedId.isNullOrBlank() && !currentSessionId.isNullOrBlank() && emittedMatchedForSessionId != currentSessionId) {
                     emittedMatchedForSessionId = currentSessionId
                     viewModelScope.launch {
-                        _openMatchedProfile.emit(matchedId)
+                        _matchCompleted.emit(sendBumpHelloUseCase(matchedId))
                     }
                 }
             }
