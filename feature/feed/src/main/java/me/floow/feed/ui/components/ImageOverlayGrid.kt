@@ -30,6 +30,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
@@ -50,6 +51,7 @@ import me.floow.domain.models.resolvedImageVariants
 import me.floow.uikit.components.media.ProgressiveImage
 import me.floow.uikit.components.media.ProgressiveImageMode
 import me.floow.uikit.components.media.viewer2.SharedImageOrigin
+import me.floow.uikit.components.media.viewer2.SourceImageScaleMode
 import kotlin.math.roundToInt
 
 private const val MAX_CARDS = 4
@@ -80,9 +82,11 @@ internal fun ImageOverlayGrid(
     launchData: OverlayLaunchData? = null,
     visible: Boolean,
     onDismiss: () -> Unit,
-    onImageClick: (Int, SharedImageOrigin?) -> Unit = { _, _ -> },
+    onImageClick: (Int, SharedImageOrigin?, Painter?) -> Unit = { _, _, _ -> },
     onOriginChanged: (Int, SharedImageOrigin?) -> Unit = { _, _ -> },
     onDetachedCountChange: (Int) -> Unit = {},
+    hiddenSourceKey: String? = null,
+    hiddenSourceRevealProgress: Float = 0f,
     onClosedAnimationEnd: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -389,11 +393,13 @@ internal fun ImageOverlayGrid(
             val state = motions[index]
             val variant = variants[index]
             val movableContent = launchData?.cardContents?.getOrNull(index)
+            val fallbackPainter = launchData?.cardPainters?.getOrNull(index)
             OverlayCard(
                 index = index,
                 postId = post.id,
                 variant = variant,
                 movableContent = movableContent,
+                fallbackPainter = fallbackPainter,
                 state = state,
                 cardWidth = cardWidth,
                 cardHeight = cardHeight,
@@ -402,6 +408,8 @@ internal fun ImageOverlayGrid(
                     phase != OverlayScenePhase.Transfer,
                 onImageClick = onImageClick,
                 onOriginChanged = onOriginChanged,
+                hiddenSourceKey = hiddenSourceKey,
+                hiddenSourceRevealProgress = hiddenSourceRevealProgress,
                 z = (200 - index).toFloat()
             )
         }
@@ -433,20 +441,44 @@ private fun OverlayCard(
     postId: String,
     variant: PostImageVariant,
     movableContent: MovableCardContent? = null,
+    fallbackPainter: Painter? = null,
     state: CardMotionState,
     cardWidth: Dp,
     cardHeight: Dp,
     clickable: Boolean,
-    onImageClick: (Int, SharedImageOrigin?) -> Unit,
+    onImageClick: (Int, SharedImageOrigin?, Painter?) -> Unit,
     onOriginChanged: (Int, SharedImageOrigin?) -> Unit,
+    hiddenSourceKey: String?,
+    hiddenSourceRevealProgress: Float,
     z: Float
 ) {
     var rectInWindow by remember(index) { mutableStateOf<Rect?>(null) }
+    var sourcePainter by remember(index) { mutableStateOf<Painter?>(fallbackPainter) }
     val interactionSource = remember { MutableInteractionSource() }
+    val density = LocalDensity.current
     val sourceKey = remember(postId, index) { "feed_overlay_${postId}_$index" }
+    val sourceVisibility = if (hiddenSourceKey == sourceKey) {
+        hiddenSourceRevealProgress.coerceIn(0f, 1f)
+    } else {
+        1f
+    }
+    LaunchedEffect(fallbackPainter) {
+        if (sourcePainter == null && fallbackPainter != null) {
+            sourcePainter = fallbackPainter
+        }
+    }
     val aspectRatio = remember(cardWidth, cardHeight) {
-        val h = cardHeight.value.coerceAtLeast(0.01f)
-        cardWidth.value / h
+        val variantAspect = variant.width?.takeIf { it > 0 }
+            ?.let { width ->
+                variant.height?.takeIf { it > 0 }?.let { height ->
+                    width.toFloat() / height.toFloat()
+                }
+            }
+        variantAspect?.coerceAtLeast(0.01f)
+            ?: run {
+                val h = cardHeight.value.coerceAtLeast(0.01f)
+                cardWidth.value / h
+            }
     }
 
     Box(
@@ -462,7 +494,7 @@ private fun OverlayCard(
             .graphicsLayer {
                 scaleX = state.scaleX.value
                 scaleY = state.scaleY.value
-                alpha = state.alpha.value
+                alpha = state.alpha.value * sourceVisibility
                 rotationZ = state.rotation.value
             }
             .clip(RoundedCornerShape(14.dp))
@@ -474,12 +506,15 @@ private fun OverlayCard(
                     SharedImageOrigin(
                         sourceKey = sourceKey,
                         rectInWindow = rect,
-                        aspectRatio = aspectRatio
+                        aspectRatio = aspectRatio,
+                        contentRectInWindow = rect,
+                        cornerRadiusPx = with(density) { 14.dp.toPx() },
+                        sourceScaleMode = SourceImageScaleMode.Crop
                     )
                 )
             }
             .clickable(
-                enabled = clickable,
+                enabled = clickable && sourceVisibility > 0.99f,
                 interactionSource = interactionSource,
                 indication = null
             ) {
@@ -489,9 +524,13 @@ private fun OverlayCard(
                         SharedImageOrigin(
                             sourceKey = sourceKey,
                             rectInWindow = rect,
-                            aspectRatio = aspectRatio
+                            aspectRatio = aspectRatio,
+                            contentRectInWindow = rect,
+                            cornerRadiusPx = with(density) { 14.dp.toPx() },
+                            sourceScaleMode = SourceImageScaleMode.Crop
                         )
-                    }
+                    },
+                    sourcePainter ?: fallbackPainter
                 )
             }
     ) {
@@ -505,7 +544,8 @@ private fun OverlayCard(
                 mode = ProgressiveImageMode.LIST,
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
+                contentScale = ContentScale.Crop,
+                onPainterChanged = { sourcePainter = it }
             )
         }
     }

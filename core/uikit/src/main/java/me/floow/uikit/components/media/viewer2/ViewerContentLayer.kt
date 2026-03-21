@@ -1,17 +1,13 @@
 package me.floow.uikit.components.media.viewer2
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.BoundsTransform
 import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
@@ -59,8 +55,10 @@ fun ViewerContentLayer(
     model: FullscreenImageViewerModel,
     state: FullscreenImageViewerState,
     pagerState: PagerState,
+    sceneProgress: Float,
+    dismissProgress: Float,
     onAction: (FullscreenImageViewerAction) -> Unit,
-    onRequestClose: () -> Unit,
+    onRequestClose: (Float?) -> Unit,
     onPagePainterReady: (Int, Painter) -> Unit,
     onPageFirstFrameReady: (Int) -> Unit = {},
     fallbackPainterForPage: (Int) -> Painter?,
@@ -70,9 +68,30 @@ fun ViewerContentLayer(
 ) {
     val imageCount = model.images.size
     val touchSlopPx = LocalViewConfiguration.current.touchSlop
-    val dismissThresholdPx = with(LocalDensity.current) { 120f * density }
-    val barScrim = Color.Black.copy(alpha = 0.6f)
+    val dismissThresholdPx = mediaTransitionDismissThresholdPx(LocalDensity.current)
     val pagerZoneKey = remember { "fullscreen_viewer_pager_zone" }
+    val chromeEnterProgress = ((sceneProgress - 0.72f) / 0.28f).coerceIn(0f, 1f)
+    val chromeDismissProgress = ((dismissProgress - 0.03f) / 0.22f).coerceIn(0f, 1f)
+    val chromeTargetAlpha = when {
+        state.phase == ViewerPhase.Opened && state.chromeVisible ->
+            (1f - chromeDismissProgress).coerceIn(0f, 1f)
+        state.phase == ViewerPhase.Opening && state.chromeVisible -> chromeEnterProgress
+        else -> 0f
+    }
+    val chromeAlpha by animateFloatAsState(
+        targetValue = chromeTargetAlpha,
+        animationSpec = tween(durationMillis = 140, easing = FastOutSlowInEasing),
+        label = "viewer_chrome_alpha"
+    )
+    val chromeTranslationY by animateFloatAsState(
+        targetValue = if (state.phase == ViewerPhase.Opening) {
+            -18f * (1f - chromeEnterProgress)
+        } else {
+            -34f * chromeDismissProgress
+        },
+        animationSpec = tween(durationMillis = 140, easing = FastOutSlowInEasing),
+        label = "viewer_chrome_translation_y"
+    )
 
     LaunchedEffect(state.page, state.visible) {
         if (state.visible && pagerState.currentPage != state.page) {
@@ -142,22 +161,22 @@ fun ViewerContentLayer(
             )
         }
 
-        AnimatedVisibility(
-            visible = state.phase == ViewerPhase.Opened && state.chromeVisible,
-            enter = fadeIn(),
-            exit = fadeOut(),
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .zIndex(1f)
-        ) {
+        if (state.visible && chromeAlpha > 0.01f) {
             ViewerTopBar(
                 title = model.title,
                 subtitle = model.subtitleProvider(state.page.coerceIn(0, imageCount - 1)),
                 countText = "${state.page + 1}/$imageCount",
-                onBackClick = onRequestClose,
+                onBackClick = { onRequestClose(null) },
                 onMenuClick = { onAction(FullscreenImageViewerAction.MenuClick) },
-                backgroundColor = barScrim,
-                modifier = Modifier.fillMaxWidth()
+                backgroundColor = Color.Black.copy(alpha = 0.22f * sceneProgress),
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .zIndex(1f)
+                    .fillMaxWidth()
+                    .graphicsLayer {
+                        alpha = chromeAlpha
+                        translationY = chromeTranslationY
+                    }
             )
         }
     }
@@ -407,10 +426,6 @@ private fun ZoomableViewerImageV2(
                 .fillMaxSize()
                 .then(gestureModifier)
         ) {
-            // Background is always black when we have something to show
-            if (lqReady || previewReady || fullReady || fallbackPainter != null) {
-                Box(modifier = Modifier.fillMaxSize().background(Color.Black))
-            }
 
             if (fallbackPainter != null) {
                 Image(
@@ -513,7 +528,7 @@ private fun Modifier.verticalDismissGestureV2(
     enabled: Boolean,
     touchSlopPx: Float,
     onDragOffset: (Float) -> Unit,
-    onDismissRequest: () -> Unit,
+    onDismissRequest: (Float) -> Unit,
     onCancel: () -> Unit,
     thresholdPx: Float
 ): Modifier {
@@ -558,7 +573,7 @@ private fun Modifier.verticalDismissGestureV2(
                 if (interruptedByMultiTouch) {
                     onCancel()
                 } else if (abs(offsetY) >= thresholdPx) {
-                    onDismissRequest()
+                    onDismissRequest(offsetY)
                 } else {
                     onCancel()
                 }

@@ -14,6 +14,8 @@ fun FullscreenImageViewerState.reduce(action: FullscreenImageViewerAction, image
             pan = Offset.Zero
             dismissOffsetY = 0f
             transitionProgress = 0f
+            closeSceneStartProgress = 1f
+            closeStartRect = null
         }
 
         FullscreenImageViewerAction.OpenAnimationFinished -> {
@@ -31,10 +33,9 @@ fun FullscreenImageViewerState.reduce(action: FullscreenImageViewerAction, image
             }
             closeOrigin = action.origin ?: closeOrigin
             chromeVisible = false
-            zoom = 1f
-            pan = Offset.Zero
-            dismissOffsetY = 0f
             transitionProgress = 0f
+            closeSceneStartProgress = viewerSceneProgressForOpened(action.dismissProgressAtClose)
+            closeStartRect = action.closeStartRect ?: action.origin?.rectInWindow
         }
 
         FullscreenImageViewerAction.CloseAnimationFinished -> {
@@ -47,6 +48,8 @@ fun FullscreenImageViewerState.reduce(action: FullscreenImageViewerAction, image
             openOrigin = null
             closeOrigin = null
             transitionProgress = 0f
+            closeSceneStartProgress = 1f
+            closeStartRect = null
         }
 
         is FullscreenImageViewerAction.PageChanged -> {

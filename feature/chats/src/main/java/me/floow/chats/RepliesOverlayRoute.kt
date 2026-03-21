@@ -139,7 +139,7 @@ fun RepliesOverlayRoute(
 			onUserStartedScroll = vm::onUserStartedScroll,
 			onViewportSnapshotChanged = vm::onViewportSnapshotChanged,
 			onLoadMore = {},
-		onPostImageClick = { _, _ -> },
+		onPostImageClick = { _, _, _, _ -> },
 		onPinMessage = {},
 		onUnpinMessage = {},
 		onDeleteMessage = {},

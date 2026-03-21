@@ -4,6 +4,23 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import kotlin.math.max
 
+fun transformRect(
+    baseRect: Rect,
+    scale: Float,
+    offset: Offset
+): Rect {
+    val safeScale = scale.coerceAtLeast(0.01f)
+    val center = baseRect.center + offset
+    val halfWidth = (baseRect.width * safeScale) / 2f
+    val halfHeight = (baseRect.height * safeScale) / 2f
+    return Rect(
+        left = center.x - halfWidth,
+        top = center.y - halfHeight,
+        right = center.x + halfWidth,
+        bottom = center.y + halfHeight
+    )
+}
+
 fun computeFitRect(
     containerWidthPx: Float,
     containerHeightPx: Float,
@@ -72,4 +89,35 @@ fun clampOffset(
 
 private fun lerp(start: Float, stop: Float, progress: Float): Float {
     return start + (stop - start) * progress
+}
+
+fun viewerSceneProgressForOpened(dismissProgress: Float): Float {
+    val clamped = dismissProgress.coerceIn(0f, 1f)
+    return 1f - clamped
+}
+
+fun viewerSceneProgress(
+    phase: ViewerPhase,
+    transitionProgress: Float,
+    dismissProgress: Float,
+    closeSceneStartProgress: Float
+): Float {
+    val transition = transitionProgress.coerceIn(0f, 1f)
+    return when (phase) {
+        ViewerPhase.Closed -> 0f
+        ViewerPhase.Opening -> transition
+        ViewerPhase.Opened -> viewerSceneProgressForOpened(dismissProgress)
+        ViewerPhase.Closing -> lerp(closeSceneStartProgress.coerceIn(0f, 1f), 0f, transition)
+    }.coerceIn(0f, 1f)
+}
+
+fun viewerSourceRevealProgress(
+    phase: ViewerPhase,
+    sceneProgress: Float,
+    transitionProgress: Float = sceneProgress
+): Float {
+    if (phase != ViewerPhase.Closing) return if (phase == ViewerPhase.Closed) 1f else 0f
+    val normalized = ((transitionProgress.coerceIn(0f, 1f)) - 0.9f) / 0.1f
+    val clamped = normalized.coerceIn(0f, 1f)
+    return clamped * clamped
 }

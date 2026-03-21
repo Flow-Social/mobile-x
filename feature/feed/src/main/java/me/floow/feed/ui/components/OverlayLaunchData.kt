@@ -2,6 +2,7 @@ package me.floow.feed.ui.components
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.painter.Painter
 
 internal typealias MovableCardContent = @Composable () -> Unit
 
@@ -17,5 +18,6 @@ internal data class OverlayLaunchData(
     val buttonRect: Rect?,
     val cardRects: List<Rect?>,
     val cardPoses: List<CardPose?> = emptyList(),
-    val cardContents: List<MovableCardContent?> = emptyList()
+    val cardContents: List<MovableCardContent?> = emptyList(),
+    val cardPainters: List<Painter?> = emptyList()
 )

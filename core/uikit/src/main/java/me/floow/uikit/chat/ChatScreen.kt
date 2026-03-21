@@ -68,6 +68,7 @@ import me.floow.uikit.chat.states.HasDataState
 import me.floow.uikit.chat.states.LoadingState
 import me.floow.uikit.chat.states.NoMessagesState
 import me.floow.uikit.components.avatar.NetworkAvatar
+import androidx.compose.ui.graphics.painter.Painter
 import me.floow.uikit.components.pickers.FlowEmojiPanel
 
 @Composable
@@ -96,7 +97,9 @@ fun ChatScreen(
 	onAnchorRestoreSettled: (Long, Int) -> Unit = { _, _ -> },
 	onAnchorRestoreTimedOut: (Long) -> Unit = {},
 	onLoadMore: () -> Unit = {},
-	onPostImageClick: (PostPreviewMessage, Int) -> Unit = { _, _ -> },
+	onPostImageClick: (PostPreviewMessage, Int, Rect?, Painter?) -> Unit = { _, _, _, _ -> },
+	hiddenPostImageIndex: Int? = null,
+	hiddenPostImageRevealProgress: Float = 0f,
 	suspendInitialPlacement: Boolean = false,
 	onPinMessage: (Long) -> Unit,
 	onUnpinMessage: (Long) -> Unit,
@@ -449,6 +452,8 @@ fun ChatScreen(
 							onReplyClick = onReplyClick,
 							onRetrySendClick = { message -> onRetryMessage(message) },
 							onPostImageClick = onPostImageClick,
+							hiddenPostImageIndex = hiddenPostImageIndex,
+							hiddenPostImageRevealProgress = hiddenPostImageRevealProgress,
 							onRequestScrollToBottom = onRequestScrollToBottom,
 							onUserStartedScroll = onUserStartedScroll,
 							onViewportSnapshotChanged = onViewportSnapshotChanged,

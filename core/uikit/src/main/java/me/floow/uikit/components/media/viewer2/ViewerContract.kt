@@ -22,10 +22,18 @@ enum class ViewerPhase {
     Closing
 }
 
+enum class SourceImageScaleMode {
+    Fit,
+    Crop
+}
+
 data class SharedImageOrigin(
     val sourceKey: String,
     val rectInWindow: Rect,
-    val aspectRatio: Float
+    val aspectRatio: Float,
+    val contentRectInWindow: Rect? = null,
+    val cornerRadiusPx: Float = 0f,
+    val sourceScaleMode: SourceImageScaleMode = SourceImageScaleMode.Fit
 )
 
 data class FullscreenImageViewerModel(
@@ -48,7 +56,9 @@ sealed interface FullscreenImageViewerAction {
     data object OpenAnimationFinished : FullscreenImageViewerAction
     data class RequestClose(
         val origin: SharedImageOrigin? = null,
-        val page: Int? = null
+        val page: Int? = null,
+        val dismissProgressAtClose: Float = 0f,
+        val closeStartRect: Rect? = null
     ) : FullscreenImageViewerAction
     data object CloseAnimationFinished : FullscreenImageViewerAction
     data class PageChanged(val page: Int) : FullscreenImageViewerAction
@@ -68,7 +78,9 @@ class FullscreenImageViewerState internal constructor(
     dismissOffsetY: Float,
     openOrigin: SharedImageOrigin?,
     closeOrigin: SharedImageOrigin?,
-    transitionProgress: Float
+    transitionProgress: Float,
+    closeSceneStartProgress: Float,
+    closeStartRect: Rect?
 ) {
     var phase by mutableStateOf(phase)
     var page by mutableIntStateOf(page)
@@ -79,6 +91,8 @@ class FullscreenImageViewerState internal constructor(
     var openOrigin by mutableStateOf(openOrigin)
     var closeOrigin by mutableStateOf(closeOrigin)
     var transitionProgress by mutableFloatStateOf(transitionProgress)
+    var closeSceneStartProgress by mutableFloatStateOf(closeSceneStartProgress)
+    var closeStartRect by mutableStateOf(closeStartRect)
 
     val visible: Boolean
         get() = phase != ViewerPhase.Closed
@@ -98,7 +112,9 @@ fun rememberFullscreenImageViewerState(
     dismissOffsetY: Float = 0f,
     openOrigin: SharedImageOrigin? = null,
     closeOrigin: SharedImageOrigin? = null,
-    transitionProgress: Float = 0f
+    transitionProgress: Float = 0f,
+    closeSceneStartProgress: Float = 1f,
+    closeStartRect: Rect? = null
 ): FullscreenImageViewerState {
     return remember {
         FullscreenImageViewerState(
@@ -110,7 +126,9 @@ fun rememberFullscreenImageViewerState(
             dismissOffsetY = dismissOffsetY,
             openOrigin = openOrigin,
             closeOrigin = closeOrigin,
-            transitionProgress = transitionProgress
+            transitionProgress = transitionProgress,
+            closeSceneStartProgress = closeSceneStartProgress,
+            closeStartRect = closeStartRect
         )
     }
 }

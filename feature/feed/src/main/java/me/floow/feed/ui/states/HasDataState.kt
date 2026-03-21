@@ -7,7 +7,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
@@ -29,6 +31,9 @@ import me.floow.uikit.components.media.viewer2.FullscreenImageViewerAction
 import me.floow.uikit.components.media.viewer2.FullscreenImageViewerModel
 import me.floow.uikit.components.media.viewer2.FullscreenImageViewerV2
 import me.floow.uikit.components.media.viewer2.SharedImageOrigin
+import me.floow.uikit.components.media.viewer2.mediaTransitionHostLayer
+import me.floow.uikit.components.media.viewer2.mediaTransitionDismissThresholdPx
+import me.floow.uikit.components.media.viewer2.resolveMediaTransitionScene
 import me.floow.uikit.components.media.viewer2.reduce
 import me.floow.uikit.components.media.viewer2.rememberFullscreenImageViewerState
 import me.floow.uikit.components.misc.PostActionsSheetContent
@@ -80,6 +85,15 @@ internal fun HasDataState(
     var overlayDetachedCount by remember { mutableIntStateOf(0) }
     val overlayOrigins = remember { mutableStateMapOf<Int, SharedImageOrigin>() }
     val viewerState = rememberFullscreenImageViewerState()
+    var openingPainter by remember { mutableStateOf<Painter?>(null) }
+    var hiddenOverlaySourceKey by remember { mutableStateOf<String?>(null) }
+    val transitionScene = resolveMediaTransitionScene(
+        phase = viewerState.phase,
+        transitionProgress = viewerState.transitionProgress,
+        dismissOffsetY = viewerState.dismissOffsetY,
+        closeSceneStartProgress = viewerState.closeSceneStartProgress,
+        dismissThresholdPx = mediaTransitionDismissThresholdPx(LocalDensity.current)
+    )
     var viewerPost by remember { mutableStateOf<Post?>(null) }
     val prefetchUrls = remember(feedItems) {
         feedItems
@@ -183,6 +197,7 @@ internal fun HasDataState(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .mediaTransitionHostLayer(transitionScene)
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -338,12 +353,14 @@ internal fun HasDataState(
                         launchData = overlayLaunchData,
                         visible = isOverlayVisible,
                         onDismiss = { isOverlayVisible = false },
-                        onImageClick = { index, origin ->
+                        onImageClick = { index, origin, sourcePainter ->
                             val currentPost = overlayPost ?: return@ImageOverlayGrid
                             val imageUrls = currentPost.viewerImageUrls()
                             if (imageUrls.isEmpty() || viewerState.visible) return@ImageOverlayGrid
                             val page = index.coerceIn(0, imageUrls.lastIndex)
                             viewerPost = currentPost
+                            openingPainter = sourcePainter
+                            hiddenOverlaySourceKey = origin?.sourceKey
                             viewerState.reduce(
                                 FullscreenImageViewerAction.Open(
                                     page = page,
@@ -362,12 +379,16 @@ internal fun HasDataState(
                         onDetachedCountChange = { detachedCount ->
                             overlayDetachedCount = detachedCount
                         },
+                        hiddenSourceKey = hiddenOverlaySourceKey,
+                        hiddenSourceRevealProgress = transitionScene.sourceRevealProgress,
                         onClosedAnimationEnd = {
                             overlayPost = null
                             overlayLaunchData = null
                             overlayDetachedCount = 0
                             overlayOrigins.clear()
                             viewerPost = null
+                            openingPainter = null
+                            hiddenOverlaySourceKey = null
                         },
                         modifier = Modifier.fillMaxSize()
                     )
@@ -379,14 +400,21 @@ internal fun HasDataState(
                             images = viewerImages,
                             title = activeViewerPost?.author?.name?.value ?: "@${activeViewerPost?.author?.username?.value ?: "unknown"}",
                             subtitleProvider = { "Фото" },
+                            openingPainter = if (viewerState.phase == me.floow.uikit.components.media.viewer2.ViewerPhase.Opening) openingPainter else null,
                             originForPage = { page -> overlayOrigins[page] }
                         ),
                         state = viewerState,
                         onAction = { action ->
                             when (action) {
+                                is FullscreenImageViewerAction.RequestClose -> {
+                                    hiddenOverlaySourceKey = action.origin?.sourceKey ?: hiddenOverlaySourceKey
+                                    viewerState.reduce(action, viewerImages.size)
+                                }
                                 FullscreenImageViewerAction.CloseAnimationFinished -> {
                                     viewerState.reduce(action, viewerImages.size)
                                     viewerPost = null
+                                    openingPainter = null
+                                    hiddenOverlaySourceKey = null
                                 }
 
                                 else -> viewerState.reduce(action, viewerImages.size)
