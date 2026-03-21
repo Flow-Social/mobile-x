@@ -6,13 +6,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.floow.comments.uilogic.CommentsViewModel
 import me.floow.domain.models.CommentId
@@ -29,7 +32,12 @@ import me.floow.uikit.components.media.viewer2.FullscreenImageViewerAction
 import me.floow.uikit.components.media.viewer2.FullscreenImageViewerModel
 import me.floow.uikit.components.media.viewer2.FullscreenImageViewerV2
 import me.floow.uikit.components.media.viewer2.SharedImageOrigin
+import me.floow.uikit.components.media.viewer2.SourceImageScaleMode
+import me.floow.uikit.components.media.viewer2.MediaTransitionScene
 import me.floow.uikit.components.media.viewer2.ViewerPhase
+import me.floow.uikit.components.media.viewer2.mediaTransitionHostLayer
+import me.floow.uikit.components.media.viewer2.mediaTransitionDismissThresholdPx
+import me.floow.uikit.components.media.viewer2.resolveMediaTransitionScene
 import me.floow.uikit.components.media.viewer2.rememberFullscreenImageViewerState
 import me.floow.uikit.components.media.viewer2.reduce
 import me.floow.uikit.components.media.transfer.PostMediaSourceSnapshot
@@ -69,7 +77,18 @@ fun CommentsRoute(
 	val useDarkStatusIcons = statusBarColor.luminance() > 0.5f
 	val commentsTitle = stringResource(R.string.comments_title)
 	val commentsPhotoSubtitle = stringResource(R.string.comments_photo_subtitle)
+    val density = LocalDensity.current
+    val sourceCornerRadiusPx = with(density) { 14.dp.toPx() }
 	val viewerState = rememberFullscreenImageViewerState()
+	val liveOrigins = remember(initialData.postId) { mutableStateMapOf<Int, SharedImageOrigin>() }
+	var hiddenPostImageIndex by remember(initialData.postId) { mutableStateOf<Int?>(null) }
+	val transitionScene = resolveMediaTransitionScene(
+		phase = viewerState.phase,
+		transitionProgress = viewerState.transitionProgress,
+		dismissOffsetY = viewerState.dismissOffsetY,
+		closeSceneStartProgress = viewerState.closeSceneStartProgress,
+		dismissThresholdPx = mediaTransitionDismissThresholdPx(LocalDensity.current)
+	)
 	val mediaTransferStore: PostMediaTransferStore = koinInject()
 	val handoffSnapshot: PostMediaSourceSnapshot? = remember(initialData.mediaTransferToken, initialData.postId) {
 		initialData.mediaTransferToken
@@ -209,25 +228,40 @@ fun CommentsRoute(
 				vm.onVisibleMessageIdsChanged(snapshot.visibleMessageIds)
 			},
 			onLoadMore = vm::loadMore,
-			onPostImageClick = { _, index ->
-			if (images.isEmpty()) return@ChatScreen
-			if (viewerState.visible) return@ChatScreen
-			val safeIndex = index.coerceIn(0, images.lastIndex)
-			val sourceBounds = handoffSnapshot
-				?.boundsByIndex
-				?.get(safeIndex)
-			openingPainter = handoffSnapshot
-				?.paintersByIndex
-				?.get(safeIndex)
-				?.painter
-				?: handoffSnapshot
+			onPostImageClick = { _, index, sourceBounds, sourcePainter ->
+				if (images.isEmpty()) return@ChatScreen
+				if (viewerState.visible) return@ChatScreen
+				val safeIndex = index.coerceIn(0, images.lastIndex)
+				val openingBounds = sourceBounds ?: handoffSnapshot
+					?.boundsByIndex
+					?.get(safeIndex)
+				val sourceAspect = resolveImageAspect(
+					sourcePainter = sourcePainter,
+					fallbackVariant = initialData.postImageVariants.getOrNull(safeIndex)
+				)
+				if (sourceBounds != null) {
+					liveOrigins[safeIndex] = sourceBounds.toCommentsSharedOrigin(
+						postId = initialData.postId,
+						index = safeIndex,
+						cornerRadiusPx = sourceCornerRadiusPx,
+						aspectRatio = sourceAspect
+					)
+				}
+				hiddenPostImageIndex = safeIndex
+				openingPainter = sourcePainter ?: handoffSnapshot
 					?.paintersByIndex
-					?.get(handoffSnapshot.selectedIndex)
+					?.get(safeIndex)
 					?.painter
-			openingOrigin = sourceBounds?.toCommentsSharedOrigin(
-				postId = initialData.postId,
-				index = safeIndex
-			)
+					?: handoffSnapshot
+						?.paintersByIndex
+						?.get(handoffSnapshot.selectedIndex)
+						?.painter
+				openingOrigin = openingBounds?.toCommentsSharedOrigin(
+					postId = initialData.postId,
+					index = safeIndex,
+					cornerRadiusPx = sourceCornerRadiusPx,
+					aspectRatio = sourceAspect
+				)
 			viewerState.reduce(
 				FullscreenImageViewerAction.Open(
 					page = safeIndex,
@@ -245,7 +279,9 @@ fun CommentsRoute(
 		onUndoDelete = vm::undoDelete,
 		config = config,
 		state = state,
-		modifier = modifier
+		hiddenPostImageIndex = hiddenPostImageIndex,
+		hiddenPostImageRevealProgress = transitionScene.sourceRevealProgress,
+		modifier = modifier.mediaTransitionHostLayer(transitionScene)
 	)
 
 	FullscreenImageViewerV2(
@@ -256,12 +292,18 @@ fun CommentsRoute(
 			openingPainter = if (viewerState.phase == ViewerPhase.Opening) openingPainter else null,
 			originForPage = { page ->
 				val safePage = page.coerceIn(0, images.lastIndex)
-				handoffSnapshot
+				liveOrigins[safePage]
+					?: handoffSnapshot
 					?.boundsByIndex
 					?.get(safePage)
 					?.toCommentsSharedOrigin(
 						postId = initialData.postId,
-						index = safePage
+						index = safePage,
+						cornerRadiusPx = sourceCornerRadiusPx,
+						aspectRatio = resolveImageAspect(
+							sourcePainter = null,
+							fallbackVariant = initialData.postImageVariants.getOrNull(safePage)
+						)
 					)
 			}
 		),
@@ -269,12 +311,15 @@ fun CommentsRoute(
 		onAction = { action ->
 			when (action) {
 				is FullscreenImageViewerAction.RequestClose -> {
+					hiddenPostImageIndex = action.page ?: hiddenPostImageIndex
 					viewerState.reduce(action, images.size)
 				}
 				FullscreenImageViewerAction.CloseAnimationFinished -> {
 					viewerState.reduce(action, images.size)
 					openingPainter = null
 					openingOrigin = null
+					hiddenPostImageIndex = null
+					liveOrigins.clear()
 				}
 				else -> viewerState.reduce(action, images.size)
 			}
@@ -283,11 +328,40 @@ fun CommentsRoute(
 	)
 }
 
-private fun Rect.toCommentsSharedOrigin(postId: String, index: Int): SharedImageOrigin {
-	val aspect = if (width > 0f && height > 0f) width / height else 1f
+private fun Rect.toCommentsSharedOrigin(
+	postId: String,
+	index: Int,
+	cornerRadiusPx: Float,
+	aspectRatio: Float
+): SharedImageOrigin {
 	return SharedImageOrigin(
 		sourceKey = "comments:$postId:image:$index",
 		rectInWindow = this,
-		aspectRatio = aspect.coerceAtLeast(0.01f)
+		aspectRatio = aspectRatio.coerceAtLeast(0.01f),
+		contentRectInWindow = this,
+		cornerRadiusPx = cornerRadiusPx,
+		sourceScaleMode = SourceImageScaleMode.Crop
 	)
+}
+
+private fun resolveImageAspect(
+	sourcePainter: Painter?,
+	fallbackVariant: PostImageVariant?
+): Float {
+	val painterAspect = sourcePainter?.intrinsicSize?.let { size ->
+		val width = size.width
+		val height = size.height
+		if (width.isFinite() && height.isFinite() && width > 0f && height > 0f) {
+			(width / height).coerceAtLeast(0.01f)
+		} else {
+			null
+		}
+	}
+	if (painterAspect != null) return painterAspect
+	val variantAspect = fallbackVariant?.let { variant ->
+		val width = variant.width?.toFloat() ?: return@let null
+		val height = variant.height?.toFloat() ?: return@let null
+		if (width > 0f && height > 0f) (width / height).coerceAtLeast(0.01f) else null
+	}
+	return variantAspect ?: 1f
 }

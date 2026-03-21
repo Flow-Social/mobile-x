@@ -86,10 +86,15 @@ import me.floow.uikit.components.media.viewer2.FullscreenImageViewerModel
 import me.floow.uikit.components.media.viewer2.FullscreenImageViewerSharedTransitionSpec
 import me.floow.uikit.components.media.viewer2.FullscreenImageViewerV2
 import me.floow.uikit.components.media.viewer2.SharedImageOrigin
+import me.floow.uikit.components.media.viewer2.SourceImageScaleMode
+import me.floow.uikit.components.media.viewer2.MediaTransitionScene
 import me.floow.uikit.components.media.viewer2.ViewerPhase
 import me.floow.uikit.components.media.viewer2.fitRectInBounds
 import me.floow.uikit.components.media.viewer2.reduce
+import me.floow.uikit.components.media.viewer2.mediaTransitionHostLayer
 import me.floow.uikit.components.media.viewer2.rememberFullscreenImageViewerState
+import me.floow.uikit.components.media.viewer2.mediaTransitionDismissThresholdPx
+import me.floow.uikit.components.media.viewer2.resolveMediaTransitionScene
 import me.floow.uikit.components.media.transfer.PainterRef
 import me.floow.uikit.components.media.transfer.PostMediaSourceOwner
 import me.floow.uikit.components.media.transfer.PostMediaSourceSnapshot
@@ -180,12 +185,14 @@ internal fun PostScreen(
     var pendingClosePage by remember { mutableStateOf<Int?>(null) }
     var galleryViewportRect by remember { mutableStateOf<Rect?>(null) }
     var openingTransitionPainter by remember { mutableStateOf<Painter?>(null) }
-    val dismissThresholdPx = with(LocalDensity.current) { 120f * density }
-    val dismissRevealProgress = if (viewerState.phase == ViewerPhase.Opened) {
-        (abs(viewerState.dismissOffsetY) / dismissThresholdPx).coerceIn(0f, 1f)
-    } else {
-        0f
-    }
+    val dismissThresholdPx = mediaTransitionDismissThresholdPx(LocalDensity.current)
+    val transitionScene = resolveMediaTransitionScene(
+        phase = viewerState.phase,
+        transitionProgress = viewerState.transitionProgress,
+        dismissOffsetY = viewerState.dismissOffsetY,
+        closeSceneStartProgress = viewerState.closeSceneStartProgress,
+        dismissThresholdPx = dismissThresholdPx
+    )
 
     LaunchedEffect(viewerState.phase) {
         if (viewerState.phase == ViewerPhase.Closed) {
@@ -293,6 +300,9 @@ internal fun PostScreen(
         val sharedTransitionScope = this
         Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
+            modifier = Modifier
+                .fillMaxSize()
+                .mediaTransitionHostLayer(transitionScene),
             topBar = {
                 TopAppBar(
                     title = {
@@ -347,8 +357,7 @@ internal fun PostScreen(
                     commentersPreview = commentersPreview,
                     onCommentsClick = { onCommentsClick(commentsMediaSnapshot) }
                 )
-            },
-            modifier = Modifier.fillMaxSize()
+            }
         ) { innerPadding ->
             Box(
                 modifier = Modifier
@@ -369,7 +378,7 @@ internal fun PostScreen(
                                     pagerState = galleryPagerState,
                                     hiddenSourceKey = hiddenSourceKey,
                                     viewerPhase = viewerState.phase,
-                                    dismissRevealProgress = dismissRevealProgress,
+                                    transitionScene = transitionScene,
                                     sourceKeyProvider = { index -> postImageSourceKey(postId, index) },
                                     sharedTransitionScope = sharedTransitionScope,
                                     onGalleryViewportLayout = { viewport ->
@@ -412,7 +421,10 @@ internal fun PostScreen(
                                                         SharedImageOrigin(
                                                             sourceKey = sourceKey,
                                                             rectInWindow = it,
-                                                            aspectRatio = aspect
+                                                            aspectRatio = aspect,
+                                                            contentRectInWindow = it,
+                                                            cornerRadiusPx = 0f,
+                                                            sourceScaleMode = SourceImageScaleMode.Fit
                                                         )
                                                     }
                                                 ),
@@ -530,7 +542,10 @@ internal fun PostScreen(
                     SharedImageOrigin(
                         sourceKey = postImageSourceKey(postId, idx),
                         rectInWindow = rect,
-                        aspectRatio = aspect
+                        aspectRatio = aspect,
+                        contentRectInWindow = rect,
+                        cornerRadiusPx = 0f,
+                        sourceScaleMode = SourceImageScaleMode.Fit
                     )
                 }
             ),
@@ -576,10 +591,7 @@ internal fun PostScreen(
                     else -> viewerState.reduce(action, cleanedImageUrls.size)
                 }
             },
-            sharedTransitionSpec = FullscreenImageViewerSharedTransitionSpec(
-                scope = sharedTransitionScope,
-                keyForPage = { page -> postImageSourceKey(postId, page) }
-            ),
+            sharedTransitionSpec = null,
             modifier = Modifier.fillMaxSize()
         )
     }
@@ -709,7 +721,7 @@ private fun PostImageGallery(
     pagerState: PagerState,
     hiddenSourceKey: String?,
     viewerPhase: ViewerPhase,
-    dismissRevealProgress: Float,
+    transitionScene: MediaTransitionScene,
     sourceKeyProvider: (Int) -> String,
     sharedTransitionScope: SharedTransitionScope?,
     onGalleryViewportLayout: (Rect) -> Unit,
@@ -733,7 +745,7 @@ private fun PostImageGallery(
             sourceKey = sourceKey,
             hiddenSourceKey = hiddenSourceKey,
             viewerPhase = viewerPhase,
-            dismissRevealProgress = dismissRevealProgress
+            sourceRevealProgress = transitionScene.sourceRevealProgress
         )
         val sharedModifier = rememberPostSourceSharedModifier(
             sourceKey = sourceKey,
@@ -906,7 +918,7 @@ private fun PostImageGallery(
                 sourceKey = sourceKey,
                 hiddenSourceKey = hiddenSourceKey,
                 viewerPhase = viewerPhase,
-                dismissRevealProgress = dismissRevealProgress
+                sourceRevealProgress = transitionScene.sourceRevealProgress
             )
             val sharedModifier = rememberPostSourceSharedModifier(
                 sourceKey = sourceKey,
@@ -1024,14 +1036,14 @@ private fun sourceAlphaForTransition(
     sourceKey: String,
     hiddenSourceKey: String?,
     viewerPhase: ViewerPhase,
-    dismissRevealProgress: Float
+    sourceRevealProgress: Float
 ): Float {
     if (hiddenSourceKey != sourceKey) return 1f
-    val reveal = sqrt(dismissRevealProgress.coerceIn(0f, 1f))
+    val reveal = sourceRevealProgress
     return when (viewerPhase) {
         ViewerPhase.Opening -> 0f
-        ViewerPhase.Opened -> reveal
-        ViewerPhase.Closing -> 0f
+        ViewerPhase.Opened -> 0f
+        ViewerPhase.Closing -> reveal
         ViewerPhase.Closed -> 1f
     }
 }

@@ -258,6 +258,9 @@ private fun ImageGallery(
     val left = cleanedVariants.getOrNull(1)
     val right = cleanedVariants.getOrNull(2)
     val back = cleanedVariants.getOrNull(3)
+    var leftPainter by remember(left) { mutableStateOf<androidx.compose.ui.graphics.painter.Painter?>(null) }
+    var rightPainter by remember(right) { mutableStateOf<androidx.compose.ui.graphics.painter.Painter?>(null) }
+    var backPainter by remember(back) { mutableStateOf<androidx.compose.ui.graphics.painter.Painter?>(null) }
     val extraCount = (cleanedVariants.size - 3).coerceAtLeast(0)
     val frontShadeAlpha by animateFloatAsState(
         targetValue = if (isOverlayActive && overlayDetachedCount >= 1) 0f else 0.3f,
@@ -366,7 +369,12 @@ private fun ImageGallery(
                     mode = ProgressiveImageMode.LIST,
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
+                    contentScale = ContentScale.Crop,
+                    onPainterChanged = { painter ->
+                        if (painter != null) {
+                            leftPainter = painter
+                        }
+                    }
                 )
             }
         }
@@ -381,7 +389,12 @@ private fun ImageGallery(
                     mode = ProgressiveImageMode.LIST,
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
+                    contentScale = ContentScale.Crop,
+                    onPainterChanged = { painter ->
+                        if (painter != null) {
+                            rightPainter = painter
+                        }
+                    }
                 )
             }
         }
@@ -396,7 +409,12 @@ private fun ImageGallery(
                     mode = ProgressiveImageMode.LIST,
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
+                    contentScale = ContentScale.Crop,
+                    onPainterChanged = { painter ->
+                        if (painter != null) {
+                            backPainter = painter
+                        }
+                    }
                 )
             }
         }
@@ -421,7 +439,11 @@ private fun ImageGallery(
         frontContent,
         leftContent,
         rightContent,
-        backContent
+        backContent,
+        frontPainter,
+        leftPainter,
+        rightPainter,
+        backPainter
     ) {
         {
             val cardRects = listOf(
@@ -496,6 +518,12 @@ private fun ImageGallery(
                     leftContent,
                     rightContent,
                     backContent
+                ),
+                cardPainters = listOf(
+                    frontPainter,
+                    leftPainter,
+                    rightPainter,
+                    backPainter
                 )
             )
         }

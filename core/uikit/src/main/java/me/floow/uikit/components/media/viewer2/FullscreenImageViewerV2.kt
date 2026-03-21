@@ -22,6 +22,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -38,16 +40,14 @@ import androidx.core.view.WindowInsetsCompat
 import coil.Coil
 import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
-import kotlin.math.abs
 import kotlin.math.roundToInt
-import kotlin.math.sqrt
 import me.floow.uikit.util.SystemBarsScrim
 
 private const val OPEN_DURATION_MS = 280
 private const val CLOSE_DURATION_MS = 240
 private const val CROSSFADE_MS = 180
-private const val MAX_STATUS_BAR_ALPHA = 0.6f
-private const val MAX_NAV_BAR_ALPHA = 0.35f
+private const val MAX_STATUS_BAR_ALPHA = 0.22f
+private const val MAX_NAV_BAR_ALPHA = 0.12f
 
 private enum class TransitionActorState {
     OpeningShared,
@@ -64,11 +64,6 @@ private data class TransitionSnapshot(
     val phase: ViewerPhase
 )
 
-private data class BarScrimState(
-    val statusAlpha: Float,
-    val navigationAlpha: Float
-)
-
 @Composable
 fun FullscreenImageViewerV2(
     model: FullscreenImageViewerModel,
@@ -81,71 +76,60 @@ fun FullscreenImageViewerV2(
 
     val context = LocalContext.current
     val imageCount = model.images.size
-    val dismissThresholdPx = with(LocalDensity.current) { 120f * density }
-    val dismissProgress = dismissProgress(
+    val dismissThresholdPx = mediaTransitionDismissThresholdPx(LocalDensity.current)
+    val sceneAnim = remember { Animatable(0f) }
+    val transitionScene = resolveMediaTransitionScene(
         phase = state.phase,
+        transitionProgress = state.transitionProgress,
         dismissOffsetY = state.dismissOffsetY,
-        thresholdPx = dismissThresholdPx
+        closeSceneStartProgress = state.closeSceneStartProgress,
+        dismissThresholdPx = dismissThresholdPx
     )
-    val openAnim = remember { Animatable(0f) }
-    val closeAnim = remember { Animatable(0f) }
+    val sceneProgress = transitionScene.sceneProgress
+    val actorProgress = when (state.phase) {
+        ViewerPhase.Closing -> state.transitionProgress.coerceIn(0f, 1f)
+        else -> sceneProgress
+    }
     val pagePainters = remember { mutableStateMapOf<Int, Painter>() }
     val pageFirstFrameReady = remember { mutableStateMapOf<Int, Boolean>() }
     val pagerState = rememberPagerState(
         initialPage = state.page.coerceIn(0, imageCount - 1),
         pageCount = { imageCount }
     )
-    val useSharedTransition = sharedTransitionSpec != null
+    val useSharedTransition = false
 
-    val barScrim = resolveBarScrimState(
-        phase = state.phase,
-        openProgress = openAnim.value,
-        closeProgress = closeAnim.value,
-        dismissProgress = dismissProgress
-    )
     SystemBarsScrim(
         visible = state.visible,
-        scrim = Color.Black.copy(alpha = barScrim.statusAlpha),
-        navigationScrim = Color.Black.copy(alpha = barScrim.navigationAlpha)
+        scrim = Color.Black.copy(alpha = transitionScene.statusBarAlpha),
+        navigationScrim = Color.Black.copy(alpha = transitionScene.navigationBarAlpha)
     )
 
-    val requestClose: () -> Unit = {
-        val activePage = resolveActivePageForClose(
-            isScrollInProgress = pagerState.isScrollInProgress,
-            currentPage = pagerState.currentPage,
-            targetPage = pagerState.targetPage,
-            maxIndex = imageCount - 1
-        )
-        onAction(
-            FullscreenImageViewerAction.RequestClose(
-                origin = model.originForPage(activePage),
-                page = activePage
-            )
-        )
-    }
-    BackHandler(enabled = state.visible) { requestClose() }
+    var requestClose by remember { mutableStateOf<(Float?) -> Unit>({}) }
+    BackHandler(enabled = state.visible) { requestClose(null) }
 
     LaunchedEffect(state.phase) {
         when (state.phase) {
             ViewerPhase.Opening -> {
-                openAnim.snapTo(0f)
+                sceneAnim.snapTo(0f)
                 state.updateTransitionProgress(0f)
-                openAnim.animateTo(
+                sceneAnim.animateTo(
                     targetValue = 1f,
                     animationSpec = tween(durationMillis = OPEN_DURATION_MS, easing = FastOutSlowInEasing)
-                )
-                state.updateTransitionProgress(1f)
+                ) {
+                    state.updateTransitionProgress(value)
+                }
                 onAction(FullscreenImageViewerAction.OpenAnimationFinished)
             }
 
             ViewerPhase.Closing -> {
-                closeAnim.snapTo(0f)
+                sceneAnim.snapTo(0f)
                 state.updateTransitionProgress(0f)
-                closeAnim.animateTo(
+                sceneAnim.animateTo(
                     targetValue = 1f,
                     animationSpec = tween(durationMillis = CLOSE_DURATION_MS, easing = FastOutSlowInEasing)
-                )
-                state.updateTransitionProgress(1f)
+                ) {
+                    state.updateTransitionProgress(value)
+                }
                 onAction(FullscreenImageViewerAction.CloseAnimationFinished)
             }
 
@@ -175,6 +159,39 @@ fun FullscreenImageViewerV2(
             openOrigin = state.openOrigin,
             closeOrigin = state.closeOrigin
         )
+        requestClose = { dismissOffsetOverride ->
+            val activePage = resolveActivePageForClose(
+                isScrollInProgress = pagerState.isScrollInProgress,
+                currentPage = pagerState.currentPage,
+                targetPage = pagerState.targetPage,
+                maxIndex = imageCount - 1
+            )
+            val origin = model.originForPage(activePage)
+            val closeDismissOffset = dismissOffsetOverride ?: state.dismissOffsetY
+            val closeDismissProgress = mediaTransitionDismissProgressForOffset(
+                dismissOffsetY = closeDismissOffset,
+                thresholdPx = dismissThresholdPx
+            )
+            val aspect = (
+                origin?.aspectRatio?.coerceAtLeast(0.01f)
+                    ?: resolvePainterAspectRatio(pagePainters[activePage] ?: asyncPainter, fallbackAspect)
+                ).coerceAtLeast(0.01f)
+            onAction(
+                FullscreenImageViewerAction.RequestClose(
+                    origin = origin,
+                    page = activePage,
+                    dismissProgressAtClose = closeDismissProgress,
+                    closeStartRect = resolveCloseStartRect(
+                        state = state,
+                        containerWidthPx = containerWidthPx,
+                        containerHeightPx = containerHeightPx,
+                        aspectRatio = aspect,
+                        dismissProgress = closeDismissProgress,
+                        dismissOffsetY = closeDismissOffset
+                    )
+                )
+            )
+        }
 
         LaunchedEffect(state.phase) {
             if (state.phase == ViewerPhase.Opening) {
@@ -233,6 +250,7 @@ fun FullscreenImageViewerV2(
             ViewerPhase.Closing -> state.closeOrigin
             ViewerPhase.Opened, ViewerPhase.Closed -> state.openOrigin
         }
+        val transitionOriginRect = transitionOrigin?.contentRectInWindow ?: transitionOrigin?.rectInWindow
         val activeAspect = when {
             transitionSnapshot != null -> transitionSnapshot.aspectRatio
             transitionOrigin != null -> transitionOrigin.aspectRatio.coerceAtLeast(0.01f)
@@ -245,17 +263,44 @@ fun FullscreenImageViewerV2(
         )
         val transitionRect = when (state.phase) {
             ViewerPhase.Opening -> {
-                val start = transitionOrigin?.rectInWindow
-                if (start != null) lerpRect(start, endRect, openAnim.value) else endRect
+                val start = transitionOriginRect
+                if (start != null) lerpRect(start, endRect, actorProgress) else endRect
             }
 
             ViewerPhase.Closing -> {
-                val end = transitionOrigin?.rectInWindow
-                if (end != null) lerpRect(endRect, end, closeAnim.value) else endRect
+                val end = transitionOriginRect
+                val start = state.closeStartRect ?: endRect
+                if (end != null) lerpRect(start, end, actorProgress) else start
             }
 
             ViewerPhase.Opened,
             ViewerPhase.Closed -> endRect
+        }
+        val transitionCornerRadiusPx = when (state.phase) {
+            ViewerPhase.Opening -> lerpFloat(
+                start = transitionOrigin?.cornerRadiusPx ?: 0f,
+                end = 0f,
+                progress = actorProgress
+            )
+            ViewerPhase.Closing -> lerpFloat(
+                start = 0f,
+                end = transitionOrigin?.cornerRadiusPx ?: 0f,
+                progress = actorProgress
+            )
+            ViewerPhase.Opened,
+            ViewerPhase.Closed -> 0f
+        }
+        val transitionFitBlend = when (state.phase) {
+            ViewerPhase.Opening -> resolveTransitionFitBlend(
+                sourceScaleMode = transitionOrigin?.sourceScaleMode ?: SourceImageScaleMode.Fit,
+                progress = actorProgress
+            )
+            ViewerPhase.Closing -> resolveTransitionFitBlend(
+                sourceScaleMode = transitionOrigin?.sourceScaleMode ?: SourceImageScaleMode.Fit,
+                progress = 1f - actorProgress
+            )
+            ViewerPhase.Opened,
+            ViewerPhase.Closed -> 1f
         }
 
         val contentTargetAlpha = resolveContentTargetAlpha(
@@ -264,7 +309,12 @@ fun FullscreenImageViewerV2(
         )
         val contentAlpha by animateFloatAsState(
             targetValue = contentTargetAlpha,
-            animationSpec = if (actorState == TransitionActorState.Opened) snap() else tween(durationMillis = CROSSFADE_MS),
+            animationSpec = when (actorState) {
+                TransitionActorState.Opened,
+                TransitionActorState.ClosingFallback,
+                TransitionActorState.ClosingShared -> snap()
+                else -> tween(durationMillis = CROSSFADE_MS)
+            },
             label = "viewer_content_alpha"
         )
 
@@ -275,7 +325,12 @@ fun FullscreenImageViewerV2(
         )
         val snapshotAlpha by animateFloatAsState(
             targetValue = snapshotTargetAlpha,
-            animationSpec = tween(durationMillis = CROSSFADE_MS),
+            animationSpec = when {
+                actorState == TransitionActorState.ClosingFallback ||
+                    actorState == TransitionActorState.ClosingShared -> snap()
+                actorState == TransitionActorState.Opened && currentPageReady -> snap()
+                else -> tween(durationMillis = CROSSFADE_MS)
+            },
             label = "viewer_snapshot_alpha"
         )
 
@@ -295,24 +350,19 @@ fun FullscreenImageViewerV2(
                 modifier = Modifier
                     .fillMaxSize()
                     .drawBehind {
-                        val alpha = resolveBackdropAlpha(
-                            phase = state.phase,
-                            openProgress = openAnim.value,
-                            closeProgress = closeAnim.value,
-                            dismissProgress = dismissProgress
-                        )
+                        val alpha = transitionScene.backdropAlpha
                         if (alpha > 0f) {
                             drawRect(Color.Black, alpha = alpha)
                         }
                     }
             )
 
-            EdgeToEdgeStatusBarScrim(alpha = barScrim.statusAlpha)
-
             ViewerContentLayer(
                 model = model,
                 state = state,
                 pagerState = pagerState,
+                sceneProgress = transitionScene.sceneProgress,
+                dismissProgress = transitionScene.dismissProgress,
                 onAction = onAction,
                 onRequestClose = requestClose,
                 onPagePainterReady = { page, painter -> pagePainters[page] = painter },
@@ -323,13 +373,13 @@ fun FullscreenImageViewerV2(
                         ?: if (page == state.page) openingPainter else null
                 },
                 gesturesEnabled = state.phase == ViewerPhase.Opened && contentAlpha > 0.99f,
-                sharedTransitionSpec = sharedTransitionSpec,
+                sharedTransitionSpec = null,
                 modifier = Modifier
                     .fillMaxSize()
                     .zIndex(1f)
                     .testTag("viewer_content_layer")
-                    .graphicsLayer {
-                        alpha = contentAlpha * dismissContentAlpha(dismissProgress)
+                        .graphicsLayer {
+                        alpha = contentAlpha
                     }
             )
 
@@ -337,6 +387,9 @@ fun FullscreenImageViewerV2(
                 ViewerTransitionLayer(
                     painter = transitionSnapshot.painter,
                     animatedRect = transitionRect,
+                    painterAspectRatio = transitionSnapshot.aspectRatio,
+                    cornerRadiusPx = transitionCornerRadiusPx,
+                    fitBlend = transitionFitBlend,
                     modifier = Modifier
                         .fillMaxSize()
                         .zIndex(2f)
@@ -344,6 +397,20 @@ fun FullscreenImageViewerV2(
                         .graphicsLayer { alpha = snapshotAlpha }
                 )
             }
+
+            val sceneScrimAlpha = (transitionScene.backdropAlpha * 0.22f).coerceIn(0f, 1f)
+            if (sceneScrimAlpha > 0f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .zIndex(2.2f)
+                        .drawBehind {
+                            drawRect(Color.Black, alpha = sceneScrimAlpha)
+                        }
+                )
+            }
+
+            EdgeToEdgeStatusBarScrim(alpha = transitionScene.statusBarAlpha)
         }
     }
 }
@@ -390,37 +457,13 @@ private fun resolveActivePageForClose(
     }
 }
 
-private fun resolveBarScrimState(
-    phase: ViewerPhase,
-    openProgress: Float,
-    closeProgress: Float,
-    dismissProgress: Float
-): BarScrimState {
-    val statusAlpha = when (phase) {
-        ViewerPhase.Opening -> MAX_STATUS_BAR_ALPHA * openProgress
-        ViewerPhase.Opened -> MAX_STATUS_BAR_ALPHA * (1f - dismissProgress)
-        ViewerPhase.Closing -> MAX_STATUS_BAR_ALPHA * (1f - closeProgress)
-        ViewerPhase.Closed -> 0f
-    }.coerceIn(0f, MAX_STATUS_BAR_ALPHA)
-    val navigationAlpha = when (phase) {
-        ViewerPhase.Opening -> MAX_NAV_BAR_ALPHA * openProgress
-        ViewerPhase.Opened -> MAX_NAV_BAR_ALPHA * (1f - dismissProgress)
-        ViewerPhase.Closing -> MAX_NAV_BAR_ALPHA * (1f - closeProgress)
-        ViewerPhase.Closed -> 0f
-    }.coerceIn(0f, MAX_NAV_BAR_ALPHA)
-    return BarScrimState(
-        statusAlpha = statusAlpha,
-        navigationAlpha = navigationAlpha
-    )
-}
-
 private fun shouldCaptureSnapshot(
     phase: ViewerPhase,
     actorState: TransitionActorState
 ): Boolean {
     return when (phase) {
         ViewerPhase.Opening -> true
-        ViewerPhase.Closing -> actorState == TransitionActorState.ClosingFallback
+        ViewerPhase.Closing -> true
         ViewerPhase.Opened,
         ViewerPhase.Closed -> false
     }
@@ -443,7 +486,7 @@ private fun buildTransitionSnapshot(
         ViewerPhase.Closed -> null
     }
     val painter = openingPainter ?: cachedPainter ?: asyncPainter
-    val aspectRatio = (snapshotOrigin?.aspectRatio ?: resolvePainterAspectRatio(painter, fallbackAspect))
+    val aspectRatio = resolvePainterAspectRatio(painter, snapshotOrigin?.aspectRatio ?: fallbackAspect)
         .coerceAtLeast(0.01f)
     return TransitionSnapshot(
         painter = painter,
@@ -459,7 +502,7 @@ private fun resolveContentTargetAlpha(
 ): Float {
     return when (actorState) {
         TransitionActorState.OpeningFallback -> 0f
-        TransitionActorState.OpeningShared -> 1f
+        TransitionActorState.OpeningShared -> 0f
         TransitionActorState.Opened -> if (currentPageReady) 1f else 0f
         TransitionActorState.ClosingFallback,
         TransitionActorState.ClosingShared -> 0f
@@ -477,20 +520,6 @@ private fun resolveSnapshotTargetAlpha(
         TransitionActorState.Opened -> if (!hasSnapshot || currentPageReady) 0f else 1f
         TransitionActorState.OpeningShared,
         TransitionActorState.ClosingShared -> 1f
-    }
-}
-
-private fun resolveBackdropAlpha(
-    phase: ViewerPhase,
-    openProgress: Float,
-    closeProgress: Float,
-    dismissProgress: Float
-): Float {
-    return when (phase) {
-        ViewerPhase.Opening -> openProgress
-        ViewerPhase.Opened -> dismissScrimAlpha(dismissProgress)
-        ViewerPhase.Closing -> 1f - closeProgress
-        ViewerPhase.Closed -> 0f
     }
 }
 
@@ -517,21 +546,42 @@ private fun BoxScope.EdgeToEdgeStatusBarScrim(alpha: Float, modifier: Modifier =
     )
 }
 
-private fun dismissProgress(
-    phase: ViewerPhase,
-    dismissOffsetY: Float,
-    thresholdPx: Float
+private fun lerpFloat(start: Float, end: Float, progress: Float): Float {
+    val p = progress.coerceIn(0f, 1f)
+    return start + (end - start) * p
+}
+
+private fun resolveTransitionFitBlend(
+    sourceScaleMode: SourceImageScaleMode,
+    progress: Float
 ): Float {
-    if (phase != ViewerPhase.Opened) return 0f
-    return (abs(dismissOffsetY) / thresholdPx).coerceIn(0f, 1f)
+    if (sourceScaleMode == SourceImageScaleMode.Fit) return 1f
+    val normalized = ((progress.coerceIn(0f, 1f) - 0.18f) / 0.82f).coerceIn(0f, 1f)
+    return normalized * normalized * (3f - 2f * normalized)
 }
 
-private fun dismissScrimAlpha(progress: Float): Float {
-    return (1f - sqrt(progress.coerceIn(0f, 1f))).coerceIn(0f, 1f)
-}
-
-private fun dismissContentAlpha(progress: Float): Float {
-    return (1f - (progress.coerceIn(0f, 1f) * 0.08f)).coerceIn(0f, 1f)
+private fun resolveCloseStartRect(
+    state: FullscreenImageViewerState,
+    containerWidthPx: Float,
+    containerHeightPx: Float,
+    aspectRatio: Float,
+    dismissProgress: Float,
+    dismissOffsetY: Float
+): Rect {
+    val baseRect = computeFitRect(
+        containerWidthPx = containerWidthPx,
+        containerHeightPx = containerHeightPx,
+        aspectRatio = aspectRatio
+    )
+    val dismissScale = 1f - (dismissProgress * 0.08f)
+    return transformRect(
+        baseRect = baseRect,
+        scale = state.zoom * dismissScale,
+        offset = Offset(
+            x = state.pan.x,
+            y = state.pan.y + dismissOffsetY
+        )
+    )
 }
 
 private fun prefetchViewerUrls(rawUrl: String): List<String> {

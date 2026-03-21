@@ -18,11 +18,20 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -42,7 +51,9 @@ fun ChatPostBubble(
 	likesCount: Int,
 	description: String,
 	dateTime: LocalDateTime,
-	onImageClick: (Int) -> Unit,
+	hiddenImageIndex: Int? = null,
+	hiddenImageRevealProgress: Float = 0f,
+	onImageClick: (Int, Rect?, Painter?) -> Unit,
 	modifier: Modifier = Modifier
 ) {
 	Column(
@@ -64,6 +75,8 @@ fun ChatPostBubble(
 
 		PostImageGrid(
 			imageVariants = imageVariants,
+			hiddenImageIndex = hiddenImageIndex,
+			hiddenImageRevealProgress = hiddenImageRevealProgress,
 			onImageClick = onImageClick,
 			modifier = Modifier.fillMaxWidth()
 		)
@@ -136,7 +149,9 @@ fun ChatPostBubble(
 @Composable
 private fun PostImageGrid(
 	imageVariants: List<PostImageVariant>,
-	onImageClick: (Int) -> Unit,
+	hiddenImageIndex: Int?,
+	hiddenImageRevealProgress: Float,
+	onImageClick: (Int, Rect?, Painter?) -> Unit,
 	modifier: Modifier = Modifier
 ) {
 	val variants = imageVariants
@@ -150,31 +165,36 @@ private fun PostImageGrid(
 	when (variants.size) {
 		1 -> {
 			val variant = variants.first()
+			var painter by remember(variant) { mutableStateOf<Painter?>(null) }
+			var bounds by remember { mutableStateOf<Rect?>(null) }
 			Box(
 				modifier = modifier
 					.height(180.dp)
 					.clip(shape)
-					.clickable { onImageClick(0) }
+					.graphicsLayer { alpha = if (hiddenImageIndex == 0) hiddenImageRevealProgress else 1f }
+					.clickable { onImageClick(0, bounds, painter) }
+					.onGloballyPositioned { bounds = it.boundsInWindow() }
 			) {
-					ProgressiveImage(
-						lqUrl = variant.lqUrl,
-						previewUrl = variant.previewUrl,
-						fullUrl = variant.fullUrl,
-						mode = ProgressiveImageMode.LIST,
-						contentDescription = null,
-						contentScale = ContentScale.Crop,
-						modifier = Modifier.fillMaxSize()
-					)
-				}
+				ProgressiveImage(
+					lqUrl = variant.lqUrl,
+					previewUrl = variant.previewUrl,
+					fullUrl = variant.fullUrl,
+					mode = ProgressiveImageMode.LIST,
+					contentDescription = null,
+					contentScale = ContentScale.Crop,
+					onPainterChanged = { painter = it },
+					modifier = Modifier.fillMaxSize()
+				)
 			}
+		}
 		2 -> {
 			Row(
 				modifier = modifier
 					.clip(shape)
 			) {
-				ImageCell(variants[0], Modifier.weight(1f), onClick = { onImageClick(0) })
+				ImageCell(variants[0], Modifier.weight(1f), hiddenImageIndex == 0, hiddenImageRevealProgress, onClick = { bounds, painter -> onImageClick(0, bounds, painter) })
 				Spacer(Modifier.width(2.dp))
-				ImageCell(variants[1], Modifier.weight(1f), onClick = { onImageClick(1) })
+				ImageCell(variants[1], Modifier.weight(1f), hiddenImageIndex == 1, hiddenImageRevealProgress, onClick = { bounds, painter -> onImageClick(1, bounds, painter) })
 			}
 		}
 		3 -> {
@@ -183,12 +203,12 @@ private fun PostImageGrid(
 					.clip(shape)
 			) {
 				Row {
-					ImageCell(variants[0], Modifier.weight(1f), onClick = { onImageClick(0) })
+					ImageCell(variants[0], Modifier.weight(1f), hiddenImageIndex == 0, hiddenImageRevealProgress, onClick = { bounds, painter -> onImageClick(0, bounds, painter) })
 					Spacer(Modifier.width(2.dp))
-					ImageCell(variants[1], Modifier.weight(1f), onClick = { onImageClick(1) })
+					ImageCell(variants[1], Modifier.weight(1f), hiddenImageIndex == 1, hiddenImageRevealProgress, onClick = { bounds, painter -> onImageClick(1, bounds, painter) })
 				}
 				Spacer(Modifier.height(2.dp))
-				ImageCell(variants[2], Modifier.fillMaxWidth(), onClick = { onImageClick(2) })
+				ImageCell(variants[2], Modifier.fillMaxWidth(), hiddenImageIndex == 2, hiddenImageRevealProgress, onClick = { bounds, painter -> onImageClick(2, bounds, painter) })
 			}
 		}
 		else -> {
@@ -197,15 +217,15 @@ private fun PostImageGrid(
 					.clip(shape)
 			) {
 				Row {
-					ImageCell(variants[0], Modifier.weight(1f), onClick = { onImageClick(0) })
+					ImageCell(variants[0], Modifier.weight(1f), hiddenImageIndex == 0, hiddenImageRevealProgress, onClick = { bounds, painter -> onImageClick(0, bounds, painter) })
 					Spacer(Modifier.width(2.dp))
-					ImageCell(variants[1], Modifier.weight(1f), onClick = { onImageClick(1) })
+					ImageCell(variants[1], Modifier.weight(1f), hiddenImageIndex == 1, hiddenImageRevealProgress, onClick = { bounds, painter -> onImageClick(1, bounds, painter) })
 				}
 				Spacer(Modifier.height(2.dp))
 				Row {
-					ImageCell(variants[2], Modifier.weight(1f), onClick = { onImageClick(2) })
+					ImageCell(variants[2], Modifier.weight(1f), hiddenImageIndex == 2, hiddenImageRevealProgress, onClick = { bounds, painter -> onImageClick(2, bounds, painter) })
 					Spacer(Modifier.width(2.dp))
-					ImageCell(variants[3], Modifier.weight(1f), onClick = { onImageClick(3) })
+					ImageCell(variants[3], Modifier.weight(1f), hiddenImageIndex == 3, hiddenImageRevealProgress, onClick = { bounds, painter -> onImageClick(3, bounds, painter) })
 				}
 			}
 		}
@@ -216,14 +236,20 @@ private fun PostImageGrid(
 private fun ImageCell(
 	variant: PostImageVariant,
 	modifier: Modifier = Modifier,
-	onClick: () -> Unit
+	hidden: Boolean = false,
+	hiddenRevealProgress: Float = 0f,
+	onClick: (Rect?, Painter?) -> Unit
 ) {
+	var bounds by remember { mutableStateOf<Rect?>(null) }
+	var painter by remember(variant) { mutableStateOf<Painter?>(null) }
 	Box(
 		modifier = modifier
 			.height(90.dp)
 			.clip(RoundedCornerShape(4.dp))
+			.graphicsLayer { alpha = if (hidden) hiddenRevealProgress else 1f }
 			.background(Color.LightGray)
-			.clickable { onClick() }
+			.clickable { onClick(bounds, painter) }
+			.onGloballyPositioned { bounds = it.boundsInWindow() }
 	) {
 		ProgressiveImage(
 			lqUrl = variant.lqUrl,
@@ -232,6 +258,7 @@ private fun ImageCell(
 			mode = ProgressiveImageMode.LIST,
 			contentDescription = null,
 			contentScale = ContentScale.Crop,
+			onPainterChanged = { painter = it },
 			modifier = Modifier.fillMaxSize()
 		)
 	}

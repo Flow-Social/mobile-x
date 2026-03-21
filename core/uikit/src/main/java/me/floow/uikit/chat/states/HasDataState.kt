@@ -56,6 +56,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -145,7 +146,9 @@ fun HasDataState(
 	onReply: (ChatMessage) -> Unit,
 	onReplyClick: (ChatMessage) -> Unit,
 	onRetrySendClick: ((ChatMessage) -> Unit)? = null,
-	onPostImageClick: (PostPreviewMessage, Int) -> Unit,
+	onPostImageClick: (PostPreviewMessage, Int, Rect?, Painter?) -> Unit,
+	hiddenPostImageIndex: Int?,
+	hiddenPostImageRevealProgress: Float,
 	onRequestScrollToBottom: () -> Unit = {},
 	onUserStartedScroll: () -> Unit = {},
 	onViewportSnapshotChanged: (ChatViewportSnapshot) -> Unit = {},
@@ -1209,9 +1212,11 @@ fun HasDataState(
 												likesCount = preview.likesCount,
 												description = preview.messageText,
 												dateTime = preview.dateTime,
-												onImageClick = { imageIndex ->
+												hiddenImageIndex = hiddenPostImageIndex,
+												hiddenImageRevealProgress = hiddenPostImageRevealProgress,
+												onImageClick = { imageIndex, bounds, painter ->
 													if (!isSelectionMode) {
-														onPostImageClick(preview, imageIndex)
+														onPostImageClick(preview, imageIndex, bounds, painter)
 													}
 												},
 												modifier = Modifier.widthIn(max = 280.dp)

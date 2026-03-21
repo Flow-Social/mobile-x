@@ -146,7 +146,7 @@ fun ChatRoute(
 		onAnchorRestoreSettled = vm::onAnchorRestoreSettled,
 		onAnchorRestoreTimedOut = vm::onAnchorRestoreTimedOut,
 		onLoadMore = vm::loadMore,
-		onPostImageClick = { _, _ -> },
+		onPostImageClick = { _, _, _, _ -> },
 		onPinMessage = vm::pinMessage,
 		onUnpinMessage = vm::unpinMessage,
 		onDeleteMessage = vm::deleteMessage,
