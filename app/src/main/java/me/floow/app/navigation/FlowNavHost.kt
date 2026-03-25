@@ -1,9 +1,14 @@
 package me.floow.app.navigation
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -42,6 +47,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -254,6 +260,13 @@ fun FlowNavHost(
 	val previewCacheWindow = remember { ArrayDeque<Pair<String, List<String>>>() }
 	val editedPostOverrides = remember { mutableStateMapOf<String, PostContentOverride>() }
 	val postCacheById = remember { mutableStateMapOf<String, me.floow.domain.models.Post>() }
+	var didHandleFeedNotificationsPermission by remember { mutableStateOf(false) }
+	val notificationsPermissionLauncher =
+		rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+			if (isGranted) {
+				PushTokenSyncScheduler.enqueueNow(context.applicationContext)
+			}
+		}
 
 	val deepLinkIntent by deepLinkDispatcher.intentFlow.collectAsState()
 
@@ -275,6 +288,31 @@ fun FlowNavHost(
 		} else {
 			notificationsBadgeViewModel.stopPolling(resetUnread = true)
 			directChatsSyncCoordinator.stop()
+		}
+	}
+
+	val requestNotificationsPermissionOnFeedEntry: () -> Unit = remember(
+		context,
+		notificationsPermissionLauncher
+	) {
+		{
+			if (!didHandleFeedNotificationsPermission) {
+				didHandleFeedNotificationsPermission = true
+
+				if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+					PushTokenSyncScheduler.enqueueNow(context.applicationContext)
+				} else {
+					val hasPermission = ContextCompat.checkSelfPermission(
+						context,
+						Manifest.permission.POST_NOTIFICATIONS
+					) == PackageManager.PERMISSION_GRANTED
+					if (hasPermission) {
+						PushTokenSyncScheduler.enqueueNow(context.applicationContext)
+					} else {
+						notificationsPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+					}
+				}
+			}
 		}
 	}
 
@@ -1336,6 +1374,7 @@ fun FlowNavHost(
 								},
 								isMockBuild = me.floow.app.BuildConfig.USE_MOCK_DATA,
 								isDebugBuild = me.floow.app.BuildConfig.DEBUG,
+								onFeedVisible = requestNotificationsPermissionOnFeedEntry,
 								modifier = Modifier.fillMaxSize(),
 								viewModel = feedViewModel
 							)

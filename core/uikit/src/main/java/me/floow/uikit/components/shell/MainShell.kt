@@ -15,7 +15,7 @@ import androidx.compose.ui.unit.dp
 
 object MainShellDefaults {
     val contentShape: Shape
-        @Composable get() = RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp)
+        @Composable get() = RoundedCornerShape(bottomStart = 36.dp, bottomEnd = 36.dp)
 
     val appBackgroundColor: Color
         @Composable get() = MaterialTheme.colorScheme.surfaceContainer
