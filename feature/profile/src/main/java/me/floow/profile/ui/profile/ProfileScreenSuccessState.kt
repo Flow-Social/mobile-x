@@ -66,6 +66,8 @@ import androidx.compose.ui.text.font.FontWeight
 import kotlin.math.abs
 import me.floow.domain.models.Post
 import me.floow.profile.ui.profile.segments.buttons.ProfileButtonsSegment
+import me.floow.profile.ui.common.bumpSheetStatusBarAppearance
+import me.floow.profile.ui.common.SheetStatusBarStyle
 import me.floow.profile.ui.profile.bump.BumpBleProximityEffect
 import me.floow.profile.ui.profile.bump.BumpDetectorEffect
 import me.floow.profile.uilogic.bump.ProfileBumpMode
@@ -118,6 +120,7 @@ fun ProfileScreenSuccessState(
     onSharePost: (Post) -> Unit = {},
     onDeletePost: (String) -> Unit = {},
 	onLoadMorePosts: () -> Unit = {},
+    suppressStatusBarStyle: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     var postToDelete by remember { mutableStateOf<Post?>(null) }
@@ -136,6 +139,22 @@ fun ProfileScreenSuccessState(
                 scaffoldState.bottomSheetState.targetValue == SheetValue.Expanded
         }
     }
+    val isPostMenuSheetVisible by remember(showMenuForPost, postMenuSheetState) {
+        derivedStateOf {
+            showMenuForPost != null && (
+                postMenuSheetState.currentValue != SheetValue.Hidden ||
+                    postMenuSheetState.targetValue != SheetValue.Hidden
+                )
+        }
+    }
+    val isBumpSheetVisible by remember(bumpUiState.isSheetVisible, bumpSheetState) {
+        derivedStateOf {
+            bumpUiState.isSheetVisible && (
+                bumpSheetState.currentValue != SheetValue.Hidden ||
+                    bumpSheetState.targetValue != SheetValue.Hidden
+                )
+        }
+    }
     val isPostsGridAtTop by remember {
         derivedStateOf {
             postsGridState.firstVisibleItemIndex == 0 &&
@@ -147,22 +166,25 @@ fun ProfileScreenSuccessState(
         animationSpec = tween(durationMillis = 220),
         label = "sheetCornerRadius"
     )
-    val statusBarColor = if (isSheetExpanded) {
-        MaterialTheme.colorScheme.surfaceContainerHigh
-    } else {
-        Color.Transparent
+    val statusBarColor = when {
+        isBumpSheetVisible -> MaterialTheme.colorScheme.surfaceContainerHigh
+        isSheetExpanded -> MaterialTheme.colorScheme.surfaceContainerHigh
+        else -> Color.Transparent
     }
-    val useDarkStatusIcons = if (isSheetExpanded) {
-        statusBarColor.luminance() > 0.5f
-    } else {
-        false
+    val useDarkStatusIcons = when {
+        isBumpSheetVisible -> false
+        isPostMenuSheetVisible -> statusBarColor.luminance() > 0.5f
+        isSheetExpanded -> statusBarColor.luminance() > 0.5f
+        else -> false
     }
     val haptic = LocalHapticFeedback.current
     var heroBoundsInWindow by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
-    SetStatusBarStyle(
-        color = statusBarColor,
-        darkIcons = useDarkStatusIcons
-    )
+    if (!suppressStatusBarStyle) {
+        SetStatusBarStyle(
+            color = statusBarColor,
+            darkIcons = useDarkStatusIcons
+        )
+    }
     LaunchedEffect(scaffoldState.bottomSheetState) {
         var lastCurrent = scaffoldState.bottomSheetState.currentValue
         var lastTarget = scaffoldState.bottomSheetState.targetValue
@@ -508,6 +530,9 @@ private fun ShareAndBumpSheetContent(
     onShowQrClick: () -> Unit,
     onShareLinkClick: () -> Unit,
 ) {
+    SheetStatusBarStyle(
+        appearance = bumpSheetStatusBarAppearance(MaterialTheme.colorScheme),
+    )
     val mode = bumpUiState.mode
     val hasError = !bumpUiState.errorMessage.isNullOrBlank()
     val helperText = when {

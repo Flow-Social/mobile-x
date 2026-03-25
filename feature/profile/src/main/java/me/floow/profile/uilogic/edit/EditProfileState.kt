@@ -13,7 +13,6 @@ interface EditProfileState {
 		val backgroundPreviewUri: String? = null,
 		val backgroundRemoteUrl: String? = null,
 		val backgroundErrorMessage: String? = null,
+		val isSubmitting: Boolean = false,
 	) : EditProfileState
-
-	data object Uploading : EditProfileState
 }

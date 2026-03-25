@@ -684,7 +684,6 @@ fun FlowNavHost(
 				}
 
 					ProfileRoute(
-							goToProfileEditScreen = { _, _, _, _, _ -> },
 						goToAddPostScreen = {},
 						onPostClick = { post, sourceSnapshot ->
 							openPostOverlay(post = post, isSelf = false, sourceSnapshot = sourceSnapshot)
@@ -718,6 +717,9 @@ fun FlowNavHost(
 						viewModel = profileVm,
 						bumpViewModel = koinViewModel(
 							key = "overlay-${overlayId}-profile-bump-${overlay.userId}"
+						),
+						editProfileViewModel = koinViewModel(
+							key = "overlay-${overlayId}-profile-edit-${overlay.userId}"
 						),
 						modifier = Modifier.fillMaxSize()
 					)
@@ -1412,7 +1414,6 @@ fun FlowNavHost(
 					) { backStackEntry ->
 						val profileScreenRoute = backStackEntry.toRoute<ProfileScreen>()
 								ProfileRoute(
-							goToProfileEditScreen = { _, _, _, _, _ -> },
 								goToAddPostScreen = {},
 								onPostClick = { post, sourceSnapshot ->
 									openPostOverlay(post = post, isSelf = false, sourceSnapshot = sourceSnapshot)
@@ -1609,15 +1610,6 @@ fun FlowNavHost(
 								chatsUnreadCount = chatsUnreadCount
 							) { padding ->
 							ProfileRoute(
-								goToProfileEditScreen = { name, username, description, avatarUrl, backgroundUrl ->
-									pushOverlay(OverlayScreen.OverlayEditProfile(
-										name = name,
-										username = username,
-										description = description,
-										avatarUrl = avatarUrl,
-										backgroundUrl = backgroundUrl,
-									))
-								},
 										goToAddPostScreen = {
 											pushOverlay(OverlayScreen.OverlayCreatePost)
 										},
@@ -1653,6 +1645,7 @@ fun FlowNavHost(
 								},
 								viewModel = koinViewModel(),
 								bumpViewModel = koinViewModel(key = "self-profile-bump"),
+								editProfileViewModel = koinViewModel(key = "self-profile-edit"),
 								modifier = Modifier.fillMaxSize()
 							)
 						}

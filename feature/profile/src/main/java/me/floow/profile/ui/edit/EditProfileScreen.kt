@@ -31,12 +31,10 @@ internal fun EditProfileScreen(
 ) {
 	Scaffold(
 		topBar = {
-			if (state is EditProfileState.Edit) {
-				EditProfileScreenTopBar(
-					onBackClick = onBackClick,
-					onDoneClick = onDoneClick
-				)
-			}
+			EditProfileScreenTopBar(
+				onBackClick = onBackClick,
+				onDoneClick = onDoneClick
+			)
 		},
 		modifier = modifier
 	) { innerPadding ->
@@ -46,24 +44,20 @@ internal fun EditProfileScreen(
 				.fillMaxSize()
 				.navigationBarsPadding()
 		) {
-			when (state) {
-				is EditProfileState.Uploading -> {
-					FlowLoadingIndicator(
-						Modifier
-							.align(Alignment.Center)
-					)
-				}
-
-				is EditProfileState.Edit -> {
-					EditState(
-						onAvatarPickerClick,
-						onBackgroundPickerClick,
-						state,
-						onNameChange,
-						onUsernameChange,
-						onBiographyChange
-					)
-				}
+			val editState = state as? EditProfileState.Edit ?: return@Box
+			EditState(
+				onAvatarPickerClick,
+				onBackgroundPickerClick,
+				editState,
+				onNameChange,
+				onUsernameChange,
+				onBiographyChange
+			)
+			if (editState.isSubmitting) {
+				FlowLoadingIndicator(
+					Modifier
+						.align(Alignment.Center)
+				)
 			}
 		}
 	}

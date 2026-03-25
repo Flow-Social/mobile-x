@@ -28,9 +28,10 @@ fun ProfileScreen(
     onBackClick: () -> Unit = {},
     onPostClick: (me.floow.domain.models.Post, PostMediaSourceSnapshot?) -> Unit,
     onSharePost: (me.floow.domain.models.Post) -> Unit = {},
-    onEditPost: (me.floow.domain.models.Post, PostMediaSourceSnapshot?) -> Unit = { _, _ -> },
+	onEditPost: (me.floow.domain.models.Post, PostMediaSourceSnapshot?) -> Unit = { _, _ -> },
     onDeletePost: (String) -> Unit = {},
 	onLoadMorePosts: () -> Unit = {},
+	suppressStatusBarStyle: Boolean = false,
 	state: ProfileScreenState,
 	modifier: Modifier = Modifier,
 ) {
@@ -71,9 +72,10 @@ fun ProfileScreen(
 	                    onBackClick = onBackClick,
 	                    onPostClick = onPostClick,
 	                onSharePost = onSharePost,
-	                onEditPost = onEditPost,
+					onEditPost = onEditPost,
 	                onDeletePost = onDeletePost,
 					onLoadMorePosts = onLoadMorePosts,
+					suppressStatusBarStyle = suppressStatusBarStyle,
 						modifier = Modifier
 					)
 				}

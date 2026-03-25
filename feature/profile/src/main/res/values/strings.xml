@@ -47,6 +47,19 @@
     <string name="bump_sheet_headline_line2">to find a friend!</string>
     <string name="bump_show_qr_action">Show QR code</string>
     <string name="bump_share_link_action">Share profile link</string>
+    <string name="edit_profile_sheet_title">Edit</string>
+    <string name="edit_profile_sheet_close">Close edit profile</string>
+    <string name="edit_profile_sheet_save">Save</string>
+    <string name="edit_profile_sheet_change_background">change background</string>
+    <string name="edit_profile_sheet_change_avatar">change</string>
+    <string name="edit_profile_sheet_name_label">Name</string>
+    <string name="edit_profile_sheet_name_placeholder">Enter your name</string>
+    <string name="edit_profile_sheet_username_label">ID</string>
+    <string name="edit_profile_sheet_username_prefix" translatable="false">Floow.me/@</string>
+    <string name="edit_profile_sheet_username_placeholder">your_nickname</string>
+    <string name="edit_profile_sheet_username_taken">This username is already taken</string>
+    <string name="edit_profile_sheet_bio_label">About me</string>
+    <string name="edit_profile_sheet_bio_placeholder">Write something about yourself</string>
 
     <plurals name="likes_count">
         <item quantity="one">%1$s like</item>
