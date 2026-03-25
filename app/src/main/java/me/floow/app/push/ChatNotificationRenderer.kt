@@ -92,7 +92,8 @@ class ChatNotificationRenderer(
 					conversationId = payload.conversationId,
 					messageId = payload.messageId.toString(),
 					interlocutorId = payload.senderId,
-					interlocutorName = payload.senderName
+					interlocutorName = payload.senderName,
+					interlocutorAvatarUrl = payload.senderAvatarUrl
 				)?.let { data = it }
 			},
 			PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE

@@ -126,7 +126,8 @@ class FlowFirebaseMessagingService : FirebaseMessagingService() {
 			conversationId = conversationId,
 			messageId = message.data["message_id"],
 			interlocutorId = message.data["sender_id"],
-			interlocutorName = message.data["sender_name"]
+			interlocutorName = message.data["sender_name"],
+			interlocutorAvatarUrl = message.data["sender_avatar_url"]
 		)
 	}
 

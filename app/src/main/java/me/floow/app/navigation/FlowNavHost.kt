@@ -313,6 +313,26 @@ fun FlowNavHost(
 		overlayProgress = 1f
 	}
 
+	fun openOrReuseChatOverlay(screen: OverlayScreen.OverlayChat) {
+		val topIndex = overlayStack.lastIndex
+		val topChat = overlayStack.lastOrNull()?.screen as? OverlayScreen.OverlayChat
+		val matchesCurrentTopChat = topChat?.let { current ->
+			val sameConversation = screen.conversationId != null &&
+				current.conversationId != null &&
+				screen.conversationId == current.conversationId
+			val sameInterlocutor = screen.interlocutorId.isNotBlank() &&
+				screen.interlocutorId == current.interlocutorId
+			sameConversation || sameInterlocutor
+		} == true
+
+		if (matchesCurrentTopChat && topIndex >= 0) {
+			overlayStack[topIndex] = overlayStack[topIndex].copy(screen = screen)
+			return
+		}
+
+		pushOverlay(screen)
+	}
+
 	fun buildPostMediaSnapshot(
 		post: me.floow.domain.models.Post,
 		owner: PostMediaSourceOwner
@@ -1386,6 +1406,9 @@ fun FlowNavHost(
 								bumpViewModel = koinViewModel(
 									key = "profile-screen-bump-${profileScreenRoute.userId}"
 								),
+								editProfileViewModel = koinViewModel(
+									key = "profile-screen-edit-${profileScreenRoute.userId}"
+								),
 								modifier = Modifier.fillMaxSize()
 							)
 						}
@@ -1605,8 +1628,16 @@ fun FlowNavHost(
 							.get<String>(CHAT_DEEPLINK_INTERLOCUTOR_ID_KEY)
 						val openInterlocutorName = backStackEntry.savedStateHandle
 							.get<String>(CHAT_DEEPLINK_INTERLOCUTOR_NAME_KEY)
+						val openInterlocutorAvatarUrl = backStackEntry.savedStateHandle
+							.get<String>(CHAT_DEEPLINK_INTERLOCUTOR_AVATAR_URL_KEY)
 
-						LaunchedEffect(openConversationId, openMessageId, openInterlocutorId, openInterlocutorName) {
+						LaunchedEffect(
+							openConversationId,
+							openMessageId,
+							openInterlocutorId,
+							openInterlocutorName,
+							openInterlocutorAvatarUrl
+						) {
 							val conversationId = openConversationId
 								?.trim()
 								?.toLongOrNull()
@@ -1620,14 +1651,17 @@ fun FlowNavHost(
 							backStackEntry.savedStateHandle.remove<String>(CHAT_DEEPLINK_MESSAGE_ID_KEY)
 							backStackEntry.savedStateHandle.remove<String>(CHAT_DEEPLINK_INTERLOCUTOR_ID_KEY)
 							backStackEntry.savedStateHandle.remove<String>(CHAT_DEEPLINK_INTERLOCUTOR_NAME_KEY)
-							pushOverlay(
+							backStackEntry.savedStateHandle.remove<String>(CHAT_DEEPLINK_INTERLOCUTOR_AVATAR_URL_KEY)
+							openOrReuseChatOverlay(
 								OverlayScreen.OverlayChat(
 									interlocutorId = openInterlocutorId?.trim().orEmpty(),
 									interlocutorName = openInterlocutorName
 										?.trim()
 										?.takeIf(String::isNotEmpty)
 										?: "Чат",
-									interlocutorAvatarUri = null,
+									interlocutorAvatarUri = openInterlocutorAvatarUrl
+										?.trim()
+										?.takeIf(String::isNotEmpty),
 									conversationId = conversationId,
 									messageAnchorId = messageAnchorId,
 									openMode = DirectChatOpenMode.FROM_MESSAGE_LINK
@@ -1879,6 +1913,7 @@ private const val CHAT_DEEPLINK_CONVERSATION_ID_KEY = "open_chat_conversation_id
 private const val CHAT_DEEPLINK_MESSAGE_ID_KEY = "open_chat_message_id"
 private const val CHAT_DEEPLINK_INTERLOCUTOR_ID_KEY = "open_chat_interlocutor_id"
 private const val CHAT_DEEPLINK_INTERLOCUTOR_NAME_KEY = "open_chat_interlocutor_name"
+private const val CHAT_DEEPLINK_INTERLOCUTOR_AVATAR_URL_KEY = "open_chat_interlocutor_avatar_url"
 
 private suspend fun handleChatConversationDeepLinkIntent(
 	intent: Intent,
@@ -1898,6 +1933,9 @@ private suspend fun handleChatConversationDeepLinkIntent(
 		?.trim()
 		?.takeIf(String::isNotEmpty)
 	val interlocutorName = data.getQueryParameter("interlocutor_name")
+		?.trim()
+		?.takeIf(String::isNotEmpty)
+	val interlocutorAvatarUrl = data.getQueryParameter("interlocutor_avatar_url")
 		?.trim()
 		?.takeIf(String::isNotEmpty)
 
@@ -1922,6 +1960,9 @@ private suspend fun handleChatConversationDeepLinkIntent(
 			interlocutorName?.let { nonBlankInterlocutorName ->
 				targetEntry.savedStateHandle[CHAT_DEEPLINK_INTERLOCUTOR_NAME_KEY] = nonBlankInterlocutorName
 			}
+			interlocutorAvatarUrl?.let { nonBlankInterlocutorAvatarUrl ->
+				targetEntry.savedStateHandle[CHAT_DEEPLINK_INTERLOCUTOR_AVATAR_URL_KEY] = nonBlankInterlocutorAvatarUrl
+			}
 			return true
 		}
 		kotlinx.coroutines.delay(16L)
@@ -1936,6 +1977,9 @@ private suspend fun handleChatConversationDeepLinkIntent(
 	}
 	interlocutorName?.let { nonBlankInterlocutorName ->
 		navController.currentBackStackEntry?.savedStateHandle?.set(CHAT_DEEPLINK_INTERLOCUTOR_NAME_KEY, nonBlankInterlocutorName)
+	}
+	interlocutorAvatarUrl?.let { nonBlankInterlocutorAvatarUrl ->
+		navController.currentBackStackEntry?.savedStateHandle?.set(CHAT_DEEPLINK_INTERLOCUTOR_AVATAR_URL_KEY, nonBlankInterlocutorAvatarUrl)
 	}
 	return true
 }
