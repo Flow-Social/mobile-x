@@ -31,6 +31,7 @@ fun FeedRoute(
 	onCommentsClick: (me.floow.domain.models.Post) -> Unit = {},
 	onSharePost: (me.floow.domain.models.Post) -> Unit = {},
 	onEditPost: (me.floow.domain.models.Post) -> Unit = {},
+	onFeedVisible: () -> Unit = {},
 	isMockBuild: Boolean = false, // Передается из app модуля
 	isDebugBuild: Boolean = false,
 	modifier: Modifier = Modifier,
@@ -56,7 +57,10 @@ fun FeedRoute(
 	DisposableEffect(lifecycleOwner, viewModel) {
 		val observer = LifecycleEventObserver { _, event ->
 			when (event) {
-				Lifecycle.Event.ON_RESUME -> viewModel.onFeedScreenVisible()
+				Lifecycle.Event.ON_RESUME -> {
+					onFeedVisible()
+					viewModel.onFeedScreenVisible()
+				}
 				Lifecycle.Event.ON_PAUSE -> viewModel.onFeedScreenHidden()
 				else -> Unit
 			}

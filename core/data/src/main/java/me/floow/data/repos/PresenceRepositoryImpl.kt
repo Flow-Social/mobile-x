@@ -38,6 +38,7 @@ class PresenceRepositoryImpl(
 	private val authenticationManager: AuthenticationManager,
 	private val sessionStore: PresenceSessionStore
 ) : PresenceRepository {
+	private val realtimeLoopLock = Any()
 	private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 	private val stateMutex = Mutex()
 	private val _presences = MutableStateFlow<Map<String, UserPresence>>(emptyMap())
@@ -125,8 +126,10 @@ class PresenceRepositoryImpl(
 	}
 
 	private fun ensureRealtimeLoop() {
-		if (!isForeground || realtimeJob?.isActive == true) return
-		realtimeJob = scope.launch {
+		if (!isForeground) return
+		val jobToStart = synchronized(realtimeLoopLock) {
+			if (realtimeJob?.isActive == true) return
+			scope.launch {
 			var backoffMs = REALTIME_RECONNECT_MIN_MS
 			while (isActive && isForeground) {
 				val desiredSnapshot = stateMutex.withLock { desiredTargets }
@@ -175,6 +178,8 @@ class PresenceRepositoryImpl(
 				backoffMs = (backoffMs * 2).coerceAtMost(REALTIME_RECONNECT_MAX_MS)
 			}
 		}
+		}
+		realtimeJob = jobToStart
 	}
 
 	private suspend fun syncRealtimeTargets(targets: Set<String>) {

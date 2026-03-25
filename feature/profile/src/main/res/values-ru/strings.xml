@@ -46,6 +46,19 @@
     <string name="bump_sheet_headline_line2">чтобы найти друга!</string>
     <string name="bump_show_qr_action">Показать QR-код</string>
     <string name="bump_share_link_action">Поделиться ссылкой</string>
+    <string name="edit_profile_sheet_title">Редактировать</string>
+    <string name="edit_profile_sheet_close">Закрыть редактирование профиля</string>
+    <string name="edit_profile_sheet_save">Сохранить</string>
+    <string name="edit_profile_sheet_change_background">изменить фон</string>
+    <string name="edit_profile_sheet_change_avatar">изменить</string>
+    <string name="edit_profile_sheet_name_label">Имя</string>
+    <string name="edit_profile_sheet_name_placeholder">введите имя</string>
+    <string name="edit_profile_sheet_username_label">ID</string>
+    <string name="edit_profile_sheet_username_prefix" translatable="false">Floow.me/@</string>
+    <string name="edit_profile_sheet_username_placeholder">ваш_ник</string>
+    <string name="edit_profile_sheet_username_taken">Этот юзернейм уже занят</string>
+    <string name="edit_profile_sheet_bio_label">О себе</string>
+    <string name="edit_profile_sheet_bio_placeholder">напишите здесь что-то о себе</string>
 
     <plurals name="likes_count">
         <item quantity="one">%1$s лайк</item>

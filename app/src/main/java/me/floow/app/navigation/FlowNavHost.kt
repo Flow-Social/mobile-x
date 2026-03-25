@@ -1,9 +1,14 @@
 package me.floow.app.navigation
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -42,6 +47,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -254,6 +260,13 @@ fun FlowNavHost(
 	val previewCacheWindow = remember { ArrayDeque<Pair<String, List<String>>>() }
 	val editedPostOverrides = remember { mutableStateMapOf<String, PostContentOverride>() }
 	val postCacheById = remember { mutableStateMapOf<String, me.floow.domain.models.Post>() }
+	var didHandleFeedNotificationsPermission by remember { mutableStateOf(false) }
+	val notificationsPermissionLauncher =
+		rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+			if (isGranted) {
+				PushTokenSyncScheduler.enqueueNow(context.applicationContext)
+			}
+		}
 
 	val deepLinkIntent by deepLinkDispatcher.intentFlow.collectAsState()
 
@@ -275,6 +288,31 @@ fun FlowNavHost(
 		} else {
 			notificationsBadgeViewModel.stopPolling(resetUnread = true)
 			directChatsSyncCoordinator.stop()
+		}
+	}
+
+	val requestNotificationsPermissionOnFeedEntry: () -> Unit = remember(
+		context,
+		notificationsPermissionLauncher
+	) {
+		{
+			if (!didHandleFeedNotificationsPermission) {
+				didHandleFeedNotificationsPermission = true
+
+				if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+					PushTokenSyncScheduler.enqueueNow(context.applicationContext)
+				} else {
+					val hasPermission = ContextCompat.checkSelfPermission(
+						context,
+						Manifest.permission.POST_NOTIFICATIONS
+					) == PackageManager.PERMISSION_GRANTED
+					if (hasPermission) {
+						PushTokenSyncScheduler.enqueueNow(context.applicationContext)
+					} else {
+						notificationsPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+					}
+				}
+			}
 		}
 	}
 
@@ -311,6 +349,26 @@ fun FlowNavHost(
 		// New overlay starts offscreen to the right (progress=1) and animates in to 0.
 		// Keeping this in sync prevents the underlay from "jumping" on the first frame.
 		overlayProgress = 1f
+	}
+
+	fun openOrReuseChatOverlay(screen: OverlayScreen.OverlayChat) {
+		val topIndex = overlayStack.lastIndex
+		val topChat = overlayStack.lastOrNull()?.screen as? OverlayScreen.OverlayChat
+		val matchesCurrentTopChat = topChat?.let { current ->
+			val sameConversation = screen.conversationId != null &&
+				current.conversationId != null &&
+				screen.conversationId == current.conversationId
+			val sameInterlocutor = screen.interlocutorId.isNotBlank() &&
+				screen.interlocutorId == current.interlocutorId
+			sameConversation || sameInterlocutor
+		} == true
+
+		if (matchesCurrentTopChat && topIndex >= 0) {
+			overlayStack[topIndex] = overlayStack[topIndex].copy(screen = screen)
+			return
+		}
+
+		pushOverlay(screen)
 	}
 
 	fun buildPostMediaSnapshot(
@@ -626,7 +684,6 @@ fun FlowNavHost(
 				}
 
 					ProfileRoute(
-							goToProfileEditScreen = { _, _, _, _, _ -> },
 						goToAddPostScreen = {},
 						onPostClick = { post, sourceSnapshot ->
 							openPostOverlay(post = post, isSelf = false, sourceSnapshot = sourceSnapshot)
@@ -660,6 +717,9 @@ fun FlowNavHost(
 						viewModel = profileVm,
 						bumpViewModel = koinViewModel(
 							key = "overlay-${overlayId}-profile-bump-${overlay.userId}"
+						),
+						editProfileViewModel = koinViewModel(
+							key = "overlay-${overlayId}-profile-edit-${overlay.userId}"
 						),
 						modifier = Modifier.fillMaxSize()
 					)
@@ -1316,6 +1376,7 @@ fun FlowNavHost(
 								},
 								isMockBuild = me.floow.app.BuildConfig.USE_MOCK_DATA,
 								isDebugBuild = me.floow.app.BuildConfig.DEBUG,
+								onFeedVisible = requestNotificationsPermissionOnFeedEntry,
 								modifier = Modifier.fillMaxSize(),
 								viewModel = feedViewModel
 							)
@@ -1353,7 +1414,6 @@ fun FlowNavHost(
 					) { backStackEntry ->
 						val profileScreenRoute = backStackEntry.toRoute<ProfileScreen>()
 								ProfileRoute(
-							goToProfileEditScreen = { _, _, _, _, _ -> },
 								goToAddPostScreen = {},
 								onPostClick = { post, sourceSnapshot ->
 									openPostOverlay(post = post, isSelf = false, sourceSnapshot = sourceSnapshot)
@@ -1385,6 +1445,9 @@ fun FlowNavHost(
 								viewModel = koinViewModel(),
 								bumpViewModel = koinViewModel(
 									key = "profile-screen-bump-${profileScreenRoute.userId}"
+								),
+								editProfileViewModel = koinViewModel(
+									key = "profile-screen-edit-${profileScreenRoute.userId}"
 								),
 								modifier = Modifier.fillMaxSize()
 							)
@@ -1547,15 +1610,6 @@ fun FlowNavHost(
 								chatsUnreadCount = chatsUnreadCount
 							) { padding ->
 							ProfileRoute(
-								goToProfileEditScreen = { name, username, description, avatarUrl, backgroundUrl ->
-									pushOverlay(OverlayScreen.OverlayEditProfile(
-										name = name,
-										username = username,
-										description = description,
-										avatarUrl = avatarUrl,
-										backgroundUrl = backgroundUrl,
-									))
-								},
 										goToAddPostScreen = {
 											pushOverlay(OverlayScreen.OverlayCreatePost)
 										},
@@ -1591,6 +1645,7 @@ fun FlowNavHost(
 								},
 								viewModel = koinViewModel(),
 								bumpViewModel = koinViewModel(key = "self-profile-bump"),
+								editProfileViewModel = koinViewModel(key = "self-profile-edit"),
 								modifier = Modifier.fillMaxSize()
 							)
 						}
@@ -1605,8 +1660,16 @@ fun FlowNavHost(
 							.get<String>(CHAT_DEEPLINK_INTERLOCUTOR_ID_KEY)
 						val openInterlocutorName = backStackEntry.savedStateHandle
 							.get<String>(CHAT_DEEPLINK_INTERLOCUTOR_NAME_KEY)
+						val openInterlocutorAvatarUrl = backStackEntry.savedStateHandle
+							.get<String>(CHAT_DEEPLINK_INTERLOCUTOR_AVATAR_URL_KEY)
 
-						LaunchedEffect(openConversationId, openMessageId, openInterlocutorId, openInterlocutorName) {
+						LaunchedEffect(
+							openConversationId,
+							openMessageId,
+							openInterlocutorId,
+							openInterlocutorName,
+							openInterlocutorAvatarUrl
+						) {
 							val conversationId = openConversationId
 								?.trim()
 								?.toLongOrNull()
@@ -1620,14 +1683,17 @@ fun FlowNavHost(
 							backStackEntry.savedStateHandle.remove<String>(CHAT_DEEPLINK_MESSAGE_ID_KEY)
 							backStackEntry.savedStateHandle.remove<String>(CHAT_DEEPLINK_INTERLOCUTOR_ID_KEY)
 							backStackEntry.savedStateHandle.remove<String>(CHAT_DEEPLINK_INTERLOCUTOR_NAME_KEY)
-							pushOverlay(
+							backStackEntry.savedStateHandle.remove<String>(CHAT_DEEPLINK_INTERLOCUTOR_AVATAR_URL_KEY)
+							openOrReuseChatOverlay(
 								OverlayScreen.OverlayChat(
 									interlocutorId = openInterlocutorId?.trim().orEmpty(),
 									interlocutorName = openInterlocutorName
 										?.trim()
 										?.takeIf(String::isNotEmpty)
 										?: "Чат",
-									interlocutorAvatarUri = null,
+									interlocutorAvatarUri = openInterlocutorAvatarUrl
+										?.trim()
+										?.takeIf(String::isNotEmpty),
 									conversationId = conversationId,
 									messageAnchorId = messageAnchorId,
 									openMode = DirectChatOpenMode.FROM_MESSAGE_LINK
@@ -1879,6 +1945,7 @@ private const val CHAT_DEEPLINK_CONVERSATION_ID_KEY = "open_chat_conversation_id
 private const val CHAT_DEEPLINK_MESSAGE_ID_KEY = "open_chat_message_id"
 private const val CHAT_DEEPLINK_INTERLOCUTOR_ID_KEY = "open_chat_interlocutor_id"
 private const val CHAT_DEEPLINK_INTERLOCUTOR_NAME_KEY = "open_chat_interlocutor_name"
+private const val CHAT_DEEPLINK_INTERLOCUTOR_AVATAR_URL_KEY = "open_chat_interlocutor_avatar_url"
 
 private suspend fun handleChatConversationDeepLinkIntent(
 	intent: Intent,
@@ -1898,6 +1965,9 @@ private suspend fun handleChatConversationDeepLinkIntent(
 		?.trim()
 		?.takeIf(String::isNotEmpty)
 	val interlocutorName = data.getQueryParameter("interlocutor_name")
+		?.trim()
+		?.takeIf(String::isNotEmpty)
+	val interlocutorAvatarUrl = data.getQueryParameter("interlocutor_avatar_url")
 		?.trim()
 		?.takeIf(String::isNotEmpty)
 
@@ -1922,6 +1992,9 @@ private suspend fun handleChatConversationDeepLinkIntent(
 			interlocutorName?.let { nonBlankInterlocutorName ->
 				targetEntry.savedStateHandle[CHAT_DEEPLINK_INTERLOCUTOR_NAME_KEY] = nonBlankInterlocutorName
 			}
+			interlocutorAvatarUrl?.let { nonBlankInterlocutorAvatarUrl ->
+				targetEntry.savedStateHandle[CHAT_DEEPLINK_INTERLOCUTOR_AVATAR_URL_KEY] = nonBlankInterlocutorAvatarUrl
+			}
 			return true
 		}
 		kotlinx.coroutines.delay(16L)
@@ -1936,6 +2009,9 @@ private suspend fun handleChatConversationDeepLinkIntent(
 	}
 	interlocutorName?.let { nonBlankInterlocutorName ->
 		navController.currentBackStackEntry?.savedStateHandle?.set(CHAT_DEEPLINK_INTERLOCUTOR_NAME_KEY, nonBlankInterlocutorName)
+	}
+	interlocutorAvatarUrl?.let { nonBlankInterlocutorAvatarUrl ->
+		navController.currentBackStackEntry?.savedStateHandle?.set(CHAT_DEEPLINK_INTERLOCUTOR_AVATAR_URL_KEY, nonBlankInterlocutorAvatarUrl)
 	}
 	return true
 }

@@ -82,8 +82,18 @@ fun FlowBottomBar(
 				icon = {
 					if (isFeedItem && selected) {
 						AnimatedFeedIcon(
+							selected = selected,
 							showUndo = canUseUndo,
 							defaultIconRes = item.drawableIconId,
+							activeIconRes = me.floow.uikit.R.drawable.feed_icon_active,
+							undoIconRes = me.floow.uikit.R.drawable.undo_icon
+						)
+					} else if (isFeedItem) {
+						AnimatedFeedIcon(
+							selected = selected,
+							showUndo = false,
+							defaultIconRes = item.drawableIconId,
+							activeIconRes = me.floow.uikit.R.drawable.feed_icon_active,
 							undoIconRes = me.floow.uikit.R.drawable.undo_icon
 						)
 					} else if (isChatsItem && chatsUnreadCount > 0) {
@@ -138,31 +148,59 @@ fun FlowBottomBar(
 
 @Composable
 private fun AnimatedFeedIcon(
+	selected: Boolean,
 	showUndo: Boolean,
 	defaultIconRes: Int,
+	activeIconRes: Int,
 	undoIconRes: Int
 ) {
-	val transition = updateTransition(targetState = showUndo, label = "feedUndoIconTransition")
+	val targetState = when {
+		showUndo -> FeedIconState.Undo
+		selected -> FeedIconState.Active
+		else -> FeedIconState.Default
+	}
+	val transition = updateTransition(targetState = targetState, label = "feedIconTransition")
 
 	val baseAlpha = transition.animateFloat(
 		transitionSpec = { tween(durationMillis = 170, easing = FastOutSlowInEasing) },
 		label = "baseAlpha"
-	) { isUndo -> if (isUndo) 0f else 1f }
+	) { state -> if (state == FeedIconState.Default) 1f else 0f }
+
+	val activeAlpha = transition.animateFloat(
+		transitionSpec = { tween(durationMillis = 190, easing = FastOutSlowInEasing) },
+		label = "activeAlpha"
+	) { state -> if (state == FeedIconState.Active) 1f else 0f }
+
+	val activeScale = transition.animateFloat(
+		transitionSpec = { tween(durationMillis = 220, easing = FastOutSlowInEasing) },
+		label = "activeScale"
+	) { state -> if (state == FeedIconState.Active) 1f else 0.88f }
+
+	val activeRotation = transition.animateFloat(
+		transitionSpec = { tween(durationMillis = 240, easing = FastOutSlowInEasing) },
+		label = "activeRotation"
+	) { state ->
+		when (state) {
+			FeedIconState.Default -> -20f
+			FeedIconState.Active -> 0f
+			FeedIconState.Undo -> 18f
+		}
+	}
 
 	val undoAlpha = transition.animateFloat(
 		transitionSpec = { tween(durationMillis = 220, easing = FastOutSlowInEasing) },
 		label = "undoAlpha"
-	) { isUndo -> if (isUndo) 1f else 0f }
+	) { state -> if (state == FeedIconState.Undo) 1f else 0f }
 
 	val undoScale = transition.animateFloat(
 		transitionSpec = { tween(durationMillis = 220, easing = FastOutSlowInEasing) },
 		label = "undoScale"
-	) { isUndo -> if (isUndo) 1f else 0.84f }
+	) { state -> if (state == FeedIconState.Undo) 1f else 0.84f }
 
 	val undoRotation = transition.animateFloat(
 		transitionSpec = { tween(durationMillis = 240, easing = FastOutSlowInEasing) },
 		label = "undoRotation"
-	) { isUndo -> if (isUndo) 0f else -95f }
+	) { state -> if (state == FeedIconState.Undo) 0f else -95f }
 
 	Box(modifier = Modifier.size(24.dp)) {
 		Icon(
@@ -171,6 +209,18 @@ private fun AnimatedFeedIcon(
 			modifier = Modifier
 				.size(24.dp)
 				.graphicsLayer(alpha = baseAlpha.value)
+		)
+		Icon(
+			painter = painterResource(activeIconRes),
+			contentDescription = null,
+			modifier = Modifier
+				.size(24.dp)
+				.graphicsLayer(
+					alpha = activeAlpha.value,
+					rotationZ = activeRotation.value,
+					scaleX = activeScale.value,
+					scaleY = activeScale.value
+				)
 		)
 		Icon(
 			painter = painterResource(undoIconRes),
@@ -185,4 +235,10 @@ private fun AnimatedFeedIcon(
 				)
 		)
 	}
+}
+
+private enum class FeedIconState {
+	Default,
+	Active,
+	Undo
 }

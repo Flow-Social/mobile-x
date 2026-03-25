@@ -7,7 +7,8 @@ object ChatPushDeepLink {
 		conversationId: Long,
 		messageId: String?,
 		interlocutorId: String?,
-		interlocutorName: String?
+		interlocutorName: String?,
+		interlocutorAvatarUrl: String? = null
 	): Uri? {
 		if (conversationId <= 0L) return null
 		val builder = Uri.Builder()
@@ -26,6 +27,10 @@ object ChatPushDeepLink {
 			?.trim()
 			?.takeIf(String::isNotEmpty)
 			?.let { builder.appendQueryParameter("interlocutor_name", it) }
+		interlocutorAvatarUrl
+			?.trim()
+			?.takeIf(String::isNotEmpty)
+			?.let { builder.appendQueryParameter("interlocutor_avatar_url", it) }
 		return builder.build()
 	}
 }

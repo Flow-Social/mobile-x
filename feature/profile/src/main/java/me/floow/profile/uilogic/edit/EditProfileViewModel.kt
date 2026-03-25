@@ -41,36 +41,42 @@ import me.floow.uikit.util.state.ValidatedField
 import me.floow.uikit.util.state.ValidatedField.Companion.initialField
 import me.floow.uikit.util.state.ValidationErrorType
 
-data class CreateProfileVmState(
+sealed interface EditProfileUiEvent {
+	data object Saved : EditProfileUiEvent
+	data object RollbackApplied : EditProfileUiEvent
+}
+
+data class EditProfileVmState(
 	val name: ValidatedField = initialField,
 	val username: ValidatedField = initialField,
 	val bio: ValidatedField = initialField,
+	val originalName: String = "",
 	val avatarPreviewUri: String? = null,
 	val avatarRemoteUrl: String? = null,
 	val avatarErrorMessage: String? = null,
+	val originalAvatarRemoteUrl: String? = null,
 	val backgroundPreviewUri: String? = null,
 	val backgroundRemoteUrl: String? = null,
 	val backgroundErrorMessage: String? = null,
-	val isUploading: Boolean = false,
+	val originalBackgroundRemoteUrl: String? = null,
+	val isSubmitting: Boolean = false,
+	val originalBio: String = "",
 	val originalUsername: String = ""
 ) {
 	fun toUiState(): EditProfileState {
-		return if (isUploading) {
-			EditProfileState.Uploading
-		} else {
-			EditProfileState.Edit(
-				name = name,
-					username = username,
-					bio = bio,
-					avatarPreviewUri = avatarPreviewUri,
-					avatarRemoteUrl = avatarRemoteUrl,
-					avatarErrorMessage = avatarErrorMessage,
-					backgroundPreviewUri = backgroundPreviewUri,
-					backgroundRemoteUrl = backgroundRemoteUrl,
-					backgroundErrorMessage = backgroundErrorMessage
-				)
-			}
-		}
+		return EditProfileState.Edit(
+			name = name,
+			username = username,
+			bio = bio,
+			avatarPreviewUri = avatarPreviewUri,
+			avatarRemoteUrl = avatarRemoteUrl,
+			avatarErrorMessage = avatarErrorMessage,
+			backgroundPreviewUri = backgroundPreviewUri,
+			backgroundRemoteUrl = backgroundRemoteUrl,
+			backgroundErrorMessage = backgroundErrorMessage,
+			isSubmitting = isSubmitting,
+		)
+	}
 }
 
 private sealed interface AvatarUploadResult {
@@ -85,6 +91,22 @@ private sealed interface BackgroundUploadResult {
 	data class Failure(val message: String) : BackgroundUploadResult
 }
 
+private data class EditProfileSubmission(
+	val name: String,
+	val username: String,
+	val bio: String,
+	val avatarPreviewUri: String?,
+	val avatarRemoteUrl: String?,
+	val backgroundPreviewUri: String?,
+	val backgroundRemoteUrl: String?,
+) {
+	val optimisticAvatarUrl: String?
+		get() = avatarPreviewUri ?: avatarRemoteUrl
+
+	val optimisticBackgroundUrl: String?
+		get() = backgroundPreviewUri ?: backgroundRemoteUrl
+}
+
 @OptIn(FlowPreview::class)
 class EditProfileViewModel(
 	private val profileRepository: ProfileRepository,
@@ -94,14 +116,16 @@ class EditProfileViewModel(
 	private val authApi: AuthApi,
 	private val profileLocalStore: ProfileLocalStore,
 ) : ViewModel() {
-	private val _state = MutableStateFlow(CreateProfileVmState())
+	private val _state = MutableStateFlow(EditProfileVmState())
 	private val _usernameCheckFlow = MutableSharedFlow<String>()
 	private val _hapticFeedbackFlow = MutableSharedFlow<Unit>()
+	private val _uiEvents = MutableSharedFlow<EditProfileUiEvent>()
 
 	val hapticFeedbackFlow: SharedFlow<Unit> = _hapticFeedbackFlow
+	val uiEvents: SharedFlow<EditProfileUiEvent> = _uiEvents
 
 	val state: StateFlow<EditProfileState> = _state
-		.map(CreateProfileVmState::toUiState)
+		.map(EditProfileVmState::toUiState)
 		.stateIn(viewModelScope, SharingStarted.Eagerly, EditProfileState.Edit())
 
 	init {
@@ -134,12 +158,16 @@ class EditProfileViewModel(
 							name = ValidatedField.Valid(value = result.data.name?.value ?: ""),
 							bio = ValidatedField.Valid(value = result.data.description?.value ?: ""),
 							username = ValidatedField.Valid(value = result.data.username?.value ?: ""),
+							originalName = result.data.name?.value ?: "",
 							avatarRemoteUrl = result.data.avatarUrl,
 							avatarPreviewUri = null,
 							avatarErrorMessage = null,
+							originalAvatarRemoteUrl = result.data.avatarUrl,
 							backgroundRemoteUrl = result.data.backgroundUrl,
 							backgroundPreviewUri = null,
 							backgroundErrorMessage = null,
+							originalBackgroundRemoteUrl = result.data.backgroundUrl,
+							originalBio = result.data.description?.value ?: "",
 							originalUsername = result.data.username?.value ?: ""
 						)
 					}
@@ -256,59 +284,92 @@ class EditProfileViewModel(
 		}
 	}
 
-	fun updateProfile(onSuccess: () -> Unit, onFailure: () -> Unit) {
+	fun updateProfile(
+		optimistic: Boolean = false,
+		onSuccess: () -> Unit,
+		onFailure: () -> Unit
+	) {
 		viewModelScope.launch {
 			validateAll()
 
-			val allValid = _state.value.bio is ValidatedField.Valid &&
-				_state.value.name is ValidatedField.Valid &&
-				_state.value.username is ValidatedField.Valid
+			val currentState = _state.value
+			val allValid = currentState.bio is ValidatedField.Valid &&
+				currentState.name is ValidatedField.Valid &&
+				currentState.username is ValidatedField.Valid
 
 			if (!allValid) {
 				onFailure()
 				return@launch
 			}
 
+			if (!currentState.hasChanges()) {
+				onSuccess()
+				return@launch
+			}
+
+			val submission = currentState.toSubmission()
+			val pendingToken = authenticationManager.getPendingRegistrationTokenOrNull()
+			val useOptimisticFlow = optimistic && pendingToken == null
+			val previousProfile = if (useOptimisticFlow) {
+				upsertLocalProfile(
+					submission = submission,
+					avatarUrl = submission.optimisticAvatarUrl,
+					backgroundUrl = submission.optimisticBackgroundUrl,
+					backgroundUpdatedAt = resolveBackgroundUpdatedAt(
+						backgroundUrl = submission.optimisticBackgroundUrl,
+						fallbackUpdatedAt = profileLocalStore.getProfile("me")?.backgroundUpdatedAt
+					)
+				)
+			} else {
+				null
+			}
+
+			if (useOptimisticFlow) {
+				onSuccess()
+			} else {
 				_state.update {
 					it.copy(
-						isUploading = true,
+						isSubmitting = true,
 						avatarErrorMessage = null,
 						backgroundErrorMessage = null
 					)
 				}
+			}
 
-				val avatarUploadResult = uploadAvatarIfNeeded()
-				if (avatarUploadResult is AvatarUploadResult.Failure) {
+			val avatarUploadResult = uploadAvatarIfNeeded(submission.avatarPreviewUri)
+			if (avatarUploadResult is AvatarUploadResult.Failure) {
+				handleOptimisticFailure(previousProfile)
 				_state.update {
 					it.copy(
-						isUploading = false,
+						isSubmitting = false,
 						avatarErrorMessage = avatarUploadResult.message
 					)
 				}
 				onFailure()
-					return@launch
-				}
-				val backgroundUploadResult = uploadBackgroundIfNeeded()
-				if (backgroundUploadResult is BackgroundUploadResult.Failure) {
-					_state.update {
-						it.copy(
-							isUploading = false,
-							backgroundErrorMessage = backgroundUploadResult.message
-						)
-					}
-					onFailure()
-					return@launch
-				}
+				return@launch
+			}
 
-				val uploadedAvatarUrl = (avatarUploadResult as? AvatarUploadResult.Success)?.avatarUrl
-				val uploadedBackgroundUrl = (backgroundUploadResult as? BackgroundUploadResult.Success)?.backgroundUrl
-				val editData = EditProfileData(
-					name = ProfileName.create(_state.value.name.value),
-					username = ProfileUsername.create(_state.value.username.value),
-					description = ProfileDescription.create(_state.value.bio.value)
+			val backgroundUploadResult = uploadBackgroundIfNeeded(submission.backgroundPreviewUri)
+			if (backgroundUploadResult is BackgroundUploadResult.Failure) {
+				handleOptimisticFailure(previousProfile)
+				_state.update {
+					it.copy(
+						isSubmitting = false,
+						backgroundErrorMessage = backgroundUploadResult.message
+					)
+				}
+				onFailure()
+				return@launch
+			}
+
+			val uploadedAvatarUrl = (avatarUploadResult as? AvatarUploadResult.Success)?.avatarUrl
+			val uploadedBackgroundUrl = (backgroundUploadResult as? BackgroundUploadResult.Success)?.backgroundUrl
+			val editData = EditProfileData(
+				name = ProfileName.create(submission.name),
+				username = ProfileUsername.create(submission.username),
+				description = ProfileDescription.create(submission.bio)
 			)
 
-			val pendingToken = authenticationManager.getPendingRegistrationTokenOrNull()
 			if (pendingToken != null) {
 				when (val result = authApi.completeGoogleRegistration(pendingToken, editData, uploadedAvatarUrl)) {
 					is CompleteGoogleRegistrationResult.Success -> {
@@ -321,7 +382,7 @@ class EditProfileViewModel(
 						_state.update {
 							it.copy(
 								username = ValidatedField.Invalid(
-									value = _state.value.username.value,
+									value = submission.username,
 									errorType = ValidationErrorType.UsernameAlreadyExists
 								)
 							)
@@ -334,53 +395,63 @@ class EditProfileViewModel(
 					}
 				}
 			} else {
-					val profileUpdateResult = profileRepository.edit(data = editData)
-					if (profileUpdateResult is UpdateDataResponse.Success) {
-						val avatarPersistResult = if (uploadedAvatarUrl != null) {
-							profileRepository.updateAvatarUrl(uploadedAvatarUrl)
-						} else {
-							UpdateDataResponse.Success
-						}
-						val backgroundPersistResult = if (uploadedBackgroundUrl != null) {
-							profileRepository.updateBackgroundUrl(uploadedBackgroundUrl)
-						} else {
-							UpdateDataResponse.Success
-						}
+				val profileUpdateResult = profileRepository.edit(data = editData)
+				if (profileUpdateResult is UpdateDataResponse.Success) {
+					val avatarPersistResult = if (uploadedAvatarUrl != null) {
+						profileRepository.updateAvatarUrl(uploadedAvatarUrl)
+					} else {
+						UpdateDataResponse.Success
+					}
+					val backgroundPersistResult = if (uploadedBackgroundUrl != null) {
+						profileRepository.updateBackgroundUrl(uploadedBackgroundUrl)
+					} else {
+						UpdateDataResponse.Success
+					}
 
-						if (avatarPersistResult is UpdateDataResponse.Success &&
-							backgroundPersistResult is UpdateDataResponse.Success
-						) {
-							applyOptimisticProfileUpdate(
-								newAvatarUrl = uploadedAvatarUrl,
-								newBackgroundUrl = uploadedBackgroundUrl
+					if (avatarPersistResult is UpdateDataResponse.Success &&
+						backgroundPersistResult is UpdateDataResponse.Success
+					) {
+						upsertLocalProfile(
+							submission = submission,
+							avatarUrl = uploadedAvatarUrl ?: submission.avatarRemoteUrl,
+							backgroundUrl = uploadedBackgroundUrl ?: submission.backgroundRemoteUrl,
+							backgroundUpdatedAt = resolveBackgroundUpdatedAt(
+								backgroundUrl = uploadedBackgroundUrl ?: submission.backgroundRemoteUrl,
+								fallbackUpdatedAt = profileLocalStore.getProfile("me")?.backgroundUpdatedAt
 							)
-							refreshProfileInBackground()
+						)
+						_uiEvents.emit(EditProfileUiEvent.Saved)
+						refreshProfileInBackground(previousProfile)
+						if (!useOptimisticFlow) {
 							onSuccess()
-						} else {
-							_state.update {
-								it.copy(
-									avatarErrorMessage = if (avatarPersistResult is UpdateDataResponse.Success) {
-										it.avatarErrorMessage
-									} else {
-										"Не удалось сохранить новый аватар. Повтори попытку"
-									},
-									backgroundErrorMessage = if (backgroundPersistResult is UpdateDataResponse.Success) {
-										it.backgroundErrorMessage
-									} else {
-										"Не удалось сохранить новый фон. Повтори попытку"
-									}
-								)
-							}
-							onFailure()
 						}
+					} else {
+						handleOptimisticFailure(previousProfile)
+						_state.update {
+							it.copy(
+								avatarErrorMessage = if (avatarPersistResult is UpdateDataResponse.Success) {
+									it.avatarErrorMessage
+								} else {
+									"Не удалось сохранить новый аватар. Повтори попытку"
+								},
+								backgroundErrorMessage = if (backgroundPersistResult is UpdateDataResponse.Success) {
+									it.backgroundErrorMessage
+								} else {
+									"Не удалось сохранить новый фон. Повтори попытку"
+								}
+							)
+						}
+						onFailure()
+					}
 				} else {
+					handleOptimisticFailure(previousProfile)
 					if (profileUpdateResult is UpdateDataResponse.Failure &&
 						profileUpdateResult.failureError == FailureError.UsernameAlreadyExists
 					) {
 						_state.update {
 							it.copy(
 								username = ValidatedField.Invalid(
-									value = _state.value.username.value,
+									value = submission.username,
 									errorType = ValidationErrorType.UsernameAlreadyExists
 								)
 							)
@@ -391,16 +462,14 @@ class EditProfileViewModel(
 			}
 
 			_state.update {
-				it.copy(
-					isUploading = false
-				)
+				it.copy(isSubmitting = false)
 			}
 		}
 	}
 
-	private suspend fun uploadBackgroundIfNeeded(): BackgroundUploadResult {
-		val backgroundUri = _state.value.backgroundPreviewUri ?: return BackgroundUploadResult.NotSelected
-		return when (val readResult = localImageFileReader.readBackground(backgroundUri)) {
+	private suspend fun uploadBackgroundIfNeeded(backgroundUri: String?): BackgroundUploadResult {
+		val normalizedBackgroundUri = backgroundUri ?: return BackgroundUploadResult.NotSelected
+		return when (val readResult = localImageFileReader.readBackground(normalizedBackgroundUri)) {
 			is LocalImageReadResult.Success -> {
 				val file = readResult.file
 				val uploadData = UploadImageData(
@@ -440,9 +509,9 @@ class EditProfileViewModel(
 		}
 	}
 
-	private suspend fun uploadAvatarIfNeeded(): AvatarUploadResult {
-		val avatarUri = _state.value.avatarPreviewUri ?: return AvatarUploadResult.NotSelected
-		return when (val readResult = localImageFileReader.readAvatar(avatarUri)) {
+	private suspend fun uploadAvatarIfNeeded(avatarUri: String?): AvatarUploadResult {
+		val normalizedAvatarUri = avatarUri ?: return AvatarUploadResult.NotSelected
+		return when (val readResult = localImageFileReader.readAvatar(normalizedAvatarUri)) {
 			is LocalImageReadResult.Success -> {
 				val file = readResult.file
 				val uploadData = UploadImageData(
@@ -482,24 +551,21 @@ class EditProfileViewModel(
 		}
 	}
 
-	private suspend fun applyOptimisticProfileUpdate(newAvatarUrl: String?, newBackgroundUrl: String?) {
+	private suspend fun upsertLocalProfile(
+		submission: EditProfileSubmission,
+		avatarUrl: String?,
+		backgroundUrl: String?,
+		backgroundUpdatedAt: Long?
+	): PublicProfile? {
 		val cached = profileLocalStore.observeProfile("me").firstOrNull()
-		val updatedAvatarUrl = newAvatarUrl ?: cached?.avatarUrl
-		val updatedBackgroundUrl = newBackgroundUrl ?: cached?.backgroundUrl
-		val updatedBackgroundUpdatedAt = if (newBackgroundUrl != null) {
-			System.currentTimeMillis()
-		} else {
-			cached?.backgroundUpdatedAt
-		}
-
 		val updated = PublicProfile(
 			id = "me",
-			name = ProfileName.create(_state.value.name.value),
-			username = ProfileUsername.create(_state.value.username.value),
-			description = ProfileDescription.create(_state.value.bio.value),
-			avatarUrl = updatedAvatarUrl,
-			backgroundUrl = updatedBackgroundUrl,
-			backgroundUpdatedAt = updatedBackgroundUpdatedAt,
+			name = ProfileName.create(submission.name),
+			username = ProfileUsername.create(submission.username),
+			description = ProfileDescription.create(submission.bio),
+			avatarUrl = avatarUrl,
+			backgroundUrl = backgroundUrl,
+			backgroundUpdatedAt = backgroundUpdatedAt,
 			totalLikesReceived = cached?.totalLikesReceived ?: 0
 		)
 		profileLocalStore.upsertProfile(
@@ -508,17 +574,47 @@ class EditProfileViewModel(
 			updatedAt = System.currentTimeMillis()
 		)
 		_state.update {
-				it.copy(
-					originalUsername = _state.value.username.value,
-					avatarRemoteUrl = updatedAvatarUrl,
-					avatarPreviewUri = null,
-					backgroundRemoteUrl = updatedBackgroundUrl,
-					backgroundPreviewUri = null
-				)
-			}
+			it.copy(
+				originalName = submission.name,
+				originalUsername = submission.username,
+				originalBio = submission.bio,
+				avatarRemoteUrl = avatarUrl,
+				avatarPreviewUri = null,
+				originalAvatarRemoteUrl = avatarUrl,
+				backgroundRemoteUrl = backgroundUrl,
+				backgroundPreviewUri = null,
+				originalBackgroundRemoteUrl = backgroundUrl,
+			)
+		}
+		return cached
 	}
 
-	private fun refreshProfileInBackground() {
+	private suspend fun handleOptimisticFailure(previousProfile: PublicProfile?) {
+		if (previousProfile == null) return
+		profileLocalStore.upsertProfile(
+			userId = "me",
+			profile = previousProfile,
+			updatedAt = System.currentTimeMillis()
+		)
+		_state.update { current ->
+			current.copy(
+				originalName = previousProfile.name?.value.orEmpty(),
+				originalUsername = previousProfile.username?.value.orEmpty(),
+				originalBio = previousProfile.description?.value.orEmpty(),
+				avatarRemoteUrl = previousProfile.avatarUrl,
+				avatarPreviewUri = null,
+				originalAvatarRemoteUrl = previousProfile.avatarUrl,
+				backgroundRemoteUrl = previousProfile.backgroundUrl,
+				backgroundPreviewUri = null,
+				originalBackgroundRemoteUrl = previousProfile.backgroundUrl,
+				avatarErrorMessage = null,
+				backgroundErrorMessage = null,
+			)
+		}
+		_uiEvents.emit(EditProfileUiEvent.RollbackApplied)
+	}
+
+	private fun refreshProfileInBackground(previousProfile: PublicProfile?) {
 		viewModelScope.launch {
 			val selfData = profileRepository.getSelfData()
 			if (selfData is GetDataResponse.Success) {
@@ -540,14 +636,53 @@ class EditProfileViewModel(
 					_state.update { current ->
 						if (current.avatarPreviewUri == null && current.backgroundPreviewUri == null) {
 							current.copy(
+								originalName = selfData.data.name?.value.orEmpty(),
+								originalUsername = selfData.data.username?.value.orEmpty(),
+								originalBio = selfData.data.description?.value.orEmpty(),
 								avatarRemoteUrl = selfData.data.avatarUrl,
-								backgroundRemoteUrl = selfData.data.backgroundUrl
+								originalAvatarRemoteUrl = selfData.data.avatarUrl,
+								backgroundRemoteUrl = selfData.data.backgroundUrl,
+								originalBackgroundRemoteUrl = selfData.data.backgroundUrl,
 							)
 						} else {
 							current
 						}
 					}
+			} else if (previousProfile != null) {
+				handleOptimisticFailure(previousProfile)
 			}
+		}
+	}
+
+	private fun EditProfileVmState.toSubmission(): EditProfileSubmission {
+		return EditProfileSubmission(
+			name = name.value,
+			username = username.value,
+			bio = bio.value,
+			avatarPreviewUri = avatarPreviewUri,
+			avatarRemoteUrl = avatarRemoteUrl,
+			backgroundPreviewUri = backgroundPreviewUri,
+			backgroundRemoteUrl = backgroundRemoteUrl,
+		)
+	}
+
+	private fun EditProfileVmState.hasChanges(): Boolean {
+		return name.value != originalName ||
+			username.value != originalUsername ||
+			bio.value != originalBio ||
+			avatarPreviewUri != null ||
+			avatarRemoteUrl != originalAvatarRemoteUrl ||
+			backgroundPreviewUri != null ||
+			backgroundRemoteUrl != originalBackgroundRemoteUrl
+	}
+
+	private fun resolveBackgroundUpdatedAt(backgroundUrl: String?, fallbackUpdatedAt: Long?): Long? {
+		if (backgroundUrl.isNullOrBlank()) return null
+		val normalized = backgroundUrl.trim()
+		return if (normalized.startsWith("http://") || normalized.startsWith("https://")) {
+			System.currentTimeMillis()
+		} else {
+			null
 		}
 	}
 
@@ -563,13 +698,17 @@ class EditProfileViewModel(
 		updateBiography(initialData.description)
 			_state.update {
 				it.copy(
+					originalName = initialData.name,
 					originalUsername = initialData.username,
+					originalBio = initialData.description,
 					avatarRemoteUrl = initialData.avatarUrl,
 					avatarPreviewUri = null,
 					avatarErrorMessage = null,
+					originalAvatarRemoteUrl = initialData.avatarUrl,
 					backgroundRemoteUrl = initialData.backgroundUrl,
 					backgroundPreviewUri = null,
-					backgroundErrorMessage = null
+					backgroundErrorMessage = null,
+					originalBackgroundRemoteUrl = initialData.backgroundUrl,
 				)
 			}
 		}
