@@ -13,6 +13,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDateTime
+import java.time.ZoneOffset
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ChatOutgoingControllerTest {
@@ -152,7 +153,11 @@ class ChatOutgoingControllerTest {
 		return PrimaryOutMessage(
 			id = id,
 			messageText = text,
-			dateTime = LocalDateTime.of(2026, 1, 1, 10, 0),
+			createdAtMillis = LocalDateTime.of(2026, 1, 1, 10, 0).toEpochMillis(),
 		)
 	}
+}
+
+private fun LocalDateTime.toEpochMillis(): Long {
+	return toInstant(ZoneOffset.UTC).toEpochMilli()
 }
