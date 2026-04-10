@@ -2,21 +2,20 @@ package me.floow.post.ui
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.luminance
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.first
-import me.floow.domain.cache.ProfileLocalStore
-import me.floow.domain.cache.PostsLocalStore
-import me.floow.domain.deeplink.DeepLinkUrls
-import me.floow.domain.data.UpdateDataResponse
 import me.floow.domain.data.repos.PostsRepository
+import me.floow.domain.cache.PostsLocalStore
+import me.floow.domain.cache.ProfileLocalStore
+import me.floow.domain.deeplink.DeepLinkUrls
+import me.floow.shared.post.ui.SharedPostRoute
 import me.floow.uikit.components.media.transfer.PostMediaSourceSnapshot
 import me.floow.uikit.components.media.transfer.PostMediaTransferStore
 import me.floow.uikit.util.SetStatusBarStyle
 import org.koin.compose.koinInject
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun PostRoute(
@@ -45,92 +44,54 @@ fun PostRoute(
     onPostLinkClick: (String, String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
-    val repository: PostsRepository = koinInject()
+    val postsRepository: PostsRepository = koinInject()
     val postsLocalStore: PostsLocalStore = koinInject()
     val profileLocalStore: ProfileLocalStore = koinInject()
     val mediaTransferStore: PostMediaTransferStore = koinInject()
-    val scope = rememberCoroutineScope()
     val statusBarColor = MaterialTheme.colorScheme.background
     val useDarkStatusIcons = statusBarColor.luminance() > 0.5f
-    val initialMediaSnapshot = remember(postId, mediaTransferToken) {
-        mediaTransferToken
-            ?.let(mediaTransferStore::consume)
-            ?.takeIf { it.postId == postId }
-            ?: mediaTransferStore.peek(postId)?.takeIf { it.postId == postId }
-    }
 
     SetStatusBarStyle(
         color = statusBarColor,
         darkIcons = useDarkStatusIcons
     )
 
-    PostScreen(
+    SharedPostRoute(
         postId = postId,
         imageUrls = imageUrls,
-        mediaTransferSnapshot = initialMediaSnapshot,
+        mediaTransferToken = mediaTransferToken,
         description = description,
         authorId = authorId,
         authorName = authorName,
         authorUsername = authorUsername,
         authorAvatarUrl = authorAvatarUrl,
         category = category,
-        createdAt = createdAt,
+        createdAtLabel = formatPostCreatedAt(createdAt),
         likesCount = likesCount,
         commentsCount = commentsCount,
         commentersPreview = commentersPreview,
         isSelf = isSelf,
+        postsRepository = postsRepository,
+        postsLocalStore = postsLocalStore,
+        profileLocalStore = profileLocalStore,
+        postMediaTransferStore = mediaTransferStore,
         onBackClick = onBackClick,
         onProfileClick = onProfileClick,
         onCommentsClick = onCommentsClick,
-        onProfileTagClick = onProfileTagClick,
-        onPostLinkClick = onPostLinkClick,
-        onShareClick = {
-            val username = authorUsername?.takeIf { it.isNotBlank() } ?: authorId
-            sharePost(DeepLinkUrls.postUrl(postId, username))
+        onSharePost = sharePost,
+        buildPostShareUrl = { targetPostId, targetUsername ->
+            val username = targetUsername?.takeIf { it.isNotBlank() } ?: authorId
+            DeepLinkUrls.postUrl(targetPostId, username)
         },
         onEditPost = onEditPost,
-        onDeletePost = {
-            scope.launch {
-                val result = repository.deletePost(postId)
-                if (result is UpdateDataResponse.Success) {
-                    if (isSelf) {
-                        val cacheKeys = buildList {
-                            add("me")
-                            if (authorId.isNotBlank()) add(authorId)
-                        }.distinct()
-
-                        cacheKeys.forEach { userId ->
-                            val currentPosts = postsLocalStore.observePosts(userId).first()
-                            val deletedPost = currentPosts.firstOrNull { post -> post.id == postId }
-                            val updatedPosts = currentPosts.filter { post -> post.id != postId }
-                            if (updatedPosts.size != currentPosts.size) {
-                                postsLocalStore.replacePosts(
-                                    userId = userId,
-                                    posts = updatedPosts,
-                                    updatedAt = System.currentTimeMillis()
-                                )
-
-                                val likesToSubtract = deletedPost?.likesCount ?: 0
-                                if (likesToSubtract > 0) {
-                                    val cachedProfile = profileLocalStore.observeProfile(userId).first()
-                                    if (cachedProfile != null) {
-                                        profileLocalStore.upsertProfile(
-                                            userId = userId,
-                                            profile = cachedProfile.copy(
-                                                totalLikesReceived = (cachedProfile.totalLikesReceived - likesToSubtract)
-                                                    .coerceAtLeast(0)
-                                            ),
-                                            updatedAt = System.currentTimeMillis()
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    onPostDeleted()
-                }
-            }
-        },
+        onPostDeleted = onPostDeleted,
+        onProfileTagClick = onProfileTagClick,
+        onPostLinkClick = onPostLinkClick,
         modifier = modifier
     )
+}
+
+private fun formatPostCreatedAt(timestamp: Long): String {
+    val formatter = SimpleDateFormat("HH:mm", Locale.getDefault())
+    return formatter.format(Date(timestamp))
 }

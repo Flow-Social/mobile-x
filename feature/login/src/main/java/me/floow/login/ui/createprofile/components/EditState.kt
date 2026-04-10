@@ -11,7 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import me.floow.login.uilogic.CreateProfileState
+import me.floow.shared.login.uilogic.createprofile.CreateProfileState
 import me.floow.uikit.components.input.TextFieldWithAdditionalText
 import me.floow.uikit.components.pickers.AvatarAndBackgroundPicker
 import me.floow.uikit.theme.LocalTypography
