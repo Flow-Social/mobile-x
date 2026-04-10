@@ -12,7 +12,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import me.floow.login.ui.createprofile.components.EditState
 import me.floow.login.ui.createprofile.components.UploadingState
-import me.floow.login.uilogic.CreateProfileState
+import me.floow.shared.login.uilogic.createprofile.CreateProfileState
 import me.floow.uikit.components.topbar.TitleTopBarWithActionButton
 import me.flowme.login.R
 

@@ -2,6 +2,7 @@ package me.floow.login.ui.createprofile
 
 import android.widget.Toast
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -14,24 +15,36 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import me.floow.login.uilogic.CreateProfileViewModel
+import me.floow.shared.login.uilogic.createprofile.CreateProfileStateHolder
 
 @Composable
 fun CreateProfileRoute(
 	onDone: () -> Unit,
-	vm: CreateProfileViewModel,
+	stateHolder: CreateProfileStateHolder,
 	modifier: Modifier = Modifier
 ) {
-	val state by vm.state.collectAsState()
+	val state by stateHolder.state.collectAsState()
 	val context = LocalContext.current
 	val hapticFeedback = LocalHapticFeedback.current
 	val lifecycle = LocalLifecycleOwner.current.lifecycle
 
-	LaunchedEffect(Unit) {
+	DisposableEffect(stateHolder) { onDispose { stateHolder.dispose() } }
+
+	LaunchedEffect(stateHolder) {
 		lifecycle.repeatOnLifecycle(state = Lifecycle.State.STARTED) {
 			launch {
-				vm.hapticFeedbackFlow.collectLatest {
-					hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+				stateHolder.events.collectLatest { event ->
+					when (event) {
+						CreateProfileStateHolder.Event.HapticFeedback -> {
+							hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+						}
+
+						is CreateProfileStateHolder.Event.ShowMessage -> {
+							Toast.makeText(context, event.message, Toast.LENGTH_SHORT).show()
+						}
+
+						CreateProfileStateHolder.Event.Completed -> onDone()
+					}
 				}
 			}
 		}
@@ -40,20 +53,12 @@ fun CreateProfileRoute(
 	CreateProfileScreen(
 		state = state,
 		onAvatarPickerClick = {
-			Toast.makeText(context, "Фича ещё разрабатывается…", Toast.LENGTH_SHORT).show()
+			Toast.makeText(context, "Выбор аватара пока недоступен на этом экране", Toast.LENGTH_SHORT).show()
 		},
-		onNameChange = vm::updateName,
-		onUsernameChange = vm::updateUsername,
-		onBiographyChange = vm::updateBio,
-		onDoneClick = {
-			vm.createProfile(
-				onSuccess = onDone,
-				onFailure = {
-					val toast = Toast.makeText(context, "Failure", Toast.LENGTH_SHORT)
-					toast.show()
-				}
-			)
-		},
+		onNameChange = stateHolder::updateName,
+		onUsernameChange = stateHolder::updateUsername,
+		onBiographyChange = stateHolder::updateBio,
+		onDoneClick = stateHolder::createProfile,
 		modifier = modifier
 	)
 }
