@@ -1,5 +1,7 @@
 package me.floow.domain.models
 
+import kotlin.jvm.JvmInline
+
 @JvmInline
 value class CommentId(val value: Long) {
 	init {
@@ -16,4 +18,3 @@ fun String?.toCommentIdOrNull(): CommentId? {
 	if (parsed <= 0L) return null
 	return CommentId(parsed)
 }
-

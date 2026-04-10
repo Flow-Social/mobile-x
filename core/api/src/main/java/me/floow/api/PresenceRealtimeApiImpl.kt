@@ -35,6 +35,7 @@ import me.floow.domain.api.models.PresenceItem
 import me.floow.domain.api.models.PresenceRealtimeEvent
 import me.floow.domain.auth.AuthenticationManager
 import me.floow.domain.utils.Logger
+import me.floow.domain.utils.currentTimeMillis
 
 private const val PRESENCE_EVENT_SNAPSHOT = "presence_snapshot"
 private const val PRESENCE_EVENT_CHANGED = "presence_changed"
@@ -79,7 +80,7 @@ private class PresenceRealtimeSessionImpl(
 	private val socketSession: WebSocketSession,
 	private val logger: Logger
 ) : PresenceRealtimeSession {
-	private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+	private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 	private val eventsChannel = Channel<PresenceRealtimeEvent>(capacity = Channel.BUFFERED)
 
 	override val events: Flow<PresenceRealtimeEvent> = eventsChannel.receiveAsFlow()
@@ -130,7 +131,7 @@ private class PresenceRealtimeSessionImpl(
 private fun parsePresenceEvent(rawText: String): PresenceRealtimeEvent? {
 	val root = runCatching { JsonSerializer.parseToJsonElement(rawText).jsonObject }.getOrNull() ?: return null
 	val type = root.stringOrNull("type") ?: return null
-	val serverTimestampMillis = root.longOrNullFlexible("server_timestamp") ?: System.currentTimeMillis()
+	val serverTimestampMillis = root.longOrNullFlexible("server_timestamp") ?: currentTimeMillis()
 	return when (type) {
 		PRESENCE_EVENT_SNAPSHOT -> {
 			val items = root.arrayOrNull("items")

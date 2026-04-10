@@ -40,6 +40,7 @@ import me.floow.domain.api.models.MarkCommentsReadUpToResponse
 import me.floow.domain.api.models.UpdateCommentResponse
 import me.floow.domain.auth.AuthenticationManager
 import me.floow.domain.utils.Logger
+import me.floow.domain.utils.currentTimeMillis
 
 @Serializable
 private data class ApiCommentAuthor(
@@ -263,7 +264,7 @@ class CommentsApiImpl(
 				?: return@safeApiCall CreateCommentResponse.Error
 
 			val requestBody = CreateCommentRequest(text = data.text, replyToId = data.replyToId)
-			val startedAt = System.currentTimeMillis()
+			val startedAt = currentTimeMillis()
 
 			val response = httpClient.post("${config.apiUrl}/posts/${data.postId}/comments") {
 				addAuthTokenHeader(authToken)
@@ -275,7 +276,7 @@ class CommentsApiImpl(
 
 			val bodyText = response.bodyAsText()
 			if (!response.status.isSuccess()) {
-				val durationMs = System.currentTimeMillis() - startedAt
+				val durationMs = currentTimeMillis() - startedAt
 				logger.d("CommentsApiImpl createComment", "Failed in ${durationMs}ms with status=${response.status.value}")
 				logger.logFailureResponse("CommentsApiImpl createComment", response.status, bodyText)
 				return@safeApiCall CreateCommentResponse.Error
@@ -283,7 +284,7 @@ class CommentsApiImpl(
 
 			val comment = runCatching { JsonSerializer.decodeFromString<ApiComment>(bodyText) }
 				.getOrNull() ?: return@safeApiCall CreateCommentResponse.Error
-			val durationMs = System.currentTimeMillis() - startedAt
+			val durationMs = currentTimeMillis() - startedAt
 			logger.d("CommentsApiImpl createComment", "Success in ${durationMs}ms")
 			invalidateCommentsCacheForPost(data.postId)
 

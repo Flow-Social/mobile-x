@@ -29,9 +29,10 @@ fun Logger.logLoadTiming(
 	tag: String,
 	operation: TelemetryOperation,
 	startedAtMs: Long,
+	nowMs: Long = currentTimeMillis(),
 	extras: String = ""
 ) {
-	val durationMs = (System.currentTimeMillis() - startedAtMs).coerceAtLeast(0L)
+	val durationMs = (nowMs - startedAtMs).coerceAtLeast(0L)
 	val details = if (extras.isBlank()) "" else " $extras"
 	d(tag, "[telemetry][timing] op=${operation.key} durationMs=$durationMs$details")
 }

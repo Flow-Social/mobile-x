@@ -43,7 +43,7 @@ class NotificationsRealtimeRepositoryImpl(
 	private val authenticationManager: AuthenticationManager,
 	private val repliesInboxLocalStore: RepliesInboxLocalStore
 ) : NotificationsRealtimeRepository {
-	private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+	private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 	private val _repliesState = MutableStateFlow(RepliesRealtimeState())
 	private var realtimeJob: Job? = null
 	private var lastKnownMaxSeq: Long = 0L

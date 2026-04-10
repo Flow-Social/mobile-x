@@ -1,5 +1,7 @@
 package me.floow.domain.data.repos
 
+import kotlin.jvm.JvmInline
+
 @JvmInline
 value class ReadCursorStoreScope(val value: String)
 
