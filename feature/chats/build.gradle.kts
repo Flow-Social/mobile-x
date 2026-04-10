@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 @Suppress("DSL_SCOPE_VIOLATION") // TODO: Remove once KTIJ-19369 is fixed
 plugins {
 	alias(libs.plugins.androidLibrary)
@@ -33,12 +35,16 @@ android {
 		sourceCompatibility = JavaVersion.VERSION_1_8
 		targetCompatibility = JavaVersion.VERSION_1_8
 	}
-	kotlinOptions {
-		jvmTarget = "1.8"
+}
+
+kotlin {
+	compilerOptions {
+		jvmTarget.set(JvmTarget.JVM_1_8)
 	}
 }
 
 dependencies {
+	implementation(project(":feature:shared"))
 	implementation(project(":core:uikit"))
 	implementation(project(":core:domain"))
 
