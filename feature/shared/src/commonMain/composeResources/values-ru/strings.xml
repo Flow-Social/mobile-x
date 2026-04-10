@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="login_unsuccessful_toast_message">Login was unsuccessful</string>
+    <string name="google_login_btn_text">Войти</string>
+    <string name="privacy_policy" translatable="false">Privacy Policy</string>
+    <string name="terms_and_conditions" translatable="false">Terms &amp; Conditions</string>
+    <string name="auth_accepting_by_continuing">By continuing,&#160;</string>
+    <string name="auth_accepting_and">&#160;and&#160;</string>
+    <string name="auth_accepting_will_be_applied">&#160;will be applied.</string>
+    <string name="social_media_flow_exclamation">Social network Flow!</string>
+    <string name="flow_onboarding_explanation">A platform with an interactive feed and personalised recommendations.</string>
+    <string name="share">Поделиться</string>
+    <string name="delete">Удалить</string>
+    <string name="new_post">Новый пост</string>
+    <string name="message">Сообщение</string>
+    <string name="edit">Редактировать</string>
+    <string name="no_likes_yet">Пока нет лайков</string>
+    <string name="no_username_topbar_title">Нет юзернейма</string>
+    <string name="no_profile_description">тут пусто :(</string>
+    <string name="no_display_name">ноунейм</string>
+    <string name="online">Онлайн</string>
+    <string name="offline">Оффлайн</string>
+    <string name="last_seen_at">Был(а) в %1$s</string>
+    <string name="create_post_close">Закрыть</string>
+    <string name="create_post_category">Категория</string>
+    <string name="create_post_categories_loading">Категории</string>
+    <string name="create_post_retry_category">Повторить</string>
+    <string name="create_post_whats_new">Что нового?</string>
+    <string name="create_post_cd_selected_image">Выбранное изображение %1$d</string>
+    <string name="create_post_cd_remove_image">Удалить изображение</string>
+    <string name="create_post_cd_add_image">Добавить изображение</string>
+    <string name="create_post_cd_publish">Отправить</string>
+    <string name="username_field_supporting_text">Только буквы, цифры, подчеркивания и точки.</string>
+    <string name="create_profile_title">Создать профиль</string>
+    <string name="create_profile_finish_hint">Завершите настройку профиля Flow, чтобы продолжить.</string>
+    <string name="edit_profile_sheet_title">Редактировать</string>
+    <string name="edit_profile_sheet_close">Закрыть редактирование профиля</string>
+    <string name="edit_profile_sheet_save">Сохранить</string>
+    <string name="edit_profile_sheet_change_background">изменить фон</string>
+    <string name="edit_profile_sheet_change_avatar">изменить</string>
+    <string name="edit_profile_sheet_name_label">Имя</string>
+    <string name="edit_profile_sheet_name_placeholder">введите имя</string>
+    <string name="edit_profile_sheet_username_label">ID</string>
+    <string name="edit_profile_sheet_username_prefix" translatable="false">Floow.me/@</string>
+    <string name="edit_profile_sheet_username_placeholder">ваш_ник</string>
+    <string name="edit_profile_sheet_username_taken">Этот юзернейм уже занят</string>
+    <string name="edit_profile_sheet_bio_label">О себе</string>
+    <string name="edit_profile_sheet_bio_placeholder">напишите здесь что-то о себе</string>
+    <string name="chats_title">Чаты</string>
+    <string name="chats_error_generic">Не удалось загрузить чаты</string>
+    <string name="chats_empty_title">Чатов пока нет</string>
+    <string name="chats_empty_subtitle">Начни диалог, и он появится здесь</string>
+    <string name="chats_outgoing_prefix">Вы: </string>
+    <string name="there_is_nothing">Ничего нет.</string>
+    <string name="but_it_will_be_soon_we_promise">Но скоро будет, обещаем!</string>
+    <string name="chat_replies_title">Ответы</string>
+    <string name="chat_saved_messages_title">Избранное</string>
+    <string name="chat_replies_load_failed">Не удалось загрузить ответы</string>
+    <string name="chat_replies_no_messages">Ответов пока нет</string>
+    <string name="chat_load_failed">Не удалось загрузить чат</string>
+    <string name="chat_no_messages">Сообщений пока нет</string>
+    <string name="chat_selection_close">Закрыть выбор</string>
+    <string name="chat_copy_selected">Скопировать выбранное</string>
+    <string name="chat_selection_delete">Удалить выбранное</string>
+    <string name="chat_selection_selected_count">(%1$d) Выбрано</string>
+    <string name="chat_composer_editing">Редактирование</string>
+    <string name="chat_composer_replying_to">В ответ %1$s</string>
+    <string name="chat_copied">Скопировано</string>
+    <string name="chat_delete_message_title">Удалить сообщение?</string>
+    <string name="chat_delete_message_text">Вы уверены, что хотите удалить это сообщение?</string>
+    <string name="chat_delete_message_confirm">Удалить</string>
+    <string name="chat_delete_message_cancel">Отмена</string>
+    <string name="chat_delete_selected_messages_title">Удалить выбранные сообщения?</string>
+    <string name="chat_delete_selected_messages_text">Вы уверены, что хотите удалить выбранные сообщения?</string>
+    <string name="chat_message_deleted">Сообщение удалено</string>
+    <string name="chat_menu_unpin">Открепить</string>
+    <string name="chat_pinned">Закреплено</string>
+    <string name="chat_undo_action">Отменить</string>
+    <string name="feed_bottom_nav_back_label">Назад</string>
+
+    <plurals name="likes_count">
+        <item quantity="one">%1$s лайк</item>
+        <item quantity="few">%1$s лайка</item>
+        <item quantity="many">%1$s лайков</item>
+        <item quantity="other">%1$s лайка</item>
+    </plurals>
+</resources>

@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="login_unsuccessful_toast_message">Не удалось войти</string>
+    <string name="google_login_btn_text">Login</string>
+    <string name="privacy_policy" translatable="false">Privacy Policy</string>
+    <string name="terms_and_conditions" translatable="false">Terms &amp; Conditions</string>
+    <string name="auth_accepting_by_continuing">By continuing,&#160;</string>
+    <string name="auth_accepting_and">&#160;and&#160;</string>
+    <string name="auth_accepting_will_be_applied">&#160;will be applied.</string>
+    <string name="social_media_flow_exclamation">Social network Flow!</string>
+    <string name="flow_onboarding_explanation">A platform with an interactive feed and personalised recommendations.</string>
+    <string name="share">Share</string>
+    <string name="delete">Delete</string>
+    <string name="new_post">New post</string>
+    <string name="message">Message</string>
+    <string name="edit">Edit</string>
+    <string name="no_likes_yet">No likes yet</string>
+    <string name="no_username_topbar_title">No username</string>
+    <string name="no_profile_description">no description</string>
+    <string name="no_display_name">No name</string>
+    <string name="online">Online</string>
+    <string name="offline">Offline</string>
+    <string name="last_seen_at">Last seen at %1$s</string>
+    <string name="create_post_close">Close</string>
+    <string name="create_post_category">Category</string>
+    <string name="create_post_categories_loading">Categories</string>
+    <string name="create_post_retry_category">Retry</string>
+    <string name="create_post_whats_new">What&apos;s new?</string>
+    <string name="create_post_cd_selected_image">Selected image %1$d</string>
+    <string name="create_post_cd_remove_image">Remove image</string>
+    <string name="create_post_cd_add_image">Add image</string>
+    <string name="create_post_cd_publish">Publish</string>
+    <string name="username_field_supporting_text">Only letters, numbers, underscores and dots.</string>
+    <string name="create_profile_title">Create profile</string>
+    <string name="create_profile_finish_hint">Finish setting up your Flow profile to continue.</string>
+    <string name="edit_profile_sheet_title">Edit</string>
+    <string name="edit_profile_sheet_close">Close edit profile</string>
+    <string name="edit_profile_sheet_save">Save</string>
+    <string name="edit_profile_sheet_change_background">change background</string>
+    <string name="edit_profile_sheet_change_avatar">change</string>
+    <string name="edit_profile_sheet_name_label">Name</string>
+    <string name="edit_profile_sheet_name_placeholder">Enter your name</string>
+    <string name="edit_profile_sheet_username_label">ID</string>
+    <string name="edit_profile_sheet_username_prefix" translatable="false">Floow.me/@</string>
+    <string name="edit_profile_sheet_username_placeholder">your_nickname</string>
+    <string name="edit_profile_sheet_username_taken">This username is already taken</string>
+    <string name="edit_profile_sheet_bio_label">About me</string>
+    <string name="edit_profile_sheet_bio_placeholder">Write something about yourself</string>
+    <string name="chats_title">Chats</string>
+    <string name="chats_error_generic">Unable to load chats</string>
+    <string name="chats_empty_title">No chats yet</string>
+    <string name="chats_empty_subtitle">Start a conversation to see it here</string>
+    <string name="chats_outgoing_prefix">You: </string>
+    <string name="there_is_nothing">There is nothing.</string>
+    <string name="but_it_will_be_soon_we_promise">But it will be soon, we promise!</string>
+    <string name="chat_replies_title">Replies</string>
+    <string name="chat_saved_messages_title">Saved messages</string>
+    <string name="chat_replies_load_failed">Unable to load replies</string>
+    <string name="chat_replies_no_messages">No replies yet</string>
+    <string name="chat_load_failed">Unable to load chat</string>
+    <string name="chat_no_messages">No messages yet</string>
+    <string name="chat_selection_close">Close selection</string>
+    <string name="chat_copy_selected">Copy selected messages</string>
+    <string name="chat_selection_delete">Delete selected messages</string>
+    <string name="chat_selection_selected_count">(%1$d) Selected</string>
+    <string name="chat_composer_editing">Editing</string>
+    <string name="chat_composer_replying_to">Replying to %1$s</string>
+    <string name="chat_copied">Copied</string>
+    <string name="chat_delete_message_title">Delete message?</string>
+    <string name="chat_delete_message_text">Are you sure you want to delete this message?</string>
+    <string name="chat_delete_message_confirm">Delete</string>
+    <string name="chat_delete_message_cancel">Cancel</string>
+    <string name="chat_delete_selected_messages_title">Delete selected messages?</string>
+    <string name="chat_delete_selected_messages_text">Are you sure you want to delete the selected messages?</string>
+    <string name="chat_message_deleted">Message deleted</string>
+    <string name="chat_menu_unpin">Unpin</string>
+    <string name="chat_pinned">Pinned</string>
+    <string name="chat_undo_action">Undo</string>
+    <string name="feed_bottom_nav_back_label">Back</string>
+
+    <plurals name="likes_count">
+        <item quantity="one">%1$s like</item>
+        <item quantity="other">%1$s likes</item>
+    </plurals>
+</resources>

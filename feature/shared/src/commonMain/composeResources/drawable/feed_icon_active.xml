@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#000000"
+        android:strokeWidth="1.7"
+        android:strokeMiterLimit="10"
+        android:pathData="M16.821 5.58574L18.5352 7.85057C18.616 7.95708 18.7478 8.01839 18.8878 8.01447L21.861 7.92734C22.2137 7.9169 22.4179 8.29311 22.2068 8.56361L20.4259 10.8464C20.3422 10.9539 20.3186 11.0925 20.3635 11.2168L21.3153 13.8614C21.428 14.1751 21.1092 14.4819 20.7752 14.3806L18.0296 13.5353C17.8971 13.4951 17.738 13.4849 17.6258 13.5661L15.1838 15.314C14.9012 15.5182 14.4996 15.3317 14.5044 14.9984L14.5455 12.188C14.5475 12.0556 14.4802 11.9321 14.3661 11.858L11.9404 10.2775C11.6527 10.0899 11.7237 9.66807 12.0607 9.56337L14.901 8.68002C15.0347 8.63862 15.1394 8.53783 15.1812 8.41047L16.0668 5.71163C16.1719 5.39168 16.3189 4.92121 16.8206 5.5858L16.821 5.58574Z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#000000"
+        android:strokeWidth="1.7"
+        android:strokeMiterLimit="10"
+        android:strokeLineCap="round"
+        android:pathData="M9.18311 15.0875L11.181 15.1786" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#000000"
+        android:strokeWidth="1.7"
+        android:strokeMiterLimit="10"
+        android:strokeLineCap="round"
+        android:pathData="M9.04736 17.9175L13.0432 18.0996" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#000000"
+        android:strokeWidth="1.7"
+        android:strokeMiterLimit="10"
+        android:pathData="M7.02636 3.17189H4.65134C3.74789 3.17189 3.02361 3.91941 3.05214 4.82241L3.45826 17.6796C3.48247 18.4461 4.04716 19.0876 4.8044 19.2089L5.52637 19.3246M21.4019 8.2205L21.6394 4.22465C21.6831 3.49099 21.0597 2.85741 20.2476 2.80914L8.10468 2.0874C7.29219 2.0391 6.59854 2.59479 6.55495 3.32806L5.60528 19.3057C5.56167 20.0393 6.18506 20.6729 6.99713 20.7212L19.14 21.4429C19.9525 21.4912 20.6462 20.9355 20.6898 20.2023L21.0678 13.8414" />
+</vector>

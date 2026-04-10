@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en" class="show-grid">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Flow Editor</title>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <style>
+        :root {
+            --bg-primary: #ffffff; --bg-secondary: #f5f5f7; --text-primary: #1d1d1f; --text-secondary: #86868b;
+            --grid-color: rgba(0, 0, 0, 0.05); --phone-shell-bg: #1c1c1e; --nav-border: #d2d2d7;
+            --panel-group-bg: rgba(0, 0, 0, 0.05);
+            --active-btn-bg: rgba(0, 0, 0, 0.12);
+            --control-bg: rgba(0, 0, 0, 0.05);
+            --accent: #007aff;
+            --app-height: 100dvh; --phone-screen-radius: 28px; --phone-shell-padding: 12px;
+        }
+        [data-theme="dark"] {
+            color-scheme: dark; --bg-primary: #000000; --bg-secondary: #0a0a0a; --text-primary: #f5f5f7; --text-secondary: #a1a1a6;
+            --grid-color: rgba(255, 255, 255, 0.1); --phone-shell-bg: #1c1c1e; --nav-border: #2c2c2e;
+            --panel-group-bg: rgba(255, 255, 255, 0.12);
+            --active-btn-bg: rgba(255, 255, 255, 0.25);
+            --control-bg: rgba(255, 255, 255, 0.12);
+        }
+
+        @keyframes phoneEntrance { from { opacity: 0; transform: translateY(40px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        
+        html, body { 
+            margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; 
+            background: var(--bg-primary); color: var(--text-primary); 
+            font-family: -apple-system, BlinkMacSystemFont, system-ui, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; transition: background 0.3s, color 0.3s; 
+        }
+        
+        body { position: fixed; inset: 0; }
+        
+        #app-host { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; position: relative; }
+        #app-host::before { content: ""; position: absolute; inset: 0; background-image: linear-gradient(var(--grid-color) 1px, transparent 1px), linear-gradient(90deg, var(--grid-color) 1px, transparent 1px); background-size: 40px 40px; z-index: 0; pointer-events: none; opacity: 0; transition: opacity 0.3s; }
+        html.show-grid #app-host::before { opacity: 1; }
+
+        #bg-canvas { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+        html.drawing-mode #bg-canvas { pointer-events: auto; cursor: crosshair; }
+        html.drawing-mode { user-select: none; -webkit-user-select: none; }
+
+        #desktop-footer-nav { display: none; position: absolute; left: 40px; bottom: 40px; flex-direction: column; gap: 10px; padding-left: 16px; border-left: 1px solid var(--nav-border); z-index: 5; animation: phoneEntrance 1s ease 0.2s both; }
+        .nav-group { display: none; flex-direction: column; gap: 10px; } .nav-group.active { display: flex; }
+        .nav-link { color: var(--text-secondary); text-decoration: none; font-size: 13px; transition: 0.2s; cursor: pointer; border: none; background: none; padding: 0; text-align: left; font-family: inherit; }
+        .nav-link:hover { color: var(--text-primary); transform: translateX(4px); }
+        .settings-item { display: flex; align-items: center; gap: 12px; font-size: 13px; min-height: 28px; cursor: pointer; }
+
+        input[type="range"] { -webkit-appearance: none; background: transparent; width: 90px; height: 20px; outline: none; cursor: pointer; border-radius: 99px; background-size: 100% 4px; background-position: center; background-repeat: no-repeat; }
+        input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 99px; background: var(--control-bg); border: 1px solid rgba(0,0,0,0.06); }
+        [data-theme="dark"] input[type="range"]::-webkit-slider-runnable-track { border-color: rgba(255,255,255,0.1); }
+        
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 22px; border-radius: 8px; background: #fff; box-shadow: 0 3px 10px rgba(0,0,0,0.25); margin-top: -6.5px; border: 0.5px solid rgba(0,0,0,0.08); transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1); cursor: grab; }
+        input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.15) translateY(-1px); cursor: grabbing; }
+
+        .glass-switch-label { display: flex; align-items: center; cursor: pointer; }
+        .glass-switch { position: relative; width: 44px; height: 22px; background: var(--control-bg); border: 1.5px solid rgba(0,0,0,0.06); border-radius: 99px; transition: 0.3s; }
+        [data-theme="dark"] .glass-switch { border-color: rgba(255,255,255,0.15); }
+        .glass-switch::after { content: ""; position: absolute; left: 3px; top: 3px; width: 16px; height: 16px; background: #fff; border-radius: 50%; box-shadow: 0 2px 5px rgba(0,0,0,0.15); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        input[type="checkbox"]:checked + .glass-switch { background: var(--accent); border-color: transparent; }
+        input[type="checkbox"]:checked + .glass-switch::after { left: 17px; width: 24px; border-radius: 8px; }
+        .glass-switch:active::after { transform: scale(1.1); }
+        .hidden-cb { display: none; }
+
+        .glass-select { background: var(--control-bg); border: 1.5px solid rgba(0,0,0,0.08); color: var(--text-primary); border-radius: 8px; padding: 4px 24px 4px 10px; font-size: 12px; outline: none; -webkit-appearance: none; cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg width='8' height='5' viewBox='0 0 8 5' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L4 4L7 1' stroke='%2386868B' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 8px center; }
+
+        .color-picker-glass { -webkit-appearance: none; border: none; width: 28px; height: 28px; border-radius: 50%; background: var(--control-bg); border: 1.5px solid rgba(0,0,0,0.08); padding: 3px; cursor: pointer; }
+        .color-picker-glass::-webkit-color-swatch-wrapper { padding: 0; }
+        .color-picker-glass::-webkit-color-swatch { border-radius: 50%; border: none; }
+
+        .tool-group-container { display: flex; gap: 6px; padding: 4px; border-radius: 12px; background: var(--panel-group-bg); align-self: flex-start; border: 1px solid rgba(0,0,0,0.05); }
+        .tool-btn, .sticker-btn { background: none; border: none; cursor: pointer; padding: 6px 10px; border-radius: 10px; transition: 0.2s; font-size: 16px; outline: none; }
+        .tool-btn.active, .sticker-btn.active { background: var(--active-btn-bg) !important; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+
+        #phone-shell { position: relative; z-index: 2; animation: phoneEntrance 0.8s both; width: 100%; height: 100%; }
+        html.desktop-frame body { background: var(--bg-secondary); display: grid; place-items: center; } 
+        html.desktop-frame #app-host { display: flex; }
+        html.desktop-frame #desktop-footer-nav { display: flex; }
+        html.desktop-frame #phone-shell { width: auto; height: 100%; max-height: calc(100vh - 60px); aspect-ratio: 414 / 868; padding: var(--phone-shell-padding); box-sizing: border-box; background: var(--phone-shell-bg); border-radius: 44px; box-shadow: 0 28px 80px rgba(18, 18, 24, 0.2), 0 8px 20px rgba(18, 18, 24, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.14); }
+        
+        #phone-screen { position: relative; width: 100%; height: var(--app-height, 100dvh); background: var(--bg-primary); border-radius: 0; overflow: hidden; transition: filter 0.4s; }
+        html.desktop-frame #phone-screen { height: 100%; border-radius: var(--phone-screen-radius); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.04); background: transparent; }
+
+        #compose-target { width: 100%; height: 100%; display: block; outline: none; }
+
+        .phone-button { display: none; position: absolute; cursor: pointer; border-radius: 999px; background: linear-gradient(180deg, #4d4d54 0%, #27272c 100%); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18); z-index: 10; transition: transform 0.1s; }
+        .phone-button:active { transform: scaleX(0.4); }
+        html.desktop-frame .phone-button { display: block; }
+        .phone-button-left-top { top: 150px; left: -4px; width: 4px; height: 54px; transform-origin: right center; } 
+        .phone-button-left-bottom { top: 220px; left: -4px; width: 4px; height: 54px; transform-origin: right center; } 
+        .phone-button-right { top: 190px; right: -4px; width: 4px; height: 84px; transform-origin: left center; }
+        .phone-button-left-top::after, .phone-button-left-bottom::after { content: ""; position: absolute; top: -20px; bottom: -20px; left: -30px; right: -10px; pointer-events: none; }
+        .phone-button-right::after { content: ""; position: absolute; top: -20px; bottom: -20px; right: -30px; left: -10px; pointer-events: none; }
+    </style>
+</head>
+<body>
+
+  <div id="app-host">
+    <canvas id="bg-canvas"></canvas>
+
+    <nav id="desktop-footer-nav">
+      <div id="menu-main" class="nav-group active">
+        <a class="nav-link">О нас</a>
+        <a class="nav-link">История</a>
+        <button class="nav-link" onclick="toggleMenu('menu-settings')">Настройки</button>
+        <a class="nav-link">Для разработчиков</a>
+        <a class="nav-link">Связаться</a>
+      </div>
+
+      <div id="menu-settings" class="nav-group">
+        <button class="nav-link" onclick="toggleMenu('menu-main')" style="font-weight: 500;">← Назад</button>
+        <label class="settings-item">Тема: <select id="theme-select" class="glass-select"><option value="light">Светлая</option><option value="dark">Темная</option><option value="system">Системная</option></select></label>
+        <label class="settings-item" style="justify-content: space-between; width: 150px;">Сетка: <label class="glass-switch-label"><input type="checkbox" id="toggle-grid" class="hidden-cb"><span class="glass-switch"></span></label></label>
+        <label class="settings-item" style="justify-content: space-between; width: 150px;">Рисование: <label class="glass-switch-label"><input type="checkbox" id="toggle-draw" class="hidden-cb"><span class="glass-switch"></span></label></label>
+
+        <div id="draw-settings-group" style="display: none; flex-direction: column; gap: 12px; margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--nav-border);">
+          <div class="tool-group-container">
+            <button class="tool-btn" data-tool="mouse">🏹</button>
+            <button class="tool-btn active" data-tool="pen">✏️</button>
+            <button class="tool-btn" data-tool="eraser">🧹</button>
+          </div>
+          <label class="settings-item">Толщина: <input type="range" id="brush-size" min="1" max="100" value="3"></label>
+          <label class="settings-item">Цвет: <input type="color" id="draw-color" value="#007aff" class="color-picker-glass"></label>
+          <div style="display: flex; gap: 6px; padding: 4px;">
+            <button class="sticker-btn" data-sticker="🍎">🍎</button>
+            <button class="sticker-btn" data-sticker="🚀">🚀</button>
+            <button class="sticker-btn" data-sticker="🔥">🔥</button>
+            <button class="sticker-btn" data-sticker="💎">💎</button>
+            <button class="sticker-btn" data-sticker="✨">✨</button>
+          </div>
+          <button class="nav-link" id="clear-canvas" style="color: #ff3b30; font-weight: 500;">Очистить рисунок</button>
+        </div>
+      </div>
+    </nav>
+
+    <div id="phone-shell">
+      <span class="phone-button phone-button-left-top" id="vol-up" aria-hidden="true"></span>
+      <span class="phone-button phone-button-left-bottom" id="vol-down" aria-hidden="true"></span>
+      <span class="phone-button phone-button-right" id="power-btn" aria-hidden="true"></span>
+      <div id="phone-screen"><div id="compose-target"></div></div>
+    </div>
+  </div>
+
+  <script>
+    function toggleMenu(id) {
+        document.querySelectorAll('.nav-group').forEach(g => g.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        if (id !== 'menu-settings') {
+            const cb = document.getElementById('toggle-draw');
+            if (cb) { cb.checked = false; cb.dispatchEvent(new Event('change')); }
+        }
+    }
+
+    (function () {
+      const root = document.documentElement;
+      const canvas = document.getElementById('bg-canvas');
+      const ctx = canvas.getContext('2d');
+      const ignoredResizeObserverMessages = new Set([
+          'ResizeObserver loop completed with undelivered notifications.',
+          'ResizeObserver loop limit exceeded'
+      ]);
+
+      window.addEventListener('error', (event) => {
+          if (ignoredResizeObserverMessages.has(event.message)) {
+              event.preventDefault();
+              event.stopImmediatePropagation();
+          }
+      });
+
+      const els = {
+          themeSelect: document.getElementById('theme-select'),
+          gridCheckbox: document.getElementById('toggle-grid'),
+          drawCheckbox: document.getElementById('toggle-draw'),
+          drawGroup: document.getElementById('draw-settings-group'),
+          brushRange: document.getElementById('brush-size'),
+          colorInput: document.getElementById('draw-color'),
+          toolBtns: document.querySelectorAll('.tool-btn'),
+          stickerBtns: document.querySelectorAll('.sticker-btn'),
+          clearBtn: document.getElementById('clear-canvas')
+      };
+
+      const state = { objects: [], history: [], selected: [], currentTool: 'pen', activeSticker: null, hoverPos: { x: 0, y: 0 }, toolSizes: { pen: 3, eraser: 20, sticker: 60 }, interaction: { isDrawing: false, isDragging: false, isResizing: false, isRotating: false, marquee: null, anchor: { x: 0, y: 0 }, offset: { x: 0, y: 0 } } };
+
+      const desktopPointerQuery = window.matchMedia("(hover: hover) and (pointer: fine)");
+
+      function updateHostLayout() {
+        const viewport = window.visualViewport;
+        const vHeight = viewport ? viewport.height : window.innerHeight;
+        const vWidth = viewport ? viewport.width : window.innerWidth;
+        root.style.setProperty("--app-height", `${vHeight}px`);
+        
+        const isDesktop = desktopPointerQuery.matches && vWidth >= 520;
+        root.classList.toggle("desktop-frame", isDesktop);
+        
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        render();
+      }
+
+      function setTheme(t) {
+          const u = t || localStorage.getItem('flow_theme') || 'system';
+          let final = u; if (u === 'system') final = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          root.setAttribute('data-theme', final);
+          localStorage.setItem('flow_theme', u); if (els.themeSelect) els.themeSelect.value = u; updateSliderFill(els.brushRange);
+          window.dispatchEvent(new CustomEvent('flow-theme-change', { detail: { theme: u, resolvedTheme: final } }));
+      }
+      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (localStorage.getItem('flow_theme') === 'system') setTheme('system'); });
+      if (els.themeSelect) els.themeSelect.addEventListener('change', (e) => setTheme(e.target.value));
+
+      function save() { const s = JSON.stringify(state.objects); if (state.history.length >= 50) state.history.shift(); state.history.push(s); localStorage.setItem('flow_bg_objects', s); }
+      function undo() { if (state.history.length <= 1) { state.objects=[]; state.history=[]; render(); localStorage.removeItem('flow_bg_objects'); return; } state.history.pop(); try { state.objects = JSON.parse(state.history[state.history.length-1]); } catch(e) { state.objects=[]; } state.selected=[]; render(); }
+      function updateSliderFill(el) { const val = (el.value - el.min) / (el.max - el.min) * 100; el.style.backgroundImage = `linear-gradient(to right, #007aff 0%, #007aff ${val}%, transparent ${val}%, transparent 100%)`; }
+      function getBounds(o) { if (o.type === 'sticker') { const s = o.size; return { x1: o.x-s/2, y1: o.y-s/2, x2: o.x+s/2, y2: o.y+s/2 }; } const xs = o.points.map(p => p.x), ys = o.points.map(p => p.y); return { x1: Math.min(...xs), y1: Math.min(...ys), x2: Math.max(...xs), y2: Math.max(...ys) }; }
+      function getLocal(x, y, o) { const b = getBounds(o), cx = (b.x1+b.x2)/2, cy = (b.y1+b.y2)/2, r = o.rotation||0, s = o.scale||1; const sn = Math.sin(-r), cs = Math.cos(-r); let lx = (x-cx)/s, ly = (y-cy)/s; return { x: lx*cs - ly*sn + cx, y: lx*sn + ly*cs + cy }; }
+
+      function render() {
+          ctx.clearRect(0,0,canvas.width,canvas.height);
+          state.objects.forEach(o => {
+              ctx.save(); const b = getBounds(o), cx = (b.x1+b.x2)/2, cy = (b.y1+b.y2)/2; ctx.translate(cx,cy); ctx.rotate(o.rotation||0); ctx.scale(o.scale||1, o.scale||1); ctx.translate(-cx,-cy);
+              if (o.type === 'path') { ctx.strokeStyle = o.color; ctx.lineWidth = o.width; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.beginPath(); ctx.moveTo(o.points[0].x, o.points[0].y); o.points.forEach(p => ctx.lineTo(p.x, p.y)); ctx.stroke(); }
+              else { ctx.font = `${o.size}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(o.emoji, o.x, o.y); }
+              ctx.restore();
+              if (state.selected.includes(o)) {
+                  const r = o.rotation||0, s = o.scale||1; ctx.save(); ctx.translate(cx,cy); ctx.rotate(r); ctx.translate(-cx,-cy); ctx.strokeStyle='#007aff'; ctx.lineWidth=1.5; ctx.setLineDash([4,3]);
+                  const w = (b.x2-b.x1)*s, h = (b.y2-b.y1)*s; const fx = cx-w/2-8, fy = cy-h/2-8, fw = w+16, fh = h+16;
+                  ctx.strokeRect(fx,fy,fw,fh); ctx.setLineDash([]); ctx.fillStyle='#fff';
+                  const hnd = (hx, hy) => { ctx.fillRect(hx-4, hy-4, 8, 8); ctx.strokeRect(hx-4, hy-4, 8, 8); };
+                  hnd(fx+fw, fy+fh); ctx.beginPath(); ctx.moveTo(fx+fw/2, fy); ctx.lineTo(fx+fw/2, fy-20); ctx.stroke(); hnd(fx+fw/2, fy-20); ctx.restore();
+              }
+          });
+          
+          if (state.interaction.marquee) { 
+              const m = state.interaction.marquee; 
+              ctx.save(); ctx.beginPath(); ctx.setLineDash([]); ctx.fillStyle='rgba(0,122,255,0.15)'; ctx.strokeStyle='#007aff'; ctx.lineWidth = 1;
+              ctx.fillRect(m.x, m.y, m.w, m.h); ctx.strokeRect(m.x, m.y, m.w, m.h); ctx.restore();
+          }
+
+          if (root.classList.contains('drawing-mode') && (state.currentTool === 'pen' || state.currentTool === 'eraser')) {
+              const rad = state.currentTool === 'eraser' ? state.toolSizes.eraser * 2 : state.toolSizes.pen / 2;
+              ctx.save(); ctx.beginPath(); ctx.arc(state.hoverPos.x, state.hoverPos.y, rad, 0, Math.PI * 2);
+              ctx.strokeStyle = '#007aff'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 4]); ctx.stroke(); ctx.restore();
+          }
+      }
+
+      function handleEraser(ex, ey) {
+          const rad = state.toolSizes.eraser * 2, radSq = rad * rad;
+          let chg = false, nObj = [];
+          for (let i=0; i < state.objects.length; i++) {
+              const o = state.objects[i], oB = getBounds(o), pad = rad + 20;
+              if (ex < oB.x1 - pad || ex > oB.x2 + pad || ey < oB.y1 - pad || ey > oB.y2 + pad) { nObj.push(o); continue; }
+              if (o.type === 'sticker') { chg = true; continue; }
+              let isl = [], cur = [];
+              o.points.forEach(p => { const dx=ex-p.x, dy=ey-p.y; if (dx*dx+dy*dy > radSq) cur.push(p); else { if (cur.length>1) isl.push(cur); cur=[]; chg=true; } });
+              if (cur.length > 1) isl.push(cur);
+              isl.forEach(pL => nObj.push({ ...o, points: pL }));
+          }
+          if (chg) state.objects = nObj;
+      }
+
+      function onDown(e) {
+          if (!root.classList.contains('drawing-mode')) return;
+          state.interaction.anchor = { x: e.clientX, y: e.clientY };
+          if (state.currentTool === 'eraser') { state.interaction.isDrawing = true; handleEraser(e.clientX, e.clientY); render(); return; }
+          if (state.selected.length === 1) {
+              const o = state.selected[0], b = getBounds(o), cx = (b.x1+b.x2)/2, cy = (b.y1+b.y2)/2, r = o.rotation||0, s = o.scale||1;
+              const sn = Math.sin(r), cs = Math.cos(r);
+              const tx = (px, py) => { let nx = (px-cx)*s, ny = (py-cy)*s; return { x: nx*cs - ny*sn + cx, y: nx*sn + ny*cs + cy }; };
+              if (Math.hypot(e.clientX - tx(b.x2+8, b.y2+8).x, e.clientY - tx(b.x2+8, b.y2+8).y) < 20) { state.interaction.isResizing = true; return; }
+              if (Math.hypot(e.clientX - tx(cx, b.y1-25).x, e.clientY - tx(cx, b.y1-25).y) < 20) { state.interaction.isRotating = true; return; }
+          }
+          let hit = null; for (let i = state.objects.length-1; i>=0; i--) { const o = state.objects[i], l = getLocal(e.clientX, e.clientY, o), b = getBounds(o); if (l.x >= b.x1-15 && l.x <= b.x2+15 && l.y >= b.y1-15 && l.y <= b.y2+15) { hit = o; break; } }
+          if (state.currentTool === 'mouse') { if (hit) { if (!state.selected.includes(hit)) state.selected = [hit]; state.interaction.isDragging = true; state.interaction.offset = { x: e.clientX, y: e.clientY }; } else { state.selected = []; state.interaction.marquee = { x: e.clientX, y: e.clientY, w: 0, h: 0 }; } render(); return; }
+          if (state.currentTool === 'sticker') { state.objects.push({ type: 'sticker', emoji: state.activeSticker, x: e.clientX, y: e.clientY, size: state.toolSizes.sticker, scale: 1, rotation: 0 }); save(); render(); return; }
+          state.interaction.isDrawing = true; state.objects.push({ type: 'path', color: els.colorInput.value, width: state.toolSizes.pen, points: [{ x: e.clientX, y: e.clientY }], scale: 1, rotation: 0 });
+      }
+
+      function onMove(e) {
+          state.hoverPos = { x: e.clientX, y: e.clientY }; const { interaction, selected } = state;
+          if (state.currentTool === 'eraser' && interaction.isDrawing) handleEraser(e.clientX, e.clientY);
+          else if (interaction.isRotating) { const o = selected[0], b = getBounds(o); o.rotation = Math.atan2(e.clientY - (b.y1+b.y2)/2, e.clientX - (b.x1+b.x2)/2) + Math.PI/2; }
+          else if (interaction.isResizing) { const o = selected[0], b = getBounds(o); const d = Math.hypot(e.clientX - (b.x1+b.x2)/2, e.clientY - (b.y1+b.y2)/2); o.scale = Math.max(0.1, d / Math.hypot((b.x2-b.x1)/2, (b.y2-b.y1)/2)); }
+          else if (interaction.marquee) { const m = interaction.marquee; m.x = Math.min(interaction.anchor.x, e.clientX); m.y = Math.min(interaction.anchor.y, e.clientY); m.w = Math.abs(e.clientX - interaction.anchor.x); m.h = Math.abs(e.clientY - interaction.anchor.y); }
+          else if (interaction.isDragging) { const dx = e.clientX - interaction.offset.x, dy = e.clientY - interaction.offset.y; state.selected.forEach(o => { if (o.type === 'sticker') { o.x += dx; o.y += dy; } else o.points.forEach(p => { p.x += dx; p.y += dy; }); }); interaction.offset = { x: e.clientX, y: e.clientY }; }
+          else if (interaction.isDrawing) state.objects[state.objects.length-1].points.push({ x: e.clientX, y: e.clientY });
+          render();
+      }
+
+      function onUp() { if (state.interaction.isDrawing || state.interaction.isDragging || state.interaction.isResizing || state.interaction.isRotating) save(); if (state.interaction.marquee) { const m = state.interaction.marquee; state.objects.forEach(o => { const b = getBounds(o), s = o.scale||1, cx = (b.x1+b.x2)/2, cy = (b.y1+b.y2)/2, w = (b.x2-b.x1)*s, h = (b.y2-b.y1)*s; const x1 = cx-w/2, x2 = cx+w/2, y1 = cy-h/2, y2 = cy+h/2; if (!(x1 > m.x+m.w || x2 < m.x || y1 > m.y+m.h || y2 < m.y)) { if (!state.selected.includes(o)) state.selected.push(o); } }); state.interaction.marquee = null; } state.interaction.isDrawing = state.interaction.isDragging = state.interaction.isResizing = state.interaction.isRotating = false; render(); }
+
+      document.onkeydown = (e) => { if (!root.classList.contains('drawing-mode')) return; if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return; if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') { e.preventDefault(); undo(); } else if (e.code === 'Backspace' || e.code === 'Delete') { if (state.selected.length > 0) { e.preventDefault(); state.objects = state.objects.filter(o => !state.selected.includes(o)); state.selected = []; save(); render(); } } };
+
+      canvas.addEventListener('mousedown', onDown); window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
+      
+      els.gridCheckbox.addEventListener('change', (e) => { root.classList.toggle('show-grid', e.target.checked); localStorage.setItem('flow_grid_pref', e.target.checked); });
+      els.drawCheckbox.addEventListener('change', (e) => { root.classList.toggle('drawing-mode', e.target.checked); els.drawGroup.style.display = e.target.checked ? 'flex' : 'none'; if (!e.target.checked) setTool('pen'); });
+      els.brushRange.addEventListener('input', (e) => { state.toolSizes[state.currentTool] = parseInt(e.target.value); updateSliderFill(e.target); render(); });
+
+      function setTool(t, s = null) { state.currentTool = t; state.activeSticker = s; els.toolBtns.forEach(b => b.classList.toggle('active', b.dataset.tool === t)); els.stickerBtns.forEach(b => b.classList.toggle('active', b.dataset.sticker === s)); canvas.style.cursor = t === 'mouse' ? 'default' : 'crosshair'; els.brushRange.value = state.toolSizes[t] || 5; updateSliderFill(els.brushRange); state.selected = []; render(); }
+      els.toolBtns.forEach(btn => btn.addEventListener('click', () => setTool(btn.dataset.tool)));
+      els.stickerBtns.forEach(btn => btn.addEventListener('click', () => setTool('sticker', btn.dataset.sticker)));
+      if (els.clearBtn) els.clearBtn.addEventListener('click', () => { state.objects = []; save(); render(); });
+
+      let isScreenOff = false;
+      const phoneScreen = document.getElementById('phone-screen');
+      document.getElementById('power-btn')?.addEventListener('click', () => { isScreenOff = !isScreenOff; phoneScreen.style.filter = isScreenOff ? 'brightness(0)' : ''; });
+      const flashAction = () => { if(isScreenOff) return; phoneScreen.style.filter = 'brightness(1.2)'; setTimeout(() => phoneScreen.style.filter = '', 150); };
+      document.getElementById('vol-up')?.addEventListener('click', flashAction);
+      document.getElementById('vol-down')?.addEventListener('click', flashAction);
+
+      const saved = localStorage.getItem('flow_bg_objects'); if (saved) { try { state.objects = JSON.parse(saved); state.history.push(saved); } catch(e) {} }
+      const gPref = localStorage.getItem('flow_grid_pref'); if (gPref !== null) { const isG = gPref === 'true'; els.gridCheckbox.checked = isG; root.classList.toggle('show-grid', isG); }
+      
+      updateHostLayout();
+      const phoneScreenOb = document.getElementById('phone-screen');
+      const composeTarget = document.getElementById('compose-target');
+      const resizeObserver = new ResizeObserver(entries => {
+          if (!root.classList.contains('desktop-frame')) {
+              composeTarget.style.transform = 'none';
+              composeTarget.style.width = '100%';
+              composeTarget.style.height = '100%';
+              composeTarget.style.position = 'static';
+              composeTarget.style.left = '0';
+              composeTarget.style.top = '0';
+              return;
+          }
+          for (let entry of entries) {
+              const { width, height } = entry.contentRect;
+              if (width === 0 || height === 0) continue;
+              const scale = (width + 2) / 390;
+              const logicalHeight = (height + 2) / scale;
+              composeTarget.style.position = 'absolute';
+              composeTarget.style.left = '-1px';
+              composeTarget.style.top = '-1px';
+              composeTarget.style.width = '390px';
+              composeTarget.style.height = `${logicalHeight}px`;
+              composeTarget.style.transform = `scale(${scale})`;
+              composeTarget.style.transformOrigin = 'top left';
+          }
+      });
+      resizeObserver.observe(phoneScreenOb);
+
+      window.addEventListener("resize", updateHostLayout, { passive: true });
+      window.addEventListener("orientationchange", updateHostLayout, { passive: true });
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", updateHostLayout, { passive: true });
+      }
+      if (desktopPointerQuery.addEventListener) {
+        desktopPointerQuery.addEventListener("change", updateHostLayout);
+      }
+      
+      setTheme();
+    })();
+  </script>
+  <script src="/auth.js"></script>
+  <script src="/shared.js"></script>
+</body>
+</html>
