@@ -13,7 +13,7 @@ import me.floow.shared.chats.uilogic.replies.RepliesRepository
 import org.koin.dsl.module
 
 val chatsModule = module {
-	single<ChatsListRepository> { AndroidChatsListRepository(get(), get(), get(), get(), get()) }
+	single<ChatsListRepository> { AndroidChatsListRepository(get(), get(), get(), get()) }
 	single<ChatThreadRepository> { AndroidChatThreadRepository(get(), get(), get()) }
 	single<ChatRealtimeContract> { AndroidChatRealtimeContract(get(), get(), get()) }
 	single<ChatPresenceContract> { AndroidChatPresenceContract(get()) }
