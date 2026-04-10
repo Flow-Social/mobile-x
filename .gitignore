@@ -20,3 +20,6 @@ local.properties
 
 # Local release artifacts / staging folders (never commit)
 /app/production/
+
+# Local Kotlin/JS package manager state
+/kotlin-js-store/
