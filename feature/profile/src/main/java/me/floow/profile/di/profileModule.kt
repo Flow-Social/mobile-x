@@ -17,8 +17,8 @@ import org.koin.core.module.dsl.viewModelOf
 val profileModule = module {
 	single<LocalImageFileReader> { AndroidLocalImageFileReader(androidContext()) }
 	single<PostComposerRepository> { AndroidPostComposerRepository(get(), get(), get()) }
-	single<ProfileEditorRepository> { AndroidProfileEditorRepository(get()) }
-	single<me.floow.shared.profile.uilogic.ProfileRepository> { AndroidProfileRepository(get(), get(), get()) }
+	single<ProfileEditorRepository> { AndroidProfileEditorRepository(get(), get()) }
+	single<me.floow.shared.profile.uilogic.ProfileRepository> { AndroidProfileRepository(get(), get(), get(), get(), get(), get()) }
 	single { SendBumpHelloUseCase(get(), get()) }
 
 	viewModelOf(::ProfileBumpViewModel)

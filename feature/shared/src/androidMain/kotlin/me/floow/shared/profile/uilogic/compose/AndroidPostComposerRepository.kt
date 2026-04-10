@@ -58,29 +58,31 @@ class AndroidPostComposerRepository(
         imageUrls: List<String>,
         categoryCode: String,
     ): Result<ProfilePost> {
-        return when (postsRepository.createPost(
+        return when (val response = postsRepository.createPost(
             CreatePostData(
                 imageUrls = imageUrls,
                 description = description,
                 category = categoryCode,
             )
         )) {
-            is UpdateDataResponse.Success -> Result.success(
-                ProfilePost(
-                    id = "",
-                    description = description,
-                    imageVariants = imageUrls.map { url ->
-                        ProfileImageVariant(
-                            lqUrl = url,
-                            previewUrl = url,
-                            fullUrl = url,
-                        )
-                    },
-                    imageUrls = imageUrls,
-                    likesCount = 0,
-                    commentsCount = 0,
+            is UpdateDataResponse.Success -> {
+                Result.success(
+                    ProfilePost(
+                        id = "",
+                        description = description,
+                        imageVariants = imageUrls.map { url ->
+                            ProfileImageVariant(
+                                lqUrl = url,
+                                previewUrl = url,
+                                fullUrl = url,
+                            )
+                        },
+                        imageUrls = imageUrls,
+                        likesCount = 0,
+                        commentsCount = 0,
+                    )
                 )
-            )
+            }
             is UpdateDataResponse.Failure -> Result.failure(IllegalStateException("Failed to create post"))
         }
     }
@@ -90,25 +92,31 @@ class AndroidPostComposerRepository(
         description: String?,
         imageUrls: List<String>,
     ): Result<ProfilePost> {
-        return when (postsRepository.updatePost(postId, description, imageUrls)) {
-            is UpdateDataResponse.Success -> Result.success(
-                ProfilePost(
-                    id = postId,
-                    description = description,
-                    imageVariants = imageUrls.map { url ->
-                        ProfileImageVariant(
-                            lqUrl = url,
-                            previewUrl = url,
-                            fullUrl = url,
-                        )
-                    },
-                    imageUrls = imageUrls,
-                    likesCount = 0,
-                    commentsCount = 0,
+        return when (val response = postsRepository.updatePost(postId, description, imageUrls)) {
+            is UpdateDataResponse.Success -> {
+                Result.success(
+                    ProfilePost(
+                        id = postId,
+                        description = description,
+                        imageVariants = imageUrls.map { url ->
+                            ProfileImageVariant(
+                                lqUrl = url,
+                                previewUrl = url,
+                                fullUrl = url,
+                            )
+                        },
+                        imageUrls = imageUrls,
+                        likesCount = 0,
+                        commentsCount = 0,
+                    )
                 )
-            )
+            }
             is UpdateDataResponse.Failure -> Result.failure(IllegalStateException("Failed to update post"))
         }
+    }
+
+    private companion object {
+        const val SELF_USER_ID = "me"
     }
 }
 
