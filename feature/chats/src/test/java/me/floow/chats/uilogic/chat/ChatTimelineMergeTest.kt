@@ -2,13 +2,13 @@ package me.floow.chats.uilogic.chat
 
 import me.floow.uikit.chat.model.PrimaryInMessage
 import me.floow.uikit.chat.model.PrimaryOutMessage
-import me.floow.uikit.chat.model.ReplyOutMessage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDateTime
+import java.time.ZoneOffset
 
 class ChatTimelineMergeTest {
 
@@ -20,13 +20,13 @@ class ChatTimelineMergeTest {
 			id = -1L,
 			clientMessageId = "key-1",
 			messageText = "hello",
-			dateTime = baseTime,
+			createdAtMillis = baseTime.toEpochMillis(),
 		)
 		val confirmed = PrimaryOutMessage(
 			id = 101L,
 			clientMessageId = "key-1",
 			messageText = "hello",
-			dateTime = baseTime.plusSeconds(1),
+			createdAtMillis = baseTime.plusSeconds(1).toEpochMillis(),
 		)
 
 		val result = mergeMessages(listOf(optimistic), listOf(confirmed))
@@ -42,24 +42,24 @@ class ChatTimelineMergeTest {
 			id = -1L,
 			clientMessageId = "key-2",
 			messageText = "hi",
-			dateTime = optimisticTime,
+			createdAtMillis = optimisticTime.toEpochMillis(),
 		)
 		val confirmed = PrimaryOutMessage(
 			id = 200L,
 			clientMessageId = "key-2",
 			messageText = "hi",
-			dateTime = baseTime.plusSeconds(5),
+			createdAtMillis = baseTime.plusSeconds(5).toEpochMillis(),
 		)
 
 		val result = mergeMessages(listOf(optimistic), listOf(confirmed))
 
-		assertEquals(optimisticTime, result.first().dateTime)
+		assertEquals(optimisticTime.toEpochMillis(), result.first().createdAtMillis)
 	}
 
 	@Test
 	fun `mergeMessages keeps both messages when clientMessageIds differ`() {
-		val msg1 = PrimaryOutMessage(id = -1L, clientMessageId = "k1", messageText = "a", dateTime = baseTime)
-		val msg2 = PrimaryOutMessage(id = -2L, clientMessageId = "k2", messageText = "b", dateTime = baseTime.plusSeconds(1))
+		val msg1 = PrimaryOutMessage(id = -1L, clientMessageId = "k1", messageText = "a", createdAtMillis = baseTime.toEpochMillis())
+		val msg2 = PrimaryOutMessage(id = -2L, clientMessageId = "k2", messageText = "b", createdAtMillis = baseTime.plusSeconds(1).toEpochMillis())
 
 		val result = mergeMessages(listOf(msg1), listOf(msg2))
 
@@ -68,8 +68,8 @@ class ChatTimelineMergeTest {
 
 	@Test
 	fun `mergeMessages deduplicates by id when no clientMessageId`() {
-		val original = PrimaryInMessage(id = 55L, messageText = "original", dateTime = baseTime)
-		val duplicate = PrimaryInMessage(id = 55L, messageText = "duplicate", dateTime = baseTime.plusSeconds(2))
+		val original = PrimaryInMessage(id = 55L, messageText = "original", createdAtMillis = baseTime.toEpochMillis())
+		val duplicate = PrimaryInMessage(id = 55L, messageText = "duplicate", createdAtMillis = baseTime.plusSeconds(2).toEpochMillis())
 
 		val result = mergeMessages(listOf(original), listOf(duplicate))
 
@@ -78,8 +78,8 @@ class ChatTimelineMergeTest {
 
 	@Test
 	fun `mergeMessages sorts by dateTime ascending`() {
-		val later = PrimaryInMessage(id = 2L, messageText = "b", dateTime = baseTime.plusSeconds(10))
-		val earlier = PrimaryInMessage(id = 1L, messageText = "a", dateTime = baseTime)
+		val later = PrimaryInMessage(id = 2L, messageText = "b", createdAtMillis = baseTime.plusSeconds(10).toEpochMillis())
+		val earlier = PrimaryInMessage(id = 1L, messageText = "a", createdAtMillis = baseTime.toEpochMillis())
 
 		val result = mergeMessages(listOf(later), listOf(earlier))
 
@@ -89,9 +89,9 @@ class ChatTimelineMergeTest {
 
 	@Test
 	fun `mergeObservedLatestMessages preserves older loaded messages`() {
-		val older = PrimaryInMessage(id = 5L, messageText = "old", dateTime = baseTime)
-		val observed1 = PrimaryInMessage(id = 10L, messageText = "recent1", dateTime = baseTime.plusMinutes(1))
-		val observed2 = PrimaryInMessage(id = 11L, messageText = "recent2", dateTime = baseTime.plusMinutes(2))
+		val older = PrimaryInMessage(id = 5L, messageText = "old", createdAtMillis = baseTime.toEpochMillis())
+		val observed1 = PrimaryInMessage(id = 10L, messageText = "recent1", createdAtMillis = baseTime.plusMinutes(1).toEpochMillis())
+		val observed2 = PrimaryInMessage(id = 11L, messageText = "recent2", createdAtMillis = baseTime.plusMinutes(2).toEpochMillis())
 
 		val result = mergeObservedLatestMessages(
 			currentMessages = listOf(older, observed1),
@@ -109,9 +109,9 @@ class ChatTimelineMergeTest {
 			id = -1L,
 			clientMessageId = "pending-key",
 			messageText = "sending",
-			dateTime = baseTime.plusMinutes(5),
+			createdAtMillis = baseTime.plusMinutes(5).toEpochMillis(),
 		)
-		val observed = PrimaryInMessage(id = 20L, messageText = "incoming", dateTime = baseTime.plusMinutes(4))
+		val observed = PrimaryInMessage(id = 20L, messageText = "incoming", createdAtMillis = baseTime.plusMinutes(4).toEpochMillis())
 
 		val result = mergeObservedLatestMessages(
 			currentMessages = listOf(optimistic),
@@ -129,13 +129,13 @@ class ChatTimelineMergeTest {
 			id = -1L,
 			clientMessageId = "confirmed-key",
 			messageText = "hello",
-			dateTime = baseTime,
+			createdAtMillis = baseTime.toEpochMillis(),
 		)
 		val confirmedObserved = PrimaryOutMessage(
 			id = 30L,
 			clientMessageId = "confirmed-key",
 			messageText = "hello",
-			dateTime = baseTime.plusSeconds(2),
+			createdAtMillis = baseTime.plusSeconds(2).toEpochMillis(),
 		)
 
 		val result = mergeObservedLatestMessages(
@@ -151,11 +151,11 @@ class ChatTimelineMergeTest {
 	@Test
 	fun `replaceOrMergeMessage replaces at correct index`() {
 		val messages = listOf(
-			PrimaryInMessage(id = 1L, messageText = "a", dateTime = baseTime),
-			PrimaryInMessage(id = 2L, messageText = "b", dateTime = baseTime.plusSeconds(1)),
-			PrimaryInMessage(id = 3L, messageText = "c", dateTime = baseTime.plusSeconds(2)),
+			PrimaryInMessage(id = 1L, messageText = "a", createdAtMillis = baseTime.toEpochMillis()),
+			PrimaryInMessage(id = 2L, messageText = "b", createdAtMillis = baseTime.plusSeconds(1).toEpochMillis()),
+			PrimaryInMessage(id = 3L, messageText = "c", createdAtMillis = baseTime.plusSeconds(2).toEpochMillis()),
 		)
-		val replacement = PrimaryInMessage(id = 99L, messageText = "replaced", dateTime = baseTime.plusSeconds(1))
+		val replacement = PrimaryInMessage(id = 99L, messageText = "replaced", createdAtMillis = baseTime.plusSeconds(1).toEpochMillis())
 
 		val result = replaceOrMergeMessage(
 			base = messages,
@@ -171,9 +171,9 @@ class ChatTimelineMergeTest {
 	@Test
 	fun `replaceOrMergeMessage merges when replaceId not found`() {
 		val messages = listOf(
-			PrimaryInMessage(id = 1L, messageText = "a", dateTime = baseTime),
+			PrimaryInMessage(id = 1L, messageText = "a", createdAtMillis = baseTime.toEpochMillis()),
 		)
-		val newMsg = PrimaryInMessage(id = 5L, messageText = "new", dateTime = baseTime.plusSeconds(5))
+		val newMsg = PrimaryInMessage(id = 5L, messageText = "new", createdAtMillis = baseTime.plusSeconds(5).toEpochMillis())
 
 		val result = replaceOrMergeMessage(
 			base = messages,
@@ -190,9 +190,9 @@ class ChatTimelineMergeTest {
 		val day1 = LocalDateTime.of(2026, 3, 1, 10, 0)
 		val day2 = LocalDateTime.of(2026, 3, 2, 10, 0)
 		val messages = listOf(
-			PrimaryInMessage(id = 1L, messageText = "a", dateTime = day1),
-			PrimaryInMessage(id = 2L, messageText = "b", dateTime = day2),
-			PrimaryInMessage(id = 3L, messageText = "c", dateTime = day1.plusHours(1)),
+			PrimaryInMessage(id = 1L, messageText = "a", createdAtMillis = day1.toEpochMillis()),
+			PrimaryInMessage(id = 2L, messageText = "b", createdAtMillis = day2.toEpochMillis()),
+			PrimaryInMessage(id = 3L, messageText = "c", createdAtMillis = day1.plusHours(1).toEpochMillis()),
 		)
 
 		val grouped = groupMessagesByDate(messages)
@@ -210,9 +210,9 @@ class ChatTimelineMergeTest {
 	@Test
 	fun `inferUnreadBoundaryMessageId returns first incoming after readUpTo`() {
 		val messages = listOf(
-			PrimaryOutMessage(id = 1L, messageText = "out", dateTime = baseTime),
-			PrimaryInMessage(id = 2L, messageText = "in1", dateTime = baseTime.plusSeconds(1)),
-			PrimaryInMessage(id = 3L, messageText = "in2", dateTime = baseTime.plusSeconds(2)),
+			PrimaryOutMessage(id = 1L, messageText = "out", createdAtMillis = baseTime.toEpochMillis()),
+			PrimaryInMessage(id = 2L, messageText = "in1", createdAtMillis = baseTime.plusSeconds(1).toEpochMillis()),
+			PrimaryInMessage(id = 3L, messageText = "in2", createdAtMillis = baseTime.plusSeconds(2).toEpochMillis()),
 		)
 
 		val boundary = inferUnreadBoundaryMessageId(
@@ -227,8 +227,8 @@ class ChatTimelineMergeTest {
 	@Test
 	fun `inferUnreadBoundaryMessageId returns null when all read`() {
 		val messages = listOf(
-			PrimaryInMessage(id = 1L, messageText = "a", dateTime = baseTime),
-			PrimaryInMessage(id = 2L, messageText = "b", dateTime = baseTime.plusSeconds(1)),
+			PrimaryInMessage(id = 1L, messageText = "a", createdAtMillis = baseTime.toEpochMillis()),
+			PrimaryInMessage(id = 2L, messageText = "b", createdAtMillis = baseTime.plusSeconds(1).toEpochMillis()),
 		)
 
 		val boundary = inferUnreadBoundaryMessageId(
@@ -244,8 +244,8 @@ class ChatTimelineMergeTest {
 	fun `latestPersistableMessageId ignores optimistic negative ids`() {
 		val groups = groupMessagesByDate(
 			listOf(
-				PrimaryOutMessage(id = -3L, messageText = "optimistic", dateTime = baseTime),
-				PrimaryInMessage(id = 10L, messageText = "server", dateTime = baseTime.plusSeconds(1)),
+				PrimaryOutMessage(id = -3L, messageText = "optimistic", createdAtMillis = baseTime.toEpochMillis()),
+				PrimaryInMessage(id = 10L, messageText = "server", createdAtMillis = baseTime.plusSeconds(1).toEpochMillis()),
 			)
 		)
 
@@ -256,8 +256,8 @@ class ChatTimelineMergeTest {
 	fun `latestRenderableMessageId includes optimistic ids`() {
 		val groups = groupMessagesByDate(
 			listOf(
-				PrimaryOutMessage(id = -1L, messageText = "optimistic", dateTime = baseTime.plusSeconds(2)),
-				PrimaryInMessage(id = 10L, messageText = "server", dateTime = baseTime),
+				PrimaryOutMessage(id = -1L, messageText = "optimistic", createdAtMillis = baseTime.plusSeconds(2).toEpochMillis()),
+				PrimaryInMessage(id = 10L, messageText = "server", createdAtMillis = baseTime.toEpochMillis()),
 			)
 		)
 
@@ -267,10 +267,10 @@ class ChatTimelineMergeTest {
 	@Test
 	fun `flattenMessages returns all messages sorted by dateTime`() {
 		val group1 = me.floow.uikit.chat.model.DatedChatMessages(
-			datetime = baseTime.toLocalDate(),
+			dayStartMillis = baseTime.toLocalDate().atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli(),
 			messages = listOf(
-				PrimaryInMessage(id = 2L, messageText = "b", dateTime = baseTime.plusSeconds(1)),
-				PrimaryInMessage(id = 1L, messageText = "a", dateTime = baseTime),
+				PrimaryInMessage(id = 2L, messageText = "b", createdAtMillis = baseTime.plusSeconds(1).toEpochMillis()),
+				PrimaryInMessage(id = 1L, messageText = "a", createdAtMillis = baseTime.toEpochMillis()),
 			),
 		)
 
@@ -279,4 +279,8 @@ class ChatTimelineMergeTest {
 		assertEquals(1L, result.first().id)
 		assertEquals(2L, result.last().id)
 	}
+}
+
+private fun LocalDateTime.toEpochMillis(): Long {
+	return toInstant(ZoneOffset.UTC).toEpochMilli()
 }
