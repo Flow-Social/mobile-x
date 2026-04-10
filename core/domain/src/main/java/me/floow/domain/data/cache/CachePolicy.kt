@@ -1,5 +1,7 @@
 package me.floow.domain.data.cache
 
+import me.floow.domain.utils.currentTimeMillis
+
 data class CachePolicy(
 	val maxAgeMs: Long,
 	val staleWhileRevalidateMs: Long
@@ -9,7 +11,7 @@ data class CachePolicy(
 		require(staleWhileRevalidateMs >= 0) { "staleWhileRevalidateMs must be >= 0" }
 	}
 
-	fun ageMs(lastUpdatedAtMs: Long?, nowMs: Long = System.currentTimeMillis()): Long {
+	fun ageMs(lastUpdatedAtMs: Long?, nowMs: Long = currentTimeMillis()): Long {
 		val lastUpdated = lastUpdatedAtMs ?: return Long.MAX_VALUE
 		return (nowMs - lastUpdated).coerceAtLeast(0L)
 	}
@@ -21,7 +23,7 @@ data class CachePolicy(
 	fun evaluate(
 		hasCachedData: Boolean,
 		lastUpdatedAtMs: Long?,
-		nowMs: Long = System.currentTimeMillis()
+		nowMs: Long = currentTimeMillis()
 	): CacheEvaluation {
 		if (!hasCachedData) {
 			return CacheEvaluation(

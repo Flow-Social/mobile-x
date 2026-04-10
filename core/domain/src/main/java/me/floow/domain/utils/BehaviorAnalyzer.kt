@@ -4,10 +4,12 @@ import me.floow.domain.models.AnalysisResult
 import me.floow.domain.models.AnalysisType
 import me.floow.domain.models.PostCategory
 import me.floow.domain.models.SwipeRecord
+import kotlin.math.roundToInt
 
 class BehaviorAnalyzer(
 	private val getCurrentCategoryWeight: (PostCategory) -> Float = { 0f },
-	private val getCurrentAuthorWeight: (String) -> Float = { 0f }
+	private val getCurrentAuthorWeight: (String) -> Float = { 0f },
+	private val nowMs: () -> Long = ::currentTimeMillis,
 ) {
 	
 	fun analyzeRecentBehavior(recentSwipes: List<SwipeRecord>): AnalysisResult? {
@@ -45,8 +47,8 @@ class BehaviorAnalyzer(
 							type = AnalysisType.CATEGORY_SATURATION,
 							target = category,
 						corrections = corrections,
-						explanation = "Обнаружено перенасыщение категорией: $category. Скипнуто ${skipsList.size}/${WeightCalculator.SATURATION_ANALYSIS_WINDOW} постов при высоком рейтинге (${String.format("%.2f", categoryWeight)})",
-						timestamp = System.currentTimeMillis()
+						explanation = "Обнаружено перенасыщение категорией: $category. Скипнуто ${skipsList.size}/${WeightCalculator.SATURATION_ANALYSIS_WINDOW} постов при высоком рейтинге (${categoryWeight.formatForAnalysis()})",
+						timestamp = nowMs()
 					)
 				}
 			}
@@ -74,8 +76,8 @@ class BehaviorAnalyzer(
 						type = AnalysisType.AUTHOR_SATURATION,
 						target = author,
 						corrections = corrections,
-						explanation = "Обнаружено перенасыщение автором: $author. Скипнуто ${skipsList.size}/${WeightCalculator.SATURATION_ANALYSIS_WINDOW} постов при высоком рейтинге (${String.format("%.2f", authorWeight)})",
-						timestamp = System.currentTimeMillis()
+						explanation = "Обнаружено перенасыщение автором: $author. Скипнуто ${skipsList.size}/${WeightCalculator.SATURATION_ANALYSIS_WINDOW} постов при высоком рейтинге (${authorWeight.formatForAnalysis()})",
+						timestamp = nowMs()
 					)
 				}
 			}
@@ -110,7 +112,7 @@ class BehaviorAnalyzer(
 							target = author,
 							corrections = corrections,
 							explanation = "Обнаружен проблемный автор: $author. Скипнуто $skipCount/${authorSwipesList.size} постов из разных категорий",
-							timestamp = System.currentTimeMillis()
+							timestamp = nowMs()
 						)
 					}
 				}
@@ -146,7 +148,7 @@ class BehaviorAnalyzer(
 							target = category,
 							corrections = corrections,
 							explanation = "Обнаружена любимая категория: $category. Лайкнуто $likeCount/${categorySwipesList.size} постов от ${authors.size} разных авторов",
-							timestamp = System.currentTimeMillis()
+							timestamp = nowMs()
 						)
 					}
 				}
@@ -182,7 +184,7 @@ class BehaviorAnalyzer(
 							target = category,
 							corrections = corrections,
 							explanation = "Обнаружена нелюбимая категория: $category. Скипнуто $skipCount/${categorySwipesList.size} постов от ${authors.size} разных авторов",
-							timestamp = System.currentTimeMillis()
+							timestamp = nowMs()
 						)
 					}
 				}
@@ -218,7 +220,7 @@ class BehaviorAnalyzer(
 							target = author,
 							corrections = corrections,
 							explanation = "Обнаружен любимый автор: $author. Лайкнуто $likeCount/${authorSwipesList.size} постов из разных категорий",
-							timestamp = System.currentTimeMillis()
+							timestamp = nowMs()
 						)
 					}
 				}
@@ -227,4 +229,8 @@ class BehaviorAnalyzer(
 		
 		return null
 	}
+}
+
+private fun Float.formatForAnalysis(): String {
+	return ((this * 100f).roundToInt() / 100f).toString()
 }

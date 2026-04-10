@@ -6,10 +6,10 @@ import io.ktor.http.Url
 import io.ktor.websocket.Frame
 import io.ktor.websocket.WebSocketSession
 import io.ktor.websocket.readText
-import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.isActive
 import kotlinx.serialization.json.JsonObject
@@ -53,7 +53,7 @@ class ChatsRealtimeApiImpl(
 ) : ChatsRealtimeApi {
 	private val httpClient = httpClientProvider.getClientWithoutHttpCache()
 	private val wsUrl = buildChatsRealtimeWsUrl(config.apiUrl)
-	private val sessionRef = AtomicReference<WebSocketSession?>(null)
+	private val sessionRef = MutableStateFlow<WebSocketSession?>(null)
 
 	override fun subscribeConversation(
 		conversationId: Long,
@@ -125,7 +125,7 @@ class ChatsRealtimeApiImpl(
 				continue
 			}
 
-			sessionRef.set(session)
+			sessionRef.value = session
 			var receivedAnyEvent = false
 			try {
 				for (frame in session.incoming) {
@@ -143,8 +143,8 @@ class ChatsRealtimeApiImpl(
 					"WebSocket stream error: ${throwable.message}"
 				)
 			} finally {
-				if (sessionRef.get() === session) {
-					sessionRef.set(null)
+				if (sessionRef.value === session) {
+					sessionRef.value = null
 				}
 				runCatching { session.outgoing.close() }
 			}
@@ -161,7 +161,7 @@ class ChatsRealtimeApiImpl(
 		}
 	}
 	override fun sendPushAck(request: PushAckRequest): Boolean {
-		val session = sessionRef.get() ?: return false
+		val session = sessionRef.value ?: return false
 		val payload = mapOf(
 			"type" to "push_ack",
 			"notification_id" to request.notificationId,

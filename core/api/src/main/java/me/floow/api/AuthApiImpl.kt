@@ -70,7 +70,7 @@ class AuthApiImpl(
 	private val httpClient = httpClientProvider.getClient()
 
 	override suspend fun getAuthTokenByGoogleIdToken(idToken: String): AuthApiResult =
-		withContext(Dispatchers.IO) {
+		withContext(Dispatchers.Default) {
 			safeApiCall(AuthApiResult.Failure) {
 				val response = httpClient.post("${config.apiUrl}/auth/google") {
 					contentType(ContentType.Application.FormUrlEncoded)
@@ -127,7 +127,7 @@ class AuthApiImpl(
 		pendingToken: String,
 		data: EditProfileData,
 		avatarUrl: String?
-	): CompleteGoogleRegistrationResult = withContext(Dispatchers.IO) {
+	): CompleteGoogleRegistrationResult = withContext(Dispatchers.Default) {
 		safeApiCall(CompleteGoogleRegistrationResult.Failure) {
 			val response = httpClient.post("${config.apiUrl}/auth/google/complete") {
 				contentType(ContentType.Application.FormUrlEncoded)

@@ -38,8 +38,8 @@ class PresenceRepositoryImpl(
 	private val authenticationManager: AuthenticationManager,
 	private val sessionStore: PresenceSessionStore
 ) : PresenceRepository {
-	private val realtimeLoopLock = Any()
-	private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+	private val realtimeLoopMutex = Mutex()
+	private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 	private val stateMutex = Mutex()
 	private val _presences = MutableStateFlow<Map<String, UserPresence>>(emptyMap())
 	private val ownerTargets = linkedMapOf<String, Set<String>>()
@@ -49,7 +49,6 @@ class PresenceRepositoryImpl(
 	private var realtimeJob: Job? = null
 	private var heartbeatJob: Job? = null
 
-	@Volatile
 	private var isForeground: Boolean = false
 
 	override val presences: StateFlow<Map<String, UserPresence>> = _presences
@@ -127,59 +126,60 @@ class PresenceRepositoryImpl(
 
 	private fun ensureRealtimeLoop() {
 		if (!isForeground) return
-		val jobToStart = synchronized(realtimeLoopLock) {
-			if (realtimeJob?.isActive == true) return
-			scope.launch {
-			var backoffMs = REALTIME_RECONNECT_MIN_MS
-			while (isActive && isForeground) {
-				val desiredSnapshot = stateMutex.withLock { desiredTargets }
-				if (desiredSnapshot.isEmpty()) {
-					closeRealtimeSession()
-					backoffMs = REALTIME_RECONNECT_MIN_MS
-					delay(300L)
-					continue
-				}
-				if (!authenticationManager.isSignedIn()) {
-					delay(backoffMs)
-					backoffMs = (backoffMs * 2).coerceAtMost(REALTIME_RECONNECT_MAX_MS)
-					continue
-				}
+		scope.launch {
+			realtimeLoopMutex.withLock {
+				if (realtimeJob?.isActive == true) return@withLock
+				realtimeJob = scope.launch {
+					var backoffMs = REALTIME_RECONNECT_MIN_MS
+					while (isActive && isForeground) {
+						val desiredSnapshot = stateMutex.withLock { desiredTargets }
+						if (desiredSnapshot.isEmpty()) {
+							closeRealtimeSession()
+							backoffMs = REALTIME_RECONNECT_MIN_MS
+							delay(300L)
+							continue
+						}
+						if (!authenticationManager.isSignedIn()) {
+							delay(backoffMs)
+							backoffMs = (backoffMs * 2).coerceAtMost(REALTIME_RECONNECT_MAX_MS)
+							continue
+						}
 
-				val session = presenceRealtimeApi.openSession()
-				if (session == null) {
-					delay(backoffMs)
-					backoffMs = (backoffMs * 2).coerceAtMost(REALTIME_RECONNECT_MAX_MS)
-					continue
-				}
+						val session = presenceRealtimeApi.openSession()
+						if (session == null) {
+							delay(backoffMs)
+							backoffMs = (backoffMs * 2).coerceAtMost(REALTIME_RECONNECT_MAX_MS)
+							continue
+						}
 
-				stateMutex.withLock {
-					realtimeSession = session
-					activeTargets = emptySet()
-				}
+						stateMutex.withLock {
+							realtimeSession = session
+							activeTargets = emptySet()
+						}
 
-				val connected = runCatching {
-					session.subscribe(desiredSnapshot.toList())
-					stateMutex.withLock {
-						activeTargets = desiredSnapshot
+						val connected = runCatching {
+							session.subscribe(desiredSnapshot.toList())
+							stateMutex.withLock {
+								activeTargets = desiredSnapshot
+							}
+							session.events.collectLatest { event ->
+								applyPresenceRealtimeEvent(event)
+							}
+						}
+						if (connected.isFailure) {
+							logger.d(
+								"PresenceRepositoryImpl.ensureRealtimeLoop",
+								"realtime error: ${connected.exceptionOrNull()?.message}"
+							)
+						}
+						closeRealtimeSession()
+						if (!isForeground) break
+						delay(backoffMs)
+						backoffMs = (backoffMs * 2).coerceAtMost(REALTIME_RECONNECT_MAX_MS)
 					}
-					session.events.collectLatest { event ->
-						applyPresenceRealtimeEvent(event)
-					}
 				}
-				if (connected.isFailure) {
-					logger.d(
-						"PresenceRepositoryImpl.ensureRealtimeLoop",
-						"realtime error: ${connected.exceptionOrNull()?.message}"
-					)
-				}
-				closeRealtimeSession()
-				if (!isForeground) break
-				delay(backoffMs)
-				backoffMs = (backoffMs * 2).coerceAtMost(REALTIME_RECONNECT_MAX_MS)
 			}
 		}
-		}
-		realtimeJob = jobToStart
 	}
 
 	private suspend fun syncRealtimeTargets(targets: Set<String>) {

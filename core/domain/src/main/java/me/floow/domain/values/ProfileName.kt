@@ -3,6 +3,7 @@ package me.floow.domain.values
 import me.floow.domain.values.util.RawValueObjectCreate
 import me.floow.domain.values.util.ValidationError
 import me.floow.domain.values.util.ValueValidationResult
+import kotlin.jvm.JvmInline
 
 @JvmInline
 value class ProfileName private constructor(

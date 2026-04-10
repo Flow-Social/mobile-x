@@ -40,6 +40,7 @@ import me.floow.domain.models.DirectChatPeer
 import me.floow.domain.models.DirectChatReadState
 import me.floow.domain.models.DirectChatRealtimeEvent
 import me.floow.domain.utils.Logger
+import me.floow.domain.utils.currentTimeMillis
 
 class ChatsRepositoryImpl(
 	private val logger: Logger,
@@ -181,7 +182,7 @@ class ChatsRepositoryImpl(
 			limit = limit.coerceAtLeast(1),
 			cursor = cursor?.trim()?.takeIf(String::isNotEmpty)
 		)
-		val nowMs = System.currentTimeMillis()
+		val nowMs = currentTimeMillis()
 
 		var cachedResult: GetDataResponse<DirectChatConversationsPage>? = null
 		var inFlightDeferred: CompletableDeferred<GetDataResponse<DirectChatConversationsPage>>? = null
@@ -214,7 +215,7 @@ class ChatsRepositoryImpl(
 			request.complete(result)
 			conversationsRequestMutex.withLock {
 				conversationsMemoryCache[requestKey] = ConversationsCacheEntry(
-					fetchedAtMs = System.currentTimeMillis(),
+					fetchedAtMs = currentTimeMillis(),
 					data = result
 				)
 			}
