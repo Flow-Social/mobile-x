@@ -2,7 +2,8 @@
 agp = "8.6.1"
 androidxCoreSplashscreen = "1.0.1"
 graphics-shapes = "1.0.1"
-kotlin = "2.1.20"
+kotlin = "2.3.10"
+compose-multiplatform = "1.10.1"
 core-ktx = "1.16.0"
 junit = "4.13.2"
 androidx-test-ext-junit = "1.2.1"
@@ -27,8 +28,9 @@ androidx-browser = "1.8.0"
 koin = "4.0.0-RC1"
 room = "2.7.1"
 work = "2.10.0"
-ksp = "2.1.20-1.0.31"
+ksp = "2.3.4"
 coil = "2.7.0"
+coil3 = "3.4.0"
 textflow = "1.2.1"
 composeSwipeableCards = "1.1.4"
 reorderable = "3.0.0"
@@ -79,11 +81,11 @@ firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging
 androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
 
 koin-bom = { group = "io.insert-koin", name = "koin-bom", version.ref = "koin" }
-koin-core = { group = "io.insert-koin", name = "koin-core" }
-koin-android = { group = "io.insert-koin", name = "koin-android" }
-koin-compose = { group = "io.insert-koin", name = "koin-compose" }
-koin-androidx-compose = { group = "io.insert-koin", name = "koin-androidx-compose" }
-koin-androidx-compose-navigation = { group = "io.insert-koin", name = "koin-androidx-compose-navigation" }
+koin-core = { group = "io.insert-koin", name = "koin-core", version.ref = "koin" }
+koin-android = { group = "io.insert-koin", name = "koin-android", version.ref = "koin" }
+koin-compose = { group = "io.insert-koin", name = "koin-compose", version.ref = "koin" }
+koin-androidx-compose = { group = "io.insert-koin", name = "koin-androidx-compose", version.ref = "koin" }
+koin-androidx-compose-navigation = { group = "io.insert-koin", name = "koin-androidx-compose-navigation", version.ref = "koin" }
 
 room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
@@ -91,6 +93,9 @@ room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 
 coil = { group = "io.coil-kt", name = "coil", version.ref = "coil" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
+coil3-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil3" }
+coil3-network-okhttp = { group = "io.coil-kt.coil3", name = "coil-network-okhttp", version.ref = "coil3" }
+coil3-network-ktor3 = { group = "io.coil-kt.coil3", name = "coil-network-ktor3", version.ref = "coil3" }
 coil-gif = { group = "io.coil-kt", name = "coil-gif", version.ref = "coil" }
 
 textflow-material3 = { group = "io.github.oleksandrbalan", name = "textflow-material3", version.ref = "textflow" }
@@ -103,7 +108,9 @@ androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterfa
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }
+kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlinAndroid = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+jetbrainsCompose = { id = "org.jetbrains.compose", version.ref = "compose-multiplatform" }
 org-jetbrains-kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "org-jetbrains-kotlin-jvm" }
 androidLibrary = { id = "com.android.library", version.ref = "agp" }
 composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
