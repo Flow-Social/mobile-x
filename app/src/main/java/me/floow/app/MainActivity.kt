@@ -35,6 +35,7 @@ class MainActivity : ComponentActivity() {
 		super.onCreate(savedInstanceState)
 
 		val authenticationManager: AuthenticationManager = getKoin().get()
+		handleGoogleOAuthIntent(intent, authenticationManager)
 		val launchBootstrapper = LaunchBootstrapper(authenticationManager)
 
 		splashScreen.setKeepOnScreenCondition {
@@ -81,12 +82,9 @@ class MainActivity : ComponentActivity() {
 
 	override fun onNewIntent(intent: Intent) {
 		val authenticationManager: AuthenticationManager = getKoin().get()
+		setIntent(intent)
 
-		extractGoogleOAuthCode(intent)?.let { code ->
-			lifecycleScope.launch {
-				authenticationManager.handleGoogleOAuthCode(code)
-			}
-		}
+		handleGoogleOAuthIntent(intent, authenticationManager)
 
 		pushDeepLinkIntent(intent)
 		super.onNewIntent(intent)
@@ -106,6 +104,16 @@ class MainActivity : ComponentActivity() {
 		val data = intent.data ?: return null
 		if (data.scheme != GOOGLE_OAUTH_SCHEME) return null
 		return runCatching { data.getQueryParameter("code") }.getOrNull()
+	}
+
+	private fun handleGoogleOAuthIntent(
+		intent: Intent?,
+		authenticationManager: AuthenticationManager,
+	) {
+		val code = intent?.let(::extractGoogleOAuthCode) ?: return
+		lifecycleScope.launch {
+			authenticationManager.handleGoogleOAuthCode(code)
+		}
 	}
 
 	override fun attachBaseContext(newBase: Context?) {
