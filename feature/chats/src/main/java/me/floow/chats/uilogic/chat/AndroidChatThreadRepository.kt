@@ -1,5 +1,6 @@
 package me.floow.chats.uilogic.chat
 
+import kotlinx.coroutines.flow.first
 import me.floow.domain.auth.AuthenticationManager
 import me.floow.domain.data.GetDataResponse
 import me.floow.domain.data.UpdateDataResponse
@@ -7,6 +8,7 @@ import me.floow.domain.data.repos.ChatsRepository
 import me.floow.domain.models.DirectChatAnchoredMessagesWindow
 import me.floow.domain.models.DirectChatConversation
 import me.floow.domain.models.DirectChatMessage
+import me.floow.domain.models.DirectChatPeer
 import me.floow.domain.models.MessageDeliveryStatus
 import me.floow.shared.chats.model.ChatDeliveryState
 import me.floow.shared.chats.model.ChatMessageItemModel
@@ -22,6 +24,34 @@ class AndroidChatThreadRepository(
 	private val authenticationManager: AuthenticationManager,
 	private val directMessagesReadCursorStore: me.floow.domain.data.repos.DirectMessagesReadCursorStore,
 ) : ChatThreadRepository {
+	override suspend fun loadCachedInitial(request: DirectChatInitialRequest): Result<ChatThreadSnapshot?> = runCatching {
+		val conversation = resolveCachedConversation(request) ?: return@runCatching null
+		val selfUserId = resolveSelfUserId(request, conversation)
+		val header = conversation.toHeader(request, selfUserId)
+		val anchorMessageId = request.anchorMessageId
+		if (anchorMessageId != null && request.openMode == ChatOpenMode.FROM_MESSAGE_LINK) {
+			when (val response = chatsRepository.getAnchoredMessagesWindow(conversation.id, anchorMessageId)) {
+				is GetDataResponse.Success -> response.data.toSnapshot(header, selfUserId)
+				is GetDataResponse.Error -> null
+			}
+		} else {
+			val cachedPage = chatsRepository.observeMessages(conversation.id, limit = 50).first()
+			if (cachedPage.items.isEmpty()) {
+				null
+			} else {
+				ChatThreadSnapshot(
+					conversationId = conversation.id,
+					header = header,
+					messages = cachedPage.items.sortedBy(DirectChatMessage::id).map { it.toItemModel(selfUserId) },
+					canLoadMore = cachedPage.nextBeforeId != null,
+					nextBeforeMessageId = cachedPage.nextBeforeId,
+					peerLastReadMessageId = cachedPage.peerLastReadMessageId,
+					highlightedMessageId = request.anchorMessageId,
+				)
+			}
+		}
+	}
+
 	override suspend fun sendMessage(
 		conversationId: Long,
 		text: String,
@@ -153,6 +183,19 @@ class AndroidChatThreadRepository(
 		error("chat conversation target is missing")
 	}
 
+	private suspend fun resolveCachedConversation(request: DirectChatInitialRequest): DirectChatConversation? {
+		val cachedConversations = chatsRepository.observeConversations().first()
+		val explicitConversationId = request.conversationId?.takeIf { it > 0L }
+		if (explicitConversationId != null) {
+			return cachedConversations.firstOrNull { it.id == explicitConversationId }
+				?: request.toCachedConversation(explicitConversationId)
+		}
+		if (request.isSavedMessages) {
+			return cachedConversations.firstOrNull(DirectChatConversation::isSavedMessages)
+		}
+		return null
+	}
+
 	private fun resolveSelfUserId(
 		request: DirectChatInitialRequest,
 		conversation: DirectChatConversation,
@@ -163,6 +206,25 @@ class AndroidChatThreadRepository(
 			authenticationManager.getSelfUserIdOrNull()
 		}
 	}
+}
+
+private fun DirectChatInitialRequest.toCachedConversation(conversationId: Long): DirectChatConversation {
+	return DirectChatConversation(
+		id = conversationId,
+		kind = if (isSavedMessages) SAVED_MESSAGES_CHAT_KIND else "direct",
+		peer = DirectChatPeer(
+			id = peerUserId,
+			username = null,
+			name = peerDisplayName,
+			avatarUrl = peerAvatarUrl,
+		),
+		lastMessage = null,
+		unreadCount = 0,
+		lastReadMessageId = 0L,
+		peerLastReadMessageId = null,
+		createdAt = 0L,
+		updatedAt = 0L,
+	)
 }
 
 private fun DirectChatConversation.toHeader(
@@ -227,3 +289,8 @@ private fun DirectChatMessage.toItemModel(selfUserId: String?): ChatMessageItemM
 		deliveryState = deliveryState,
 	)
 }
+
+private val DirectChatConversation.isSavedMessages: Boolean
+	get() = kind.trim().lowercase() == SAVED_MESSAGES_CHAT_KIND || kind.trim().lowercase() == "saved"
+
+private const val SAVED_MESSAGES_CHAT_KIND = "saved_messages"
