@@ -6,7 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import me.floow.profile.uilogic.bump.ProfileBumpUiState
-import me.floow.profile.uilogic.profile.ProfileScreenState
+import me.floow.shared.profile.uilogic.ProfileScreenState as SharedProfileScreenState
 import me.floow.uikit.components.loading.FlowLoadingIndicator
 import me.floow.uikit.components.media.transfer.PostMediaSourceSnapshot
 
@@ -29,31 +29,31 @@ fun ProfileScreen(
     onPostClick: (me.floow.domain.models.Post, PostMediaSourceSnapshot?) -> Unit,
     onSharePost: (me.floow.domain.models.Post) -> Unit = {},
 	onEditPost: (me.floow.domain.models.Post, PostMediaSourceSnapshot?) -> Unit = { _, _ -> },
-    onDeletePost: (String) -> Unit = {},
+	onDeletePost: (String) -> Unit = {},
 	onLoadMorePosts: () -> Unit = {},
 	suppressStatusBarStyle: Boolean = false,
-	state: ProfileScreenState,
+	state: SharedProfileScreenState,
 	modifier: Modifier = Modifier,
 ) {
 	Box(
 		modifier = modifier
 	) {
 		when (state) {
-			is ProfileScreenState.Loading -> {
+			SharedProfileScreenState.Loading -> {
 				FlowLoadingIndicator( // todo
 					modifier = Modifier
 						.align(Alignment.Center)
 				)
 			}
 
-			is ProfileScreenState.Error -> {
+			is SharedProfileScreenState.Error -> {
 				Text( // todo
-					text = "error :(",
+					text = state.message,
 					modifier = Modifier
 				)
 			}
 
-			is ProfileScreenState.Success -> {
+			is SharedProfileScreenState.Success -> {
 				ProfileScreenSuccessState(
 					state = state,
 					onProfileEditClick = onProfileEditClick,

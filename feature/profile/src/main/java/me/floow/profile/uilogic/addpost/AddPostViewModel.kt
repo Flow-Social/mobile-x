@@ -20,6 +20,7 @@ import me.floow.domain.data.repos.PostsRepository
 import me.floow.domain.data.repos.UploadImageData
 import me.floow.domain.data.repos.UploadsRepository
 import me.floow.domain.models.CategoryCatalogItem
+import me.floow.shared.profile.image.LocalImageFileReader
 
 data class AddPostVmState(
 	val imageUrls: List<String> = listOf(""),
