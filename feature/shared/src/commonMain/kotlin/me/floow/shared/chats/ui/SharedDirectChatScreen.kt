@@ -27,6 +27,7 @@ import kotlinx.coroutines.launch
 import me.floow.shared.chats.model.ChatThreadHeaderModel
 import me.floow.shared.chats.uilogic.direct.DirectChatScreenState
 import me.floow.uikit.chat.common.ChatScreenBody
+import me.floow.uikit.chat.input.ChatInputController
 import me.floow.uikit.chat.input.rememberChatInputController
 import me.floow.uikit.chat.input.rememberChatInputLayoutState
 import me.floow.uikit.chat.model.ChatContextMenuAction
@@ -80,6 +81,7 @@ internal fun SharedDirectChatScreen(
 	onDeleteSelectionClick: () -> Unit,
 	onPinnedMessageClick: (Long) -> Unit,
 	snackbarHostState: SnackbarHostState,
+	emojiPanel: @Composable (ChatInputController) -> Unit = {},
 	modifier: Modifier = Modifier,
 ) {
 	val strings = rememberSharedChatStrings()
@@ -232,6 +234,9 @@ internal fun SharedDirectChatScreen(
 			}
 		} else {
 			null
+		},
+		emojiPanel = {
+			emojiPanel(inputController)
 		},
 		content = { contentModifier ->
 			when (uiState) {

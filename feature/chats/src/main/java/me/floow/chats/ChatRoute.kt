@@ -19,6 +19,7 @@ import me.floow.shared.chats.uilogic.direct.ChatPresenceContract
 import me.floow.shared.chats.uilogic.direct.ChatRealtimeContract
 import me.floow.shared.chats.uilogic.direct.DirectChatStateHolder
 import me.floow.shared.chats.uilogic.direct.StaticChatThreadRepository
+import me.floow.uikit.components.pickers.FlowEmojiPanel
 import me.floow.uikit.util.SetStatusBarStyle
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -81,6 +82,12 @@ fun ChatRoute(
 			null
 		} else {
 			{ onProfileClick(initialRequest.peerUserId) }
+		},
+		emojiPanel = { inputController ->
+			FlowEmojiPanel(
+				onEmojiPicked = inputController::insertEmoji,
+				modifier = Modifier,
+			)
 		},
 		modifier = modifier,
 	)

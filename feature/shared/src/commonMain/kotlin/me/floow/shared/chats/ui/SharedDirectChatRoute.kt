@@ -21,6 +21,7 @@ import me.floow.shared.chats.uilogic.direct.DeleteMessageResult
 import me.floow.shared.chats.uilogic.direct.DirectChatInitialRequest
 import me.floow.shared.chats.uilogic.direct.DirectChatScreenState
 import me.floow.shared.chats.uilogic.direct.DirectChatStateHolder
+import me.floow.uikit.chat.input.ChatInputController
 import me.floow.uikit.chat.model.ChatContextMenuAction
 import me.floow.uikit.chat.model.ChatSelectionState
 
@@ -32,6 +33,7 @@ fun SharedDirectChatRoute(
 	onShowMessage: (String) -> Unit,
 	onCopyText: (String) -> Unit = {},
 	onHeaderClick: (() -> Unit)? = null,
+	emojiPanel: @Composable (ChatInputController) -> Unit = {},
 	modifier: Modifier = Modifier,
 ) {
 	val state by stateHolder.state.collectAsState()
@@ -230,6 +232,7 @@ fun SharedDirectChatRoute(
 		},
 		onPinnedMessageClick = stateHolder::jumpToMessage,
 		snackbarHostState = snackbarHostState,
+		emojiPanel = emojiPanel,
 		modifier = modifier,
 	)
 }
