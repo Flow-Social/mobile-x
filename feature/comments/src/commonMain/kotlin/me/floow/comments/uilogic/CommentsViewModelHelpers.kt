@@ -13,8 +13,9 @@ import me.floow.domain.readmodel.TimelineReadOpenMode
 import me.floow.domain.readmodel.TimelineReadProjectorInput
 import me.floow.domain.readmodel.TimelineReadProjection
 import me.floow.domain.readmodel.projectTimelineReadModel
-import me.floow.domain.utils.toLocalDateTimeFromEpochMillis
+import me.floow.domain.utils.currentTimeMillis
 import me.floow.uikit.chat.model.ChatMessage
+import me.floow.uikit.chat.model.ChatPostImageVariant
 import me.floow.uikit.chat.model.PostPreviewMessage
 import me.floow.uikit.chat.model.PrimaryInMessage
 import me.floow.uikit.chat.model.PrimaryOutMessage
@@ -131,7 +132,7 @@ internal fun resolveAnchorWindow(anchorCommentId: CommentId?): AnchorWindowParam
 
 internal fun buildOptimisticComment(
 	state: CommentsVmState,
-	selfUserId: String,
+	selfUserId: String?,
 	temporaryCommentId: String,
 	text: String,
 	replyToId: Long?,
@@ -151,7 +152,7 @@ internal fun buildOptimisticComment(
 		id = temporaryCommentId,
 		postId = state.postId,
 		author = CommentAuthor(
-			id = selfUserId,
+			id = normalizeCommentSelfUserId(selfUserId).orEmpty(),
 			name = null,
 			username = null,
 			avatarUrl = null
@@ -163,6 +164,30 @@ internal fun buildOptimisticComment(
 	)
 }
 
+internal fun normalizeCommentSelfUserId(selfUserId: String?): String? {
+	return selfUserId
+		?.trim()
+		?.takeIf(String::isNotEmpty)
+}
+
+internal fun Comment.isOwnedBy(
+	selfUserId: String?,
+	locallyOwnedCommentIds: Set<String> = emptySet()
+): Boolean {
+	if (locallyOwnedCommentIds.contains(id)) return true
+	val normalizedSelfUserId = normalizeCommentSelfUserId(selfUserId) ?: return false
+	val normalizedAuthorId = author.id.trim().takeIf(String::isNotEmpty) ?: return false
+	return normalizedAuthorId == normalizedSelfUserId
+}
+
+internal fun Comment.resolveForeignAuthorId(
+	selfUserId: String?,
+	locallyOwnedCommentIds: Set<String> = emptySet()
+): String? {
+	val normalizedAuthorId = author.id.trim().takeIf(String::isNotEmpty) ?: return null
+	return normalizedAuthorId.takeUnless { isOwnedBy(selfUserId, locallyOwnedCommentIds) }
+}
+
 internal fun CommentsVmState.buildPostPreviewMessage(): PostPreviewMessage? {
 	val description = postDescription.orEmpty()
 	val variants = PostContent(
@@ -171,14 +196,21 @@ internal fun CommentsVmState.buildPostPreviewMessage(): PostPreviewMessage? {
 		imageVariants = postImageVariants
 	).resolvedImageVariants()
 	if (description.isBlank() && variants.isEmpty()) return null
-	val dateTime = (if (postCreatedAt > 0) postCreatedAt else System.currentTimeMillis())
-		.toLocalDateTimeFromEpochMillis()
+	val createdAtMillis = if (postCreatedAt > 0) postCreatedAt else currentTimeMillis()
 	val messageId = ("post:" + postId).hashCode().toLong() * -1L
 	return PostPreviewMessage(
 		id = messageId,
 		messageText = description,
-		dateTime = dateTime,
-		imageVariants = variants,
+		createdAtMillis = createdAtMillis,
+		imageVariants = variants.map { variant ->
+			ChatPostImageVariant(
+				lqUrl = variant.lqUrl,
+				previewUrl = variant.previewUrl,
+				fullUrl = variant.fullUrl,
+				width = variant.width,
+				height = variant.height
+			)
+		},
 		likesCount = postLikesCount,
 		authorAvatarUrl = postAuthorAvatarUrl?.toString(),
 		authorName = postAuthorName,
@@ -188,10 +220,13 @@ internal fun CommentsVmState.buildPostPreviewMessage(): PostPreviewMessage? {
 
 internal fun Comment.toChatMessage(
 	selfUserId: String?,
-	messageIdByCommentId: Map<Long, Long>
+	messageIdByCommentId: Map<Long, Long>,
+	locallyOwnedCommentIds: Set<String> = emptySet()
 ): ChatMessage {
-	val isMine = selfUserId != null && author.id == selfUserId
-	val dateTime = createdAt.toLocalDateTimeFromEpochMillis()
+	val isMine = isOwnedBy(
+		selfUserId = selfUserId,
+		locallyOwnedCommentIds = locallyOwnedCommentIds
+	)
 	val authorName = author.name?.value
 	val authorUsername = author.username?.value
 	val reply = replyTo
@@ -204,7 +239,7 @@ internal fun Comment.toChatMessage(
 			ReplyOutMessage(
 				id = messageId,
 				messageText = text,
-				dateTime = dateTime,
+				createdAtMillis = createdAt,
 				replyMessageId = replyId,
 				replyMessageText = reply.text,
 				authorName = authorName,
@@ -217,7 +252,7 @@ internal fun Comment.toChatMessage(
 				replyMessageId = replyId,
 				replyMessageText = reply.text,
 				messageText = text,
-				dateTime = dateTime,
+				createdAtMillis = createdAt,
 				authorName = authorName,
 				authorUsername = authorUsername,
 				authorAvatarUrl = author.avatarUrl
@@ -228,7 +263,7 @@ internal fun Comment.toChatMessage(
 			PrimaryOutMessage(
 				id = messageId,
 				messageText = text,
-				dateTime = dateTime,
+				createdAtMillis = createdAt,
 				authorName = authorName,
 				authorUsername = authorUsername,
 				authorAvatarUrl = author.avatarUrl
@@ -237,7 +272,7 @@ internal fun Comment.toChatMessage(
 			PrimaryInMessage(
 				id = messageId,
 				messageText = text,
-				dateTime = dateTime,
+				createdAtMillis = createdAt,
 				authorName = authorName,
 				authorUsername = authorUsername,
 				authorAvatarUrl = author.avatarUrl
@@ -274,6 +309,7 @@ internal data class CommentsReadProjection(
 internal fun projectCommentsReadModel(
 	comments: List<Comment>,
 	selfUserId: String?,
+	locallyOwnedCommentIds: Set<String> = emptySet(),
 	serverReadUpToSeq: Long,
 	localReadUpToSeq: Long
 ): CommentsReadProjection {
@@ -281,7 +317,10 @@ internal fun projectCommentsReadModel(
 		TimelineReadItem(
 			messageId = commentToMessageId(comment),
 			cursor = comment.seq,
-			isIncoming = comment.author.id != selfUserId
+			isIncoming = !comment.isOwnedBy(
+				selfUserId = selfUserId,
+				locallyOwnedCommentIds = locallyOwnedCommentIds
+			)
 		)
 	}
 	val projection = projectTimelineReadModel(
@@ -370,19 +409,24 @@ internal fun applyRealtimeCommentDelete(
 internal fun applyRealtimeReadUpTo(
 	state: CommentsVmState,
 	selfUserId: String?,
+	locallyOwnedCommentIds: Set<String> = emptySet(),
 	readUpToSeq: Long
 ): CommentsVmState {
 	if (readUpToSeq <= 0L) return state
 	val readProjection = projectCommentsReadModel(
 		comments = state.comments,
 		selfUserId = selfUserId,
+		locallyOwnedCommentIds = locallyOwnedCommentIds,
 		serverReadUpToSeq = readUpToSeq,
 		localReadUpToSeq = readUpToSeq
 	)
 	val unreadMessageIds = readProjection.projection.unreadMessageIds
 	val updatedComments = state.comments.map { comment ->
 		val messageId = commentToMessageId(comment)
-		val shouldBeRead = comment.author.id == selfUserId || !unreadMessageIds.contains(messageId)
+		val shouldBeRead = comment.isOwnedBy(
+			selfUserId = selfUserId,
+			locallyOwnedCommentIds = locallyOwnedCommentIds
+		) || !unreadMessageIds.contains(messageId)
 		if (comment.isRead == shouldBeRead) {
 			comment
 		} else {
