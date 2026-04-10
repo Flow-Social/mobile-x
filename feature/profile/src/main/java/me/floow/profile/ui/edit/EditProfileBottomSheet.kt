@@ -1,5 +1,8 @@
 package me.floow.profile.ui.edit
 
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -10,41 +13,38 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -56,19 +56,21 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import coil.compose.rememberAsyncImagePainter
 import kotlinx.coroutines.launch
 import me.floow.profile.R
-import me.floow.profile.ui.common.editProfileSheetStatusBarAppearance
 import me.floow.profile.ui.common.SheetStatusBarStyle
-import me.floow.profile.uilogic.edit.EditProfileState
+import me.floow.profile.ui.common.editProfileSheetStatusBarAppearance
+import me.floow.shared.profile.ui.edit.EditProfileState
+import me.floow.shared.profile.ui.edit.SharedEditProfileFormContent
+import me.floow.shared.profile.ui.edit.SharedEditProfileSheetTopBar
 import me.floow.uikit.theme.FlowTheme
 import me.floow.uikit.theme.LocalTypography
 import me.floow.uikit.theme.NinehedronShape
@@ -138,7 +140,7 @@ private fun EditProfileBottomSheetContent(
     Column(
         modifier = Modifier.fillMaxWidth(),
     ) {
-        EditProfileSheetTopBar(
+        SharedEditProfileSheetTopBar(
             state = state,
             onDismissRequest = onDismissRequest,
             onDoneClick = onDoneClick,
@@ -151,64 +153,14 @@ private fun EditProfileBottomSheetContent(
                 .imePadding()
                 .padding(start = 8.dp, end = 8.dp, bottom = 16.dp),
         ) {
-            EditProfileMediaCard(
-                avatarPainter = avatarPainter,
-                backgroundPainter = backgroundPainter,
+            SharedEditProfileFormContent(
+                state = state,
                 onAvatarPickerClick = onAvatarPickerClick,
                 onBackgroundPickerClick = onBackgroundPickerClick,
-            )
-
-            if (!state.avatarErrorMessage.isNullOrBlank()) {
-                SheetErrorLabel(
-                    text = state.avatarErrorMessage,
-                    modifier = Modifier.padding(top = 12.dp),
-                )
-            }
-
-            if (!state.backgroundErrorMessage.isNullOrBlank()) {
-                SheetErrorLabel(
-                    text = state.backgroundErrorMessage,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            EditProfileSheetField(
-                title = stringResource(R.string.edit_profile_sheet_name_label),
-                value = state.name.value,
-                placeholder = stringResource(R.string.edit_profile_sheet_name_placeholder),
-                isError = state.name is ValidatedField.Invalid,
-                onValueChange = onNameChange,
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            EditProfileSheetField(
-                title = stringResource(R.string.edit_profile_sheet_username_label),
-                value = state.username.value,
-                placeholder = stringResource(R.string.edit_profile_sheet_username_placeholder),
-                isError = state.username is ValidatedField.Invalid,
-                prefix = stringResource(R.string.edit_profile_sheet_username_prefix),
-                supportingText = stringResource(me.floow.uikit.R.string.username_field_supporting_text),
-                errorText = usernameErrorText(state.username),
-                onValueChange = onUsernameChange,
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.None,
-                ),
-            )
-
-            Spacer(modifier = Modifier.height(18.dp))
-
-            EditProfileSheetField(
-                title = stringResource(R.string.edit_profile_sheet_bio_label),
-                value = state.bio.value,
-                placeholder = stringResource(R.string.edit_profile_sheet_bio_placeholder),
-                isError = state.bio is ValidatedField.Invalid,
-                minLines = 5,
-                maxLines = 5,
-                singleLine = false,
-                onValueChange = onBiographyChange,
+                onNameChange = onNameChange,
+                onUsernameChange = onUsernameChange,
+                onBiographyChange = onBiographyChange,
+                modifier = Modifier.fillMaxWidth(),
             )
         }
     }
@@ -232,14 +184,14 @@ private fun EditProfileSheetTopBar(
         ) {
             Icon(
                 painter = painterResource(me.floow.uikit.R.drawable.current_reply_close_icon),
-                contentDescription = stringResource(R.string.edit_profile_sheet_close),
+                contentDescription = stringResource(R.string.profile_edit_sheet_close),
                 tint = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.size(22.dp),
             )
         }
 
         Text(
-            text = stringResource(R.string.edit_profile_sheet_title),
+            text = stringResource(R.string.profile_edit_sheet_title),
             style = LocalTypography.current.titleMedium,
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier
@@ -266,7 +218,7 @@ private fun EditProfileSheetTopBar(
                 )
             } else {
                 Text(
-                    text = stringResource(R.string.edit_profile_sheet_save),
+                    text = stringResource(R.string.profile_edit_sheet_save),
                     style = LocalTypography.current.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -316,7 +268,7 @@ private fun EditProfileMediaCard(
         )
 
         Text(
-            text = stringResource(R.string.edit_profile_sheet_change_background),
+            text = stringResource(R.string.profile_edit_sheet_change_background),
             style = LocalTypography.current.labelMedium,
             color = Color.White,
             modifier = Modifier
@@ -361,7 +313,7 @@ private fun EditProfileMediaCard(
                     .padding(bottom = 32.dp),
             ) {
                 Text(
-                    text = stringResource(R.string.edit_profile_sheet_change_avatar),
+                    text = stringResource(R.string.profile_edit_sheet_change_avatar),
                     style = LocalTypography.current.bodyMedium,
                     color = Color.Black,
                     textAlign = TextAlign.Center,
@@ -567,7 +519,7 @@ private fun SheetErrorLabel(
 private fun usernameErrorText(field: ValidatedField): String? {
     val invalidField = field as? ValidatedField.Invalid ?: return null
     return when (invalidField.errorType) {
-        ValidationErrorType.UsernameAlreadyExists -> stringResource(R.string.edit_profile_sheet_username_taken)
+        ValidationErrorType.UsernameAlreadyExists -> stringResource(R.string.profile_edit_sheet_username_taken)
         else -> null
     }
 }

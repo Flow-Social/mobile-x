@@ -1,5 +1,8 @@
 package me.floow.profile.ui.addpost
 
+import me.floow.shared.profile.ui.addpost.CreatePostCategoryItem
+import me.floow.shared.profile.ui.addpost.CreatePostImageItem
+import me.floow.shared.profile.ui.addpost.CreatePostUiState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

@@ -3,71 +3,83 @@ package me.floow.profile.ui.edit
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import android.widget.Toast
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBarDefaults
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.repeatOnLifecycle
-import kotlinx.coroutines.flow.collectLatest
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import kotlinx.coroutines.CancellableContinuation
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import me.floow.profile.uilogic.edit.EditProfileViewModel
+import kotlinx.coroutines.suspendCancellableCoroutine
+import me.floow.shared.profile.image.LocalImageFileReader
+import me.floow.shared.profile.uilogic.compose.PlatformImagePicker
+import me.floow.shared.profile.uilogic.compose.PlatformPickedImage
+import me.floow.shared.profile.uilogic.compose.PostComposerRepository
+import me.floow.shared.profile.uilogic.edit.EditProfileOverlayData
+import me.floow.shared.profile.uilogic.edit.EditProfileStateHolder
+import me.floow.shared.profile.uilogic.edit.ProfileEditorRepository
 import me.floow.uikit.util.SetNavigationBarColor
 import me.floow.uikit.util.SetStatusBarStyle
-
-data class EditProfileRouteInitialData(
-	val name: String,
-	val username: String,
-	val description: String,
-	val avatarUrl: String? = null,
-	val backgroundUrl: String? = null,
-)
+import org.koin.compose.koinInject
+import org.koin.core.parameter.parametersOf
+import kotlin.coroutines.resume
 
 @Composable
 fun EditProfileRoute(
-	initialData: EditProfileRouteInitialData? = null,
+	initialData: EditProfileOverlayData? = null,
 	onBackClick: () -> Unit = {},
 	onDoneClick: () -> Unit,
-	vm: EditProfileViewModel,
 	modifier: Modifier = Modifier
 ) {
+	val routeInitialData = requireNotNull(initialData) {
+		"EditProfileRoute requires initialData in the Android shared-owner path"
+	}
 	val statusBarColor = MaterialTheme.colorScheme.background
 	val useDarkStatusIcons = statusBarColor.luminance() > 0.5f
-	val state by vm.state.collectAsState()
-	val context = LocalContext.current
-	val hapticFeedback = LocalHapticFeedback.current
-	val lifecycle = LocalLifecycleOwner.current.lifecycle
-	val pickAvatarLauncher = rememberLauncherForActivityResult(
+	val snackbarHostState = remember { SnackbarHostState() }
+	val focusManager = LocalFocusManager.current
+	val keyboardController = LocalSoftwareKeyboardController.current
+	val imagePicker = remember { AndroidSingleImagePicker() }
+	val pickImageLauncher = rememberLauncherForActivityResult(
 		contract = ActivityResultContracts.PickVisualMedia()
 	) { uri ->
-		vm.setAvatarFromPicker(uri?.toString())
+		imagePicker.onImagePicked(uri?.toString())
 	}
-	val pickBackgroundLauncher = rememberLauncherForActivityResult(
-		contract = ActivityResultContracts.PickVisualMedia()
-	) { uri ->
-		vm.setBackgroundFromPicker(uri?.toString())
+	val stateHolder: EditProfileStateHolder = koinInject(
+		parameters = { parametersOf(routeInitialData, imagePicker) }
+	)
+	val state by stateHolder.state.collectAsState()
+
+	imagePicker.launchPicker = {
+		pickImageLauncher.launch(
+			PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+		)
 	}
 
-	LaunchedEffect(Unit) {
-		if (initialData != null) {
-			vm.setInitialData(initialData)
-		} else {
-			vm.loadData()
-		}
-
-		lifecycle.repeatOnLifecycle(state = Lifecycle.State.STARTED) {
-			launch {
-				vm.hapticFeedbackFlow.collectLatest {
-					hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+	LaunchedEffect(stateHolder) {
+		stateHolder.events.collect { event ->
+			when (event) {
+				is EditProfileStateHolder.Event.Saved -> {
+					focusManager.clearFocus(force = true)
+					keyboardController?.hide()
+					onDoneClick()
+				}
+				is EditProfileStateHolder.Event.ShowMessage -> {
+					snackbarHostState.showSnackbar(event.message)
 				}
 			}
 		}
@@ -78,35 +90,66 @@ fun EditProfileRoute(
 		darkIcons = useDarkStatusIcons
 	)
 
-	EditProfileScreen(
-		state = state,
-		onBackClick = onBackClick,
-		onDoneClick = {
-			vm.updateProfile(
-				onSuccess = onDoneClick,
-				onFailure = {
-					val toast = Toast.makeText(context, "Failure", Toast.LENGTH_SHORT)
-					toast.show()
-				}
-			)
-		},
-		onAvatarPickerClick = {
-			pickAvatarLauncher.launch(
-				PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-			)
-		},
-		onBackgroundPickerClick = {
-			pickBackgroundLauncher.launch(
-				PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-			)
-		},
-		onNameChange = vm::updateName,
-		onUsernameChange = vm::updateUsername,
-		onBiographyChange = vm::updateBiography,
-		modifier = modifier,
-	)
+	Box(modifier = modifier.fillMaxSize()) {
+		EditProfileScreen(
+			state = state,
+			onBackClick = {
+				focusManager.clearFocus(force = true)
+				keyboardController?.hide()
+				onBackClick()
+			},
+			onDoneClick = stateHolder::save,
+			onAvatarPickerClick = stateHolder::pickAvatar,
+			onBackgroundPickerClick = stateHolder::pickBackground,
+			onNameChange = stateHolder::updateName,
+			onUsernameChange = stateHolder::updateUsername,
+			onBiographyChange = stateHolder::updateBio,
+			modifier = Modifier.fillMaxSize(),
+		)
 
-	SetNavigationBarColor(
-		MaterialTheme.colorScheme.background
-	)
+		SnackbarHost(
+			hostState = snackbarHostState,
+			modifier = Modifier.align(Alignment.BottomCenter)
+		)
+	}
+
+	SetNavigationBarColor(MaterialTheme.colorScheme.background)
+}
+
+internal class AndroidSingleImagePicker : PlatformImagePicker {
+	var launchPicker: (() -> Unit)? = null
+	private var continuation: CancellableContinuation<PlatformPickedImage?>? = null
+
+	override suspend fun pickPostImages(maxItems: Int): List<PlatformPickedImage> = emptyList()
+
+	override suspend fun pickSingleImage(): PlatformPickedImage? {
+		val launcher = checkNotNull(launchPicker) { "Single image picker launcher is not attached" }
+		return suspendCancellableCoroutine { continuation ->
+			this.continuation = continuation
+			continuation.invokeOnCancellation {
+				if (this.continuation === continuation) {
+					this.continuation = null
+				}
+			}
+			CoroutineScope(Dispatchers.Main.immediate).launch {
+				launcher()
+			}
+		}
+	}
+
+	fun onImagePicked(uri: String?) {
+		val pending = continuation ?: return
+		continuation = null
+		pending.resume(
+			uri?.takeIf(String::isNotBlank)?.let {
+				PlatformPickedImage(
+					id = it,
+					name = "picked_image",
+					mimeType = "image/*",
+					sizeBytes = 0L,
+					previewUri = it,
+				)
+			}
+		)
+	}
 }
