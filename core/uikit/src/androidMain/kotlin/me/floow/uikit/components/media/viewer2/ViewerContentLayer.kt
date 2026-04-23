@@ -132,7 +132,10 @@ fun ViewerContentLayer(
                 .overlayHorizontalSwipeZone(
                     zoneKey = pagerZoneKey,
                     atStart = pagerState.currentPage == 0,
-                    blockOverlay = true,
+                    // Let the pager own horizontal drags while it can still scroll, but hand the
+                    // gesture back to the hosting overlay on the first page so edge-swipe dismiss
+                    // works again like the pre-KMP Android flow.
+                    blockOverlay = false,
                     priority = 100
                 )
         ) { page ->

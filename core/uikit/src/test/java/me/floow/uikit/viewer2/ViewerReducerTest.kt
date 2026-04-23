@@ -45,7 +45,7 @@ class ViewerReducerTest {
     }
 
     @Test
-    fun request_close_moves_to_closing_and_sets_close_origin() {
+    fun request_close_moves_to_closing_and_sets_close_origin_without_resetting_gesture_state() {
         val state = state(
             phase = ViewerPhase.Opened,
             zoom = 2.8f,
@@ -67,9 +67,9 @@ class ViewerReducerTest {
         assertEquals(ViewerPhase.Closing, state.phase)
         assertEquals(2, state.page)
         assertEquals(closeOrigin, state.closeOrigin)
-        assertEquals(1f, state.zoom)
-        assertEquals(Offset.Zero, state.pan)
-        assertEquals(0f, state.dismissOffsetY)
+        assertEquals(2.8f, state.zoom)
+        assertEquals(Offset(10f, 15f), state.pan)
+        assertEquals(55f, state.dismissOffsetY)
         assertFalse(state.chromeVisible)
     }
 
@@ -116,7 +116,7 @@ class ViewerReducerTest {
     }
 
     @Test
-    fun request_close_resets_dismiss_offset_for_stable_closing() {
+    fun request_close_preserves_dismiss_offset_for_close_scene_progress() {
         val state = state(
             phase = ViewerPhase.Opened,
             page = 1,
@@ -132,7 +132,7 @@ class ViewerReducerTest {
         )
 
         assertEquals(ViewerPhase.Closing, state.phase)
-        assertEquals(0f, state.dismissOffsetY)
+        assertEquals(84f, state.dismissOffsetY)
     }
 
     @Test
@@ -178,7 +178,9 @@ class ViewerReducerTest {
         dismissOffsetY: Float = 0f,
         openOrigin: SharedImageOrigin? = null,
         closeOrigin: SharedImageOrigin? = null,
-        transitionProgress: Float = 0f
+        transitionProgress: Float = 0f,
+        closeSceneStartProgress: Float = 1f,
+        closeStartRect: Rect? = null,
     ): FullscreenImageViewerState {
         return FullscreenImageViewerState(
             phase = phase,
@@ -189,7 +191,9 @@ class ViewerReducerTest {
             dismissOffsetY = dismissOffsetY,
             openOrigin = openOrigin,
             closeOrigin = closeOrigin,
-            transitionProgress = transitionProgress
+            transitionProgress = transitionProgress,
+            closeSceneStartProgress = closeSceneStartProgress,
+            closeStartRect = closeStartRect,
         )
     }
 }

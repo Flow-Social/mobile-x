@@ -58,9 +58,11 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -126,6 +128,7 @@ import me.floow.uikit.components.media.ProgressiveImageMode
 import me.floow.uikit.components.media.viewer2.FullscreenImageViewerAction
 import me.floow.uikit.components.media.viewer2.FullscreenImageViewerModel
 import me.floow.uikit.components.media.viewer2.HostedFullscreenImageViewer
+import me.floow.uikit.components.media.viewer2.SharedImageOrigin
 import me.floow.uikit.components.media.viewer2.SharedFullscreenImageViewer
 import me.floow.uikit.components.media.viewer2.reduce
 import me.floow.uikit.components.media.viewer2.rememberFullscreenImageViewerState
@@ -196,12 +199,13 @@ internal fun SharedFeedScreen(
     onPresentFullscreenViewer: ((HostedFullscreenImageViewer?) -> Unit)?,
     isMockBuild: Boolean,
     isDebugBuild: Boolean,
+    contentPadding: PaddingValues = PaddingValues(0.dp),
     modifier: Modifier = Modifier,
 ) {
     when (state) {
-        SharedFeedScreenState.Loading -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { FlowLoadingIndicator() }
-        SharedFeedScreenState.Error -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("ошибка загрузки ленты") }
-        SharedFeedScreenState.NoMorePosts -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("нет новых постов") }
+        SharedFeedScreenState.Loading -> Box(modifier.fillMaxSize().padding(contentPadding), contentAlignment = Alignment.Center) { FlowLoadingIndicator() }
+        SharedFeedScreenState.Error -> Box(modifier.fillMaxSize().padding(contentPadding), contentAlignment = Alignment.Center) { Text("ошибка загрузки ленты") }
+        SharedFeedScreenState.NoMorePosts -> Box(modifier.fillMaxSize().padding(contentPadding), contentAlignment = Alignment.Center) { Text("нет новых постов") }
         is SharedFeedScreenState.Success -> SharedFeedSuccessState(
             state = state,
             undoAnimationSignal = undoAnimationSignal,
@@ -221,6 +225,7 @@ internal fun SharedFeedScreen(
             onPresentFullscreenViewer = onPresentFullscreenViewer,
             isMockBuild = isMockBuild,
             isDebugBuild = isDebugBuild,
+            contentPadding = contentPadding,
             modifier = modifier,
         )
     }
@@ -247,12 +252,19 @@ private fun SharedFeedSuccessState(
     onPresentFullscreenViewer: ((HostedFullscreenImageViewer?) -> Unit)?,
     isMockBuild: Boolean,
     isDebugBuild: Boolean,
+    contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
     var showProfileDeleteDialog by remember { mutableStateOf(false) }
     var showPostMenuFor by remember { mutableStateOf<Post?>(null) }
     var postToDelete by remember { mutableStateOf<Post?>(null) }
     var viewerPost by remember { mutableStateOf<Post?>(null) }
+    var viewerOpeningPainter by remember { mutableStateOf<Painter?>(null) }
+    var overlayPost by remember { mutableStateOf<Post?>(null) }
+    var overlayLaunchData by remember { mutableStateOf<SharedFeedOverlayLaunchData?>(null) }
+    var overlayDetachedCount by remember { mutableStateOf(0) }
+    var hiddenOverlaySourceKey by remember { mutableStateOf<String?>(null) }
+    val overlayOrigins = remember { mutableStateListOf<SharedImageOrigin?>() }
     val viewerState = rememberFullscreenImageViewerState()
     val viewerModelProvider = {
         viewerPost?.let { post ->
@@ -260,6 +272,8 @@ private fun SharedFeedSuccessState(
                 images = post.content.viewerImageUrls(),
                 title = post.author.name?.value ?: "@${post.author.username?.value ?: "unknown"}",
                 subtitleProvider = { "Фото" },
+                openingPainter = viewerOpeningPainter,
+                originForPage = { page -> overlayOrigins.getOrNull(page) },
             )
         }
     }
@@ -273,12 +287,15 @@ private fun SharedFeedSuccessState(
                 viewerState.reduce(action, imageCount)
                 if (action == FullscreenImageViewerAction.CloseAnimationFinished) {
                     viewerPost = null
+                    viewerOpeningPainter = null
+                    hiddenOverlaySourceKey = null
                     onPresentFullscreenViewer?.invoke(null)
                 }
             },
         )
     }
     val sheetState = rememberModalBottomSheetState()
+    val isViewerActive = viewerState.visible
 
     DisposableEffect(onPresentFullscreenViewer) {
         onDispose { onPresentFullscreenViewer?.invoke(null) }
@@ -344,9 +361,12 @@ private fun SharedFeedSuccessState(
         )
     }
 
-    Box(modifier = modifier) {
+    Box(modifier = modifier.fillMaxSize()) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(16.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(contentPadding)
+                .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Box(
@@ -364,14 +384,21 @@ private fun SharedFeedSuccessState(
                     onPostLinkClick = onPostLinkClick,
                     onCommentsClick = onCommentsClick,
                     onPostMenuClick = { showPostMenuFor = it },
-                    onViewImagesClick = { post, index ->
-                        val openRequest = resolveSharedFeedFullscreenOpenRequest(post, index) ?: return@SharedFeedSwipeablePostCard
-                        viewerPost = post
-                        onPresentFullscreenViewer?.invoke(hostedViewer)
-                        hostedViewer.onAction(
-                            FullscreenImageViewerAction.Open(page = openRequest.page, origin = null),
-                        )
+                    onOpenImageOverlay = { post, launchData ->
+                        if (isViewerActive) return@SharedFeedSwipeablePostCard
+                        overlayPost = post
+                        overlayLaunchData = launchData
+                        overlayOrigins.clear()
+                        repeat(post.content.viewerImageUrls().size) { overlayOrigins += null }
                     },
+                    onOverlaySourceSnapshot = { post, launchData ->
+                        if (overlayPost?.id == post.id) {
+                            overlayLaunchData = launchData
+                        }
+                    },
+                    isViewerActive = isViewerActive,
+                    activeOverlayPostId = overlayPost?.id,
+                    overlayDetachedCount = overlayDetachedCount,
                     modifier = Modifier.fillMaxHeight().widthIn(max = SharedFeedCardMaxWidth),
                 )
             }
@@ -454,6 +481,61 @@ private fun SharedFeedSuccessState(
             modifier = Modifier.align(Alignment.TopCenter),
         )
 
+        overlayPost?.let { post ->
+            SharedFeedImageOverlayGrid(
+                post = post,
+                startRect = overlayLaunchData?.buttonRect,
+                launchData = overlayLaunchData,
+                visible = true,
+                onDismiss = {
+                    if (!viewerState.visible) {
+                        overlayPost = null
+                        overlayLaunchData = null
+                        overlayDetachedCount = 0
+                        hiddenOverlaySourceKey = null
+                        overlayOrigins.clear()
+                    }
+                },
+                onImageClick = { index, origin, painter ->
+                    val imageCount = post.content.viewerImageUrls().size
+                    if (imageCount == 0) return@SharedFeedImageOverlayGrid
+                    if (overlayOrigins.size < imageCount) {
+                        repeat(imageCount - overlayOrigins.size) { overlayOrigins += null }
+                    }
+                    if (index in 0 until overlayOrigins.size) {
+                        overlayOrigins[index] = origin
+                    }
+                    hiddenOverlaySourceKey = origin?.sourceKey
+                    viewerOpeningPainter = painter
+                    viewerPost = post
+                    onPresentFullscreenViewer?.invoke(hostedViewer)
+                    hostedViewer.onAction(
+                        FullscreenImageViewerAction.Open(
+                            page = index.coerceIn(0, imageCount - 1),
+                            origin = origin,
+                        ),
+                    )
+                },
+                onOriginChanged = { index, origin ->
+                    val imageCount = post.content.viewerImageUrls().size
+                    if (overlayOrigins.size < imageCount) {
+                        repeat(imageCount - overlayOrigins.size) { overlayOrigins += null }
+                    }
+                    if (index in 0 until overlayOrigins.size) {
+                        overlayOrigins[index] = origin
+                    }
+                },
+                onDetachedCountChange = { overlayDetachedCount = it },
+                hiddenSourceKey = if (viewerState.visible) hiddenOverlaySourceKey else null,
+                hiddenSourceRevealProgress = if (viewerState.phase == me.floow.uikit.components.media.viewer2.ViewerPhase.Closing) {
+                    1f - viewerState.transitionProgress
+                } else {
+                    0f
+                },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
         if (onPresentFullscreenViewer == null && viewerModel != null) {
             SharedFullscreenImageViewer(
                 model = viewerModel,
@@ -477,7 +559,11 @@ private fun SharedFeedSwipeablePostCard(
     onPostLinkClick: (String, String) -> Unit,
     onCommentsClick: (Post) -> Unit,
     onPostMenuClick: (Post) -> Unit,
-    onViewImagesClick: (Post, Int) -> Unit,
+    onOpenImageOverlay: (Post, SharedFeedOverlayLaunchData) -> Unit,
+    onOverlaySourceSnapshot: (Post, SharedFeedOverlayLaunchData) -> Unit,
+    isViewerActive: Boolean,
+    activeOverlayPostId: String?,
+    overlayDetachedCount: Int,
     modifier: Modifier = Modifier,
 ) {
     val undoTopOffsetX = remember { Animatable(0f) }
@@ -517,7 +603,11 @@ private fun SharedFeedSwipeablePostCard(
             onPostLinkClick = onPostLinkClick,
             onCommentsClick = onCommentsClick,
             onMoreClick = onPostMenuClick,
-            onViewImagesClick = { index -> onViewImagesClick(item.post, index) },
+            onOpenImageOverlay = { launchData -> onOpenImageOverlay(item.post, launchData) },
+            onOverlaySourceSnapshot = { launchData -> onOverlaySourceSnapshot(item.post, launchData) },
+            isViewerActive = isViewerActive,
+            isOverlayActive = activeOverlayPostId == item.post.id,
+            overlayDetachedCount = if (activeOverlayPostId == item.post.id) overlayDetachedCount else 0,
             onNonSwipeBottomInsetChanged = { insetPx -> nonSwipeBottomInsetPx = insetPx.toFloat() },
             modifier = Modifier.fillMaxSize(),
         )
@@ -824,7 +914,11 @@ private fun SharedFeedPostCard(
     onPostLinkClick: (String, String) -> Unit,
     onCommentsClick: (Post) -> Unit,
     onMoreClick: (Post) -> Unit,
-    onViewImagesClick: (Int) -> Unit,
+    onOpenImageOverlay: (SharedFeedOverlayLaunchData) -> Unit,
+    onOverlaySourceSnapshot: (SharedFeedOverlayLaunchData) -> Unit,
+    isViewerActive: Boolean,
+    isOverlayActive: Boolean,
+    overlayDetachedCount: Int,
     onNonSwipeBottomInsetChanged: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -833,7 +927,15 @@ private fun SharedFeedPostCard(
         Column(Modifier.fillMaxSize().padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 6.dp)) {
             SharedPostHeader(post, recommendationReason, onProfileClick, onMoreClick)
             Spacer(Modifier.height(16.dp))
-            SharedImageGallery(post.content.resolvedImageVariants(), onViewImagesClick, Modifier.fillMaxWidth().weight(1f))
+            SharedImageGallery(
+                imageVariants = post.content.resolvedImageVariants(),
+                onViewClick = onOpenImageOverlay,
+                onOverlaySourceSnapshot = onOverlaySourceSnapshot,
+                isViewerActive = isViewerActive,
+                isOverlayActive = isOverlayActive,
+                overlayDetachedCount = overlayDetachedCount,
+                modifier = Modifier.fillMaxWidth().weight(1f),
+            )
             Spacer(Modifier.height(16.dp))
             SharedTextContent(post.content.description, post.createdAt, onProfileTagClick, onPostLinkClick, { onCommentsClick(post) }, categoryColor(post.category))
             Spacer(Modifier.height(16.dp))
@@ -872,11 +974,27 @@ private fun SharedPostHeader(post: Post, recommendationReason: String?, onProfil
 }
 
 @Composable
-private fun SharedImageGallery(imageVariants: List<PostImageVariant>, onViewClick: (Int) -> Unit, modifier: Modifier = Modifier) {
+private fun SharedImageGallery(
+    imageVariants: List<PostImageVariant>,
+    onViewClick: (SharedFeedOverlayLaunchData) -> Unit,
+    onOverlaySourceSnapshot: (SharedFeedOverlayLaunchData) -> Unit,
+    isViewerActive: Boolean,
+    isOverlayActive: Boolean,
+    overlayDetachedCount: Int,
+    modifier: Modifier = Modifier,
+) {
     val items = imageVariants.take(4)
     if (items.isEmpty()) return
     if (items.size == 1) {
-        SharedSingleImageGallery(items.first(), { onViewClick(0) }, modifier)
+        SharedSingleImageGallery(
+            variant = items.first(),
+            onViewClick = onViewClick,
+            onOverlaySourceSnapshot = onOverlaySourceSnapshot,
+            isViewerActive = isViewerActive,
+            isOverlayActive = isOverlayActive,
+            overlayDetachedCount = overlayDetachedCount,
+            modifier = modifier,
+        )
         return
     }
     val front = items[0]
@@ -885,18 +1003,186 @@ private fun SharedImageGallery(imageVariants: List<PostImageVariant>, onViewClic
     val back = items.getOrNull(3)
     val extraCount = (items.size - 3).coerceAtLeast(0)
     var frontPainter by remember(front) { mutableStateOf<Painter>(ColorPainter(Color(0xFF1A1A1A))) }
+    var leftPainter by remember(left) { mutableStateOf<Painter?>(null) }
+    var rightPainter by remember(right) { mutableStateOf<Painter?>(null) }
+    var backPainter by remember(back) { mutableStateOf<Painter?>(null) }
     val frontBounds = remember { mutableStateOf<Rect?>(null) }
+    val galleryBounds = remember { mutableStateOf<Rect?>(null) }
+    val buttonBounds = remember { mutableStateOf<Rect?>(null) }
+    val leftBounds = remember { mutableStateOf<Rect?>(null) }
+    val rightBounds = remember { mutableStateOf<Rect?>(null) }
+    val backBounds = remember { mutableStateOf<Rect?>(null) }
+    val density = LocalDensity.current
+    val frontWidthPx = with(density) { 180.dp.toPx() }
+    val frontHeightPx = with(density) { 230.dp.toPx() }
+    val sideWidthPx = with(density) { 170.dp.toPx() }
+    val sideHeightPx = with(density) { 200.dp.toPx() }
+    val backWidthPx = with(density) { (176.dp * 0.96f).toPx() }
+    val backHeightPx = with(density) { (210.dp * 0.96f).toPx() }
+    val sideShiftPx = with(density) { 50.dp.toPx() }
+    val backShiftYPx = with(density) { 16.dp.toPx() }
+    val frontContent = remember(front) {
+        movableContentOf {
+            ProgressiveImage(front.lqUrl, front.previewUrl, front.fullUrl, ProgressiveImageMode.LIST, null, Modifier.fillMaxSize(), ContentScale.Crop) {
+                if (it != null) frontPainter = it
+            }
+        }
+    }
+    val leftContent = remember(left) {
+        left?.let { variant ->
+            movableContentOf {
+                ProgressiveImage(variant.lqUrl, variant.previewUrl, variant.fullUrl, ProgressiveImageMode.LIST, null, Modifier.fillMaxSize(), ContentScale.Crop) {
+                    if (it != null) leftPainter = it
+                }
+            }
+        }
+    }
+    val rightContent = remember(right) {
+        right?.let { variant ->
+            movableContentOf {
+                ProgressiveImage(variant.lqUrl, variant.previewUrl, variant.fullUrl, ProgressiveImageMode.LIST, null, Modifier.fillMaxSize(), ContentScale.Crop) {
+                    if (it != null) rightPainter = it
+                }
+            }
+        }
+    }
+    val backContent = remember(back) {
+        back?.let { variant ->
+            movableContentOf {
+                ProgressiveImage(variant.lqUrl, variant.previewUrl, variant.fullUrl, ProgressiveImageMode.LIST, null, Modifier.fillMaxSize(), ContentScale.Crop) {
+                    if (it != null) backPainter = it
+                }
+            }
+        }
+    }
+    val buildLaunchData = remember(
+        frontBounds.value,
+        leftBounds.value,
+        rightBounds.value,
+        backBounds.value,
+        buttonBounds.value,
+        galleryBounds.value,
+        frontWidthPx,
+        frontHeightPx,
+        sideWidthPx,
+        sideHeightPx,
+        backWidthPx,
+        backHeightPx,
+        sideShiftPx,
+        backShiftYPx,
+        frontContent,
+        leftContent,
+        rightContent,
+        backContent,
+        frontPainter,
+        leftPainter,
+        rightPainter,
+        backPainter,
+    ) {
+        {
+            val anchorCenter = frontBounds.value?.center ?: galleryBounds.value?.center
+            fun poseOrFallback(rect: Rect?, width: Float, height: Float, rotation: Float, shiftX: Float = 0f, shiftY: Float = 0f): SharedFeedCardPose? {
+                return if (rect != null) {
+                    SharedFeedCardPose(
+                        centerX = rect.center.x,
+                        centerY = rect.center.y,
+                        width = width,
+                        height = height,
+                        rotation = rotation,
+                    )
+                } else {
+                    anchorCenter?.let { center ->
+                        SharedFeedCardPose(
+                            centerX = center.x + shiftX,
+                            centerY = center.y + shiftY,
+                            width = width,
+                            height = height,
+                            rotation = rotation,
+                        )
+                    }
+                }
+            }
+            SharedFeedOverlayLaunchData(
+                buttonRect = buttonBounds.value ?: galleryBounds.value,
+                cardRects = listOf(frontBounds.value, leftBounds.value, rightBounds.value, backBounds.value),
+                cardPoses = listOf(
+                    poseOrFallback(frontBounds.value, frontWidthPx, frontHeightPx, 0f),
+                    poseOrFallback(leftBounds.value, sideWidthPx, sideHeightPx, -10f, shiftX = -sideShiftPx),
+                    poseOrFallback(rightBounds.value, sideWidthPx, sideHeightPx, 10f, shiftX = sideShiftPx),
+                    poseOrFallback(backBounds.value, backWidthPx, backHeightPx, 0f, shiftY = backShiftYPx),
+                ),
+                cardContents = listOf(frontContent, leftContent, rightContent, backContent),
+                cardPainters = listOf(frontPainter, leftPainter, rightPainter, backPainter),
+            )
+        }
+    }
+    LaunchedEffect(isOverlayActive, frontBounds.value, leftBounds.value, rightBounds.value, backBounds.value) {
+        if (isOverlayActive) {
+            onOverlaySourceSnapshot(buildLaunchData())
+        }
+    }
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
-        back?.let { LayeredImageCard(it, Modifier.size(176.dp, 210.dp).graphicsLayer { translationY = 16.dp.toPx(); scaleX = 0.96f; scaleY = 0.96f }, 0.55f) }
-        left?.let { LayeredImageCard(it, Modifier.size(170.dp, 200.dp).graphicsLayer { rotationZ = -10f; translationX = -50.dp.toPx() }, 0.5f) }
-        right?.let { LayeredImageCard(it, Modifier.size(170.dp, 200.dp).graphicsLayer { rotationZ = 10f; translationX = 50.dp.toPx() }, 0.5f) }
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .onGloballyPositioned { galleryBounds.value = it.boundsInWindow() },
+        )
+        back?.let {
+            LayeredImageCard(
+                it,
+                Modifier
+                    .size(176.dp, 210.dp)
+                    .graphicsLayer {
+                        translationY = 16.dp.toPx()
+                        scaleX = 0.96f
+                        scaleY = 0.96f
+                        alpha = if (isOverlayActive && overlayDetachedCount >= 4) 0f else 1f
+                    }
+                    .onGloballyPositioned { coordinates -> backBounds.value = coordinates.boundsInWindow() },
+                0.55f,
+                movableContent = backContent,
+            )
+        }
+        left?.let {
+            LayeredImageCard(
+                it,
+                Modifier
+                    .size(170.dp, 200.dp)
+                    .graphicsLayer {
+                        rotationZ = -10f
+                        translationX = -50.dp.toPx()
+                        alpha = if (isOverlayActive && overlayDetachedCount >= 2) 0f else 1f
+                    }
+                    .onGloballyPositioned { coordinates -> leftBounds.value = coordinates.boundsInWindow() },
+                0.5f,
+                movableContent = leftContent,
+            )
+        }
+        right?.let {
+            LayeredImageCard(
+                it,
+                Modifier
+                    .size(170.dp, 200.dp)
+                    .graphicsLayer {
+                        rotationZ = 10f
+                        translationX = 50.dp.toPx()
+                        alpha = if (isOverlayActive && overlayDetachedCount >= 3) 0f else 1f
+                    }
+                    .onGloballyPositioned { coordinates -> rightBounds.value = coordinates.boundsInWindow() },
+                0.5f,
+                movableContent = rightContent,
+            )
+        }
         Box(contentAlignment = Alignment.Center) {
             Box(
-                modifier = Modifier.size(180.dp, 230.dp).clickable { onViewClick(0) }.onGloballyPositioned { frontBounds.value = it.boundsInWindow() }.clip(RoundedCornerShape(14.dp)),
+                modifier = Modifier
+                    .size(180.dp, 230.dp)
+                    .graphicsLayer { alpha = if (isOverlayActive && overlayDetachedCount >= 1) 0f else 1f }
+                    .clickable(enabled = !isViewerActive && !isOverlayActive) { onViewClick(buildLaunchData()) }
+                    .onGloballyPositioned { frontBounds.value = it.boundsInWindow() }
+                    .clip(RoundedCornerShape(14.dp)),
             ) {
-                ProgressiveImage(front.lqUrl, front.previewUrl, front.fullUrl, ProgressiveImageMode.LIST, null, Modifier.fillMaxSize(), ContentScale.Crop) {
-                    if (it != null) frontPainter = it
-                }
+                frontContent()
                 Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)))
                 if (extraCount > 0) {
                     Box(Modifier.align(Alignment.TopEnd).padding(8.dp).background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(10.dp)).padding(horizontal = 8.dp, vertical = 4.dp)) {
@@ -904,29 +1190,119 @@ private fun SharedImageGallery(imageVariants: List<PostImageVariant>, onViewClic
                     }
                 }
             }
-            BlurGlassButton(painter = frontPainter, backgroundBoundsInWindow = frontBounds.value, backgroundContentScale = ContentScale.Crop, refractionScale = 1.14f, blurRadius = 2.5.dp, onClick = { onViewClick(0) }) {
-                Text("смотреть", color = Color.White, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+            if (!isViewerActive && !isOverlayActive) {
+                BlurGlassButton(
+                    painter = frontPainter,
+                    backgroundBoundsInWindow = frontBounds.value,
+                    backgroundContentScale = ContentScale.Crop,
+                    refractionScale = 1.14f,
+                    blurRadius = 2.5.dp,
+                    modifier = Modifier.onGloballyPositioned { buttonBounds.value = it.boundsInWindow() },
+                    onClick = { onViewClick(buildLaunchData()) },
+                ) {
+                    Text("смотреть", color = Color.White, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                }
             }
         }
     }
 }
 
 @Composable
-private fun LayeredImageCard(variant: PostImageVariant, modifier: Modifier, shadeAlpha: Float) {
+private fun LayeredImageCard(
+    variant: PostImageVariant,
+    modifier: Modifier,
+    shadeAlpha: Float,
+    movableContent: SharedFeedMovableCardContent? = null,
+) {
     Box(modifier.clip(RoundedCornerShape(14.dp))) {
-        ProgressiveImage(variant.lqUrl, variant.previewUrl, variant.fullUrl, ProgressiveImageMode.LIST, null, Modifier.fillMaxSize(), ContentScale.Crop)
+        if (movableContent != null) {
+            movableContent()
+        } else {
+            ProgressiveImage(variant.lqUrl, variant.previewUrl, variant.fullUrl, ProgressiveImageMode.LIST, null, Modifier.fillMaxSize(), ContentScale.Crop)
+        }
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = shadeAlpha)))
     }
 }
 
 @Composable
-private fun SharedSingleImageGallery(variant: PostImageVariant, onViewClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun SharedSingleImageGallery(
+    variant: PostImageVariant,
+    onViewClick: (SharedFeedOverlayLaunchData) -> Unit,
+    onOverlaySourceSnapshot: (SharedFeedOverlayLaunchData) -> Unit,
+    isViewerActive: Boolean,
+    isOverlayActive: Boolean,
+    overlayDetachedCount: Int,
+    modifier: Modifier = Modifier,
+) {
+    val density = LocalDensity.current
+    val defaultCardWidthPx = with(density) { 220.dp.toPx() }
+    val defaultCardHeightPx = with(density) { 280.dp.toPx() }
+    val galleryBounds = remember { mutableStateOf<Rect?>(null) }
+    val frontBounds = remember { mutableStateOf<Rect?>(null) }
+    val frontContent = remember(variant) {
+        movableContentOf {
+            ProgressiveImage(variant.lqUrl, variant.previewUrl, variant.fullUrl, ProgressiveImageMode.LIST, null, Modifier.fillMaxSize(), ContentScale.Crop)
+        }
+    }
+    val buildLaunchData = remember(frontBounds.value, galleryBounds.value, frontContent, defaultCardWidthPx, defaultCardHeightPx) {
+        {
+            val rect = frontBounds.value
+            val fallbackCenter = galleryBounds.value?.center
+            SharedFeedOverlayLaunchData(
+                buttonRect = rect ?: galleryBounds.value,
+                cardRects = listOf(rect),
+                cardPoses = listOf(
+                    if (rect != null) {
+                        SharedFeedCardPose(
+                            centerX = rect.center.x,
+                            centerY = rect.center.y,
+                            width = rect.width,
+                            height = rect.height,
+                            rotation = SingleImageCardRotation,
+                        )
+                    } else {
+                        fallbackCenter?.let { center ->
+                            SharedFeedCardPose(
+                                centerX = center.x,
+                                centerY = center.y,
+                                width = defaultCardWidthPx,
+                                height = defaultCardHeightPx,
+                                rotation = SingleImageCardRotation,
+                            )
+                        }
+                    },
+                ),
+                cardContents = listOf(frontContent),
+            )
+        }
+    }
+    LaunchedEffect(isOverlayActive, frontBounds.value) {
+        if (isOverlayActive) {
+            onOverlaySourceSnapshot(buildLaunchData())
+        }
+    }
     BoxWithConstraints(modifier = modifier, contentAlignment = Alignment.Center) {
         val widthByDesign = maxWidth * 0.6f
         val widthByHeight = maxHeight * SingleImageAspectRatio
         val cardWidth = if (widthByDesign < widthByHeight) widthByDesign else widthByHeight
-        Box(Modifier.width(cardWidth).aspectRatio(SingleImageAspectRatio).graphicsLayer { rotationZ = SingleImageCardRotation }.clickable { onViewClick() }.clip(RoundedCornerShape(18.dp))) {
-            ProgressiveImage(variant.lqUrl, variant.previewUrl, variant.fullUrl, ProgressiveImageMode.LIST, null, Modifier.fillMaxSize(), ContentScale.Crop)
+        Box(
+            Modifier
+                .matchParentSize()
+                .onGloballyPositioned { galleryBounds.value = it.boundsInWindow() },
+        )
+        Box(
+            Modifier
+                .width(cardWidth)
+                .aspectRatio(SingleImageAspectRatio)
+                .graphicsLayer {
+                rotationZ = SingleImageCardRotation
+                alpha = if (isOverlayActive && overlayDetachedCount >= 1) 0f else 1f
+            }
+            .clickable(enabled = !isOverlayActive && !isViewerActive) { onViewClick(buildLaunchData()) }
+            .onGloballyPositioned { frontBounds.value = it.boundsInWindow() }
+                .clip(RoundedCornerShape(18.dp)),
+        ) {
+            frontContent()
         }
     }
 }

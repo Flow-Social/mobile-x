@@ -1,6 +1,6 @@
 package me.floow.shared.feed.ui
 
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -113,7 +113,8 @@ fun SharedFeedRoute(
             onPresentFullscreenViewer = onPresentFullscreenViewer,
             isMockBuild = isMockBuild,
             isDebugBuild = isDebugBuild,
-            modifier = Modifier.padding(innerPadding),
+            contentPadding = innerPadding,
+            modifier = Modifier,
         )
     }
 }

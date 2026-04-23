@@ -128,6 +128,8 @@ import me.floow.shared.profile.ui.model.ProfilePostItem
 import me.floow.uikit.components.media.transfer.PostMediaSourceOwner
 import me.floow.uikit.components.media.transfer.PostMediaSourceSnapshot
 import me.floow.uikit.components.media.transfer.PostMediaTransferStore
+import me.floow.uikit.components.media.viewer2.FullscreenImageViewerV2
+import me.floow.uikit.components.media.viewer2.HostedFullscreenImageViewer
 import me.floow.uikit.util.SwipeBackOverlay
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -346,6 +348,7 @@ fun FlowNavHost(
 	val createPostHasDraft = remember { mutableStateMapOf<Long, Boolean>() }
 	val editPostHasChanges = remember { mutableStateMapOf<Long, Boolean>() }
 	var activeFeedOwner by remember { mutableStateOf<SharedFeedOwner?>(null) }
+	var hostedFeedFullscreenViewer by remember { mutableStateOf<HostedFullscreenImageViewer?>(null) }
 	var createPostDiscardDialogOverlayId by remember { mutableStateOf<Long?>(null) }
 	var editPostDiscardDialogOverlayId by remember { mutableStateOf<Long?>(null) }
 	val snackbarHostState = remember { SnackbarHostState() }
@@ -1524,6 +1527,7 @@ fun FlowNavHost(
 								isMockBuild = me.floow.app.BuildConfig.USE_MOCK_DATA,
 								isDebugBuild = me.floow.app.BuildConfig.DEBUG,
 								onFeedVisible = requestNotificationsPermissionOnFeedEntry,
+								onPresentFullscreenViewer = { hostedFeedFullscreenViewer = it },
 								modifier = Modifier.fillMaxSize(),
 								stateHolder = feedStateHolder
 							)
@@ -1984,6 +1988,19 @@ fun FlowNavHost(
 					}
 				}
 			)
+		}
+
+		hostedFeedFullscreenViewer?.let { viewer ->
+			viewer.modelProvider()?.let { model ->
+				FullscreenImageViewerV2(
+					model = model,
+					state = viewer.state,
+					onAction = viewer.onAction,
+					modifier = Modifier
+						.fillMaxSize()
+						.zIndex(10f)
+				)
+			}
 		}
 
 		SnackbarHost(

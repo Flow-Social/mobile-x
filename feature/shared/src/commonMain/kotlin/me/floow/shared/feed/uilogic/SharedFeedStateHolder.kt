@@ -109,6 +109,7 @@ class SharedFeedStateHolder(
                 current.isLoading && current.items.isEmpty() -> SharedFeedScreenState.Loading
                 current.isNoMorePosts && current.items.isEmpty() -> SharedFeedScreenState.NoMorePosts
                 current.isError && current.items.isEmpty() -> SharedFeedScreenState.Error
+                current.items.isEmpty() -> SharedFeedScreenState.Loading
                 else -> SharedFeedScreenState.Success(
                     feedItems = current.items,
                     userProfile = current.userProfile,
@@ -370,7 +371,11 @@ class SharedFeedStateHolder(
                         )
                     }
             }
-            repeat(TARGET_STACK_SIZE) { loadOneMore() }
+            loadOneMore()
+            if (vmState.value.items.isNotEmpty()) {
+                vmState.update { it.copy(isLoading = false) }
+            }
+            repeat((TARGET_STACK_SIZE - 1).coerceAtLeast(0)) { loadOneMore() }
             logger.logLoadTiming(
                 tag = "SharedFeedStateHolder.loadData",
                 operation = TelemetryOperation.FeedInitialLoad,
