@@ -13,4 +13,5 @@ data class ChatMessageItemModel(
 	val isPinned: Boolean = false,
 	val isDeleted: Boolean = false,
 	val deliveryState: ChatDeliveryState? = null,
+	val content: ChatMessageContent = ChatMessageContent.Text,
 )

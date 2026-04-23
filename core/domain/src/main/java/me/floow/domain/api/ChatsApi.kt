@@ -48,6 +48,19 @@ interface ChatsApi {
 		replyToMessageId: Long?
 	): ChatsSendMessageResponse
 
+	suspend fun sendVideoCircleMessage(
+		conversationId: Long,
+		clientMessageId: String?,
+		replyToMessageId: Long?,
+		mediaUrl: String,
+		objectKey: String,
+		mimeType: String,
+		sizeBytes: Long,
+		durationMs: Long,
+		width: Int?,
+		height: Int?,
+	): ChatsSendMessageResponse
+
 	suspend fun deleteMessage(
 		conversationId: Long,
 		messageId: Long

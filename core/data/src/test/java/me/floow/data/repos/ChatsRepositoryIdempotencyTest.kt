@@ -31,6 +31,19 @@ class ChatsRepositoryIdempotencyTest {
 			throw NotImplementedError()
 		}
 
+		override suspend fun sendVideoCircleMessage(
+			conversationId: Long,
+			clientMessageId: String?,
+			replyToMessageId: Long?,
+			mediaUrl: String,
+			objectKey: String,
+			mimeType: String,
+			sizeBytes: Long,
+			durationMs: Long,
+			width: Int?,
+			height: Int?
+		): ChatsSendMessageResponse = throw NotImplementedError()
+
 		override suspend fun getOrCreateDirectConversation(peerUserId: String): ChatsGetOrCreateDirectResponse = throw NotImplementedError()
 		override suspend fun getConversations(limit: Int, cursor: String?): ChatsGetConversationsResponse = throw NotImplementedError()
 		override suspend fun getConversation(conversationId: Long): ChatsGetConversationResponse = throw NotImplementedError()

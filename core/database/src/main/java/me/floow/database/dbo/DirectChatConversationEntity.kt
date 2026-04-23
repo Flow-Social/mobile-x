@@ -31,6 +31,22 @@ data class DirectChatConversationEntity(
 	val lastMessageSenderAvatarUrl: String?,
 	@ColumnInfo(name = "last_message_text")
 	val lastMessageText: String?,
+	@ColumnInfo(name = "last_message_content_type")
+	val lastMessageContentType: String?,
+	@ColumnInfo(name = "last_message_media_url")
+	val lastMessageMediaUrl: String?,
+	@ColumnInfo(name = "last_message_media_object_key")
+	val lastMessageMediaObjectKey: String?,
+	@ColumnInfo(name = "last_message_media_mime_type")
+	val lastMessageMediaMimeType: String?,
+	@ColumnInfo(name = "last_message_media_size_bytes")
+	val lastMessageMediaSizeBytes: Long?,
+	@ColumnInfo(name = "last_message_media_duration_ms")
+	val lastMessageMediaDurationMs: Long?,
+	@ColumnInfo(name = "last_message_media_width")
+	val lastMessageMediaWidth: Int?,
+	@ColumnInfo(name = "last_message_media_height")
+	val lastMessageMediaHeight: Int?,
 	@ColumnInfo(name = "last_message_created_at")
 	val lastMessageCreatedAt: Long?,
 	@ColumnInfo(name = "last_message_updated_at")

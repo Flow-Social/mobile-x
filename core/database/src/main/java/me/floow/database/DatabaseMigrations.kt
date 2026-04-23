@@ -445,6 +445,39 @@ object DatabaseMigrations {
 		}
 	}
 
+	val MIGRATION_19_20 = object : Migration(19, 20) {
+		override fun migrate(database: SupportSQLiteDatabase) {
+			addColumnIfMissing(database, "direct_chat_messages", "content_type", "TEXT")
+			addColumnIfMissing(database, "direct_chat_messages", "media_url", "TEXT")
+			addColumnIfMissing(database, "direct_chat_messages", "media_object_key", "TEXT")
+			addColumnIfMissing(database, "direct_chat_messages", "media_mime_type", "TEXT")
+			addColumnIfMissing(database, "direct_chat_messages", "media_size_bytes", "INTEGER")
+			addColumnIfMissing(database, "direct_chat_messages", "media_duration_ms", "INTEGER")
+			addColumnIfMissing(database, "direct_chat_messages", "media_width", "INTEGER")
+			addColumnIfMissing(database, "direct_chat_messages", "media_height", "INTEGER")
+
+			addColumnIfMissing(database, "direct_chat_conversations", "last_message_content_type", "TEXT")
+			addColumnIfMissing(database, "direct_chat_conversations", "last_message_media_url", "TEXT")
+			addColumnIfMissing(database, "direct_chat_conversations", "last_message_media_object_key", "TEXT")
+			addColumnIfMissing(database, "direct_chat_conversations", "last_message_media_mime_type", "TEXT")
+			addColumnIfMissing(database, "direct_chat_conversations", "last_message_media_size_bytes", "INTEGER")
+			addColumnIfMissing(database, "direct_chat_conversations", "last_message_media_duration_ms", "INTEGER")
+			addColumnIfMissing(database, "direct_chat_conversations", "last_message_media_width", "INTEGER")
+			addColumnIfMissing(database, "direct_chat_conversations", "last_message_media_height", "INTEGER")
+		}
+	}
+
+	private fun addColumnIfMissing(
+		database: SupportSQLiteDatabase,
+		tableName: String,
+		columnName: String,
+		columnDefinition: String
+	) {
+		if (!hasColumn(database, tableName, columnName)) {
+			database.execSQL("ALTER TABLE $tableName ADD COLUMN $columnName $columnDefinition")
+		}
+	}
+
 	private fun hasColumn(
 		database: SupportSQLiteDatabase,
 		tableName: String,

@@ -11,10 +11,12 @@ import me.floow.domain.models.DirectChatMessage
 import me.floow.domain.models.DirectChatPeer
 import me.floow.domain.models.MessageDeliveryStatus
 import me.floow.shared.chats.model.ChatDeliveryState
+import me.floow.shared.chats.model.ChatMessageContent
 import me.floow.shared.chats.model.ChatMessageItemModel
 import me.floow.shared.chats.model.ChatOpenMode
 import me.floow.shared.chats.model.ChatThreadHeaderModel
 import me.floow.shared.chats.model.ChatThreadSnapshot
+import me.floow.shared.chats.model.VideoUploadState
 import me.floow.shared.chats.uilogic.direct.ChatThreadPage
 import me.floow.shared.chats.uilogic.direct.ChatThreadRepository
 import me.floow.shared.chats.uilogic.direct.DirectChatInitialRequest
@@ -274,6 +276,19 @@ private fun DirectChatMessage.toItemModel(selfUserId: String?): ChatMessageItemM
 			MessageDeliveryStatus.FAILED -> ChatDeliveryState.FAILED
 		}
 	}
+	val messageMedia = media
+	val content = if (contentType == "video_circle" && messageMedia != null) {
+		ChatMessageContent.VideoCircle(
+			localPath = null,
+			remoteUrl = messageMedia.url,
+			durationMs = messageMedia.durationMs,
+			width = messageMedia.width ?: 0,
+			height = messageMedia.height ?: 0,
+			uploadState = VideoUploadState.Uploaded
+		)
+	} else {
+		ChatMessageContent.Text
+	}
 	return ChatMessageItemModel(
 		id = id,
 		clientMessageId = clientMessageId,
@@ -287,6 +302,7 @@ private fun DirectChatMessage.toItemModel(selfUserId: String?): ChatMessageItemM
 		isPinned = isPinned,
 		isDeleted = false,
 		deliveryState = deliveryState,
+		content = content,
 	)
 }
 

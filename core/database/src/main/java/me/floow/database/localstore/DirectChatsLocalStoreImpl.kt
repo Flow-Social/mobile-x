@@ -12,6 +12,7 @@ import me.floow.domain.cache.DirectChatsLocalStore
 import me.floow.domain.models.DirectChatAnchoredMessagesWindow
 import me.floow.domain.models.DirectChatConversation
 import me.floow.domain.models.DirectChatMessage
+import me.floow.domain.models.DirectChatMessageMedia
 import me.floow.domain.models.DirectChatMessagesPage
 import me.floow.domain.models.DirectChatPeer
 import me.floow.domain.models.DirectChatReadState
@@ -188,6 +189,14 @@ class DirectChatsLocalStoreImpl(
 						senderName = entity.senderName,
 						senderAvatarUrl = entity.senderAvatarUrl,
 						text = entity.text,
+						contentType = entity.contentType,
+						mediaUrl = entity.mediaUrl,
+						mediaObjectKey = entity.mediaObjectKey,
+						mediaMimeType = entity.mediaMimeType,
+						mediaSizeBytes = entity.mediaSizeBytes,
+						mediaDurationMs = entity.mediaDurationMs,
+						mediaWidth = entity.mediaWidth,
+						mediaHeight = entity.mediaHeight,
 						replyToMessageId = entity.replyToMessageId,
 						replyToMessageText = entity.replyToMessageText,
 						isPinned = entity.isPinned,
@@ -264,6 +273,14 @@ class DirectChatsLocalStoreImpl(
 					senderName = entity.senderName,
 					senderAvatarUrl = entity.senderAvatarUrl,
 					text = entity.text,
+					contentType = entity.contentType,
+					mediaUrl = entity.mediaUrl,
+					mediaObjectKey = entity.mediaObjectKey,
+					mediaMimeType = entity.mediaMimeType,
+					mediaSizeBytes = entity.mediaSizeBytes,
+					mediaDurationMs = entity.mediaDurationMs,
+					mediaWidth = entity.mediaWidth,
+					mediaHeight = entity.mediaHeight,
 					replyToMessageId = entity.replyToMessageId,
 					replyToMessageText = entity.replyToMessageText,
 					isPinned = entity.isPinned,
@@ -572,6 +589,14 @@ class DirectChatsLocalStoreImpl(
 			lastMessageSenderName = last?.sender?.name,
 			lastMessageSenderAvatarUrl = last?.sender?.avatarUrl,
 			lastMessageText = last?.text,
+			lastMessageContentType = last?.contentType,
+			lastMessageMediaUrl = last?.media?.url,
+			lastMessageMediaObjectKey = last?.media?.objectKey,
+			lastMessageMediaMimeType = last?.media?.mimeType,
+			lastMessageMediaSizeBytes = last?.media?.sizeBytes,
+			lastMessageMediaDurationMs = last?.media?.durationMs,
+			lastMessageMediaWidth = last?.media?.width,
+			lastMessageMediaHeight = last?.media?.height,
 			lastMessageCreatedAt = last?.createdAt,
 			lastMessageUpdatedAt = last?.updatedAt,
 			unreadCount = unreadCount.coerceAtLeast(0),
@@ -594,6 +619,16 @@ class DirectChatsLocalStoreImpl(
 					avatarUrl = lastMessageSenderAvatarUrl
 				),
 				text = lastMessageText.orEmpty(),
+				contentType = lastMessageContentType,
+				media = toMedia(
+					url = lastMessageMediaUrl,
+					objectKey = lastMessageMediaObjectKey,
+					mimeType = lastMessageMediaMimeType,
+					sizeBytes = lastMessageMediaSizeBytes,
+					durationMs = lastMessageMediaDurationMs,
+					width = lastMessageMediaWidth,
+					height = lastMessageMediaHeight
+				),
 				replyToMessageId = null,
 				replyToMessageText = null,
 				isPinned = false,
@@ -634,6 +669,14 @@ class DirectChatsLocalStoreImpl(
 			senderName = sender.name,
 			senderAvatarUrl = sender.avatarUrl,
 			text = text,
+			contentType = contentType,
+			mediaUrl = media?.url,
+			mediaObjectKey = media?.objectKey,
+			mediaMimeType = media?.mimeType,
+			mediaSizeBytes = media?.sizeBytes,
+			mediaDurationMs = media?.durationMs,
+			mediaWidth = media?.width,
+			mediaHeight = media?.height,
 			clientMessageId = clientMessageId,
 			replyToMessageId = replyToMessageId,
 			replyToMessageText = replyToMessageText,
@@ -657,6 +700,16 @@ class DirectChatsLocalStoreImpl(
 				avatarUrl = senderAvatarUrl
 			),
 			text = text,
+			contentType = contentType,
+			media = toMedia(
+				url = mediaUrl,
+				objectKey = mediaObjectKey,
+				mimeType = mediaMimeType,
+				sizeBytes = mediaSizeBytes,
+				durationMs = mediaDurationMs,
+				width = mediaWidth,
+				height = mediaHeight
+			),
 			clientMessageId = clientMessageId,
 			replyToMessageId = replyToMessageId,
 			replyToMessageText = replyToMessageText,
@@ -667,6 +720,31 @@ class DirectChatsLocalStoreImpl(
 				.getOrDefault(me.floow.domain.models.MessageDeliveryStatus.SENT),
 			createdAt = createdAt,
 			updatedAt = updatedAt
+		)
+	}
+
+	private fun toMedia(
+		url: String?,
+		objectKey: String?,
+		mimeType: String?,
+		sizeBytes: Long?,
+		durationMs: Long?,
+		width: Int?,
+		height: Int?
+	): DirectChatMessageMedia? {
+		val normalizedUrl = url?.trim()?.takeIf(String::isNotEmpty) ?: return null
+		val normalizedObjectKey = objectKey?.trim()?.takeIf(String::isNotEmpty) ?: return null
+		val normalizedMimeType = mimeType?.trim()?.takeIf(String::isNotEmpty) ?: return null
+		val normalizedSizeBytes = sizeBytes?.takeIf { it > 0L } ?: return null
+		val normalizedDurationMs = durationMs?.takeIf { it > 0L } ?: return null
+		return DirectChatMessageMedia(
+			url = normalizedUrl,
+			objectKey = normalizedObjectKey,
+			mimeType = normalizedMimeType,
+			sizeBytes = normalizedSizeBytes,
+			durationMs = normalizedDurationMs,
+			width = width?.takeIf { it > 0 },
+			height = height?.takeIf { it > 0 }
 		)
 	}
 

@@ -9,6 +9,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import me.floow.domain.api.models.ChatMessageItem
+import me.floow.domain.api.models.ChatMessageMediaItem
 import me.floow.domain.api.models.ChatUserItem
 
 internal fun buildChatsApiBaseUrl(apiUrl: String): String {
@@ -26,6 +27,8 @@ internal fun JsonObject.toChatMessageItemOrNull(): ChatMessageItem? {
 	val conversationId = longOrNullFlexible("conversation_id") ?: return null
 	val sender = objectOrNull("sender")?.toChatUserItemOrNull() ?: return null
 	val text = stringOrNull("text") ?: ""
+	val contentType = stringOrNull("content_type")
+	val media = objectOrNull("media")?.toChatMessageMediaItemOrNull()
 	val clientMessageId = stringOrNullFlexible("idempotency_key")
 	val replyToMessageId = longOrNullFlexible("reply_to_message_id")
 	val replyToMessageText = stringOrNull("reply_to_message_text")
@@ -39,6 +42,8 @@ internal fun JsonObject.toChatMessageItemOrNull(): ChatMessageItem? {
 		conversationId = conversationId,
 		sender = sender,
 		text = text,
+		contentType = contentType,
+		media = media,
 		clientMessageId = clientMessageId,
 		replyToMessageId = replyToMessageId,
 		replyToMessageText = replyToMessageText,
@@ -47,6 +52,23 @@ internal fun JsonObject.toChatMessageItemOrNull(): ChatMessageItem? {
 		pinnedByUserId = pinnedByUserId,
 		createdAt = createdAt,
 		updatedAt = updatedAt
+	)
+}
+
+internal fun JsonObject.toChatMessageMediaItemOrNull(): ChatMessageMediaItem? {
+	val url = stringOrNull("url") ?: return null
+	val objectKey = stringOrNull("object_key") ?: return null
+	val mimeType = stringOrNull("mime_type") ?: return null
+	val sizeBytes = longOrNullFlexible("size_bytes") ?: return null
+	val durationMs = longOrNullFlexible("duration_ms") ?: return null
+	return ChatMessageMediaItem(
+		url = url,
+		objectKey = objectKey,
+		mimeType = mimeType,
+		sizeBytes = sizeBytes,
+		durationMs = durationMs,
+		width = longOrNullFlexible("width")?.toInt(),
+		height = longOrNullFlexible("height")?.toInt(),
 	)
 }
 
