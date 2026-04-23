@@ -29,6 +29,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.PermissionChecker
 import androidx.lifecycle.LifecycleOwner
 import me.floow.shared.chats.uilogic.direct.RecordedClip
+import me.floow.shared.chats.uilogic.direct.VideoRecorderBridge
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.ExecutorService
@@ -46,7 +47,7 @@ import java.util.concurrent.Executors
 class VideoRecorder(
     private val context: Context,
     private val lifecycleOwner: LifecycleOwner,
-) {
+) : VideoRecorderBridge {
     private val previewView = PreviewView(context)
     private var cameraProvider: ProcessCameraProvider? = null
     private var camera: Camera? = null
@@ -123,7 +124,7 @@ class VideoRecorder(
      * Toggles between front and back camera. Safe to call while a recording
      * session is active unless that session is already finalizing.
      */
-    fun switchCamera(): Boolean {
+    override fun switchCamera(): Boolean {
         val provider = cameraProvider ?: return false
         val now = SystemClock.elapsedRealtime()
 
@@ -166,12 +167,12 @@ class VideoRecorder(
         }
     }
 
-    fun zoomBy(scaleFactor: Float): Float? {
+    override fun zoomBy(scaleFactor: Float): Float? {
         if (scaleFactor <= 0f) return null
         return setZoomRatio(currentZoomRatio * scaleFactor)
     }
 
-    fun setZoomRatio(zoomRatio: Float): Float? {
+    override fun setZoomRatio(zoomRatio: Float): Float? {
         val camera = camera ?: return null
         val zoomState = camera.cameraInfo.zoomState.value ?: return null
         val applied = zoomRatio.coerceIn(zoomState.minZoomRatio, zoomState.maxZoomRatio)
@@ -184,8 +185,8 @@ class VideoRecorder(
      * Starts a new recording session. [onComplete] is dispatched on the main
      * thread once the clip is finalized (or `null` on error / cancel).
      */
-    fun startRecording(
-        onAudioLevel: (Float) -> Unit = {},
+    override fun startRecording(
+        onAudioLevel: (Float) -> Unit,
         onComplete: (RecordedClip?) -> Unit,
     ) {
         synchronized(sessionLock) {
@@ -327,23 +328,22 @@ class VideoRecorder(
      * Transitions the active session to finalizing and requests `stop`.
      * Safe to call multiple times; second call is a no-op.
      */
-    fun stopRecording(): String? {
+    override fun stopRecording() {
         synchronized(sessionLock) {
-            val session = activeSession ?: return null
+            val session = activeSession ?: return
             if (session.state == RecorderSession.State.Finalizing ||
                 session.state == RecorderSession.State.Closed
             ) {
-                return session.filePath
+                return
             }
             session.state = RecorderSession.State.Finalizing
             runCatching { session.recording?.stop() }.onFailure {
                 Log.e(TAG, "stopRecording failed", it)
             }
-            return session.filePath
         }
     }
 
-    fun cancelRecording() {
+    override fun cancelRecording() {
         val sessionSnapshot: RecorderSession?
         synchronized(sessionLock) {
             sessionSnapshot = activeSession
@@ -361,7 +361,7 @@ class VideoRecorder(
         outputDirectory?.listFiles()?.forEach { it.delete() }
     }
 
-    fun deleteTempFile(path: String) {
+    override fun deleteTempFile(path: String) {
         File(path).delete()
     }
 

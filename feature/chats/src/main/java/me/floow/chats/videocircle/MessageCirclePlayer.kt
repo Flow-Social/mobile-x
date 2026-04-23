@@ -221,107 +221,22 @@ fun MessageCirclePlayer(
                 )
             }
 
-            // Progress ring + pause overlay (Telegram: drawRoundProgress)
-            if (isActive) {
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    val density = this.density
-                    val baseInset = if (isPlaying && !isPaused) PlayingInsetDp * density else 0f
-                    // Telegram: inset += dp(16) * pauseProgress (ring shrinks when paused)
-                    val totalInset = baseInset + PauseExtraInsetDp * density * overshootPauseProgress
-                    val strokeWidth = (5f * density) + 5f * density * 0.5f * pauseProgress
-                    val diameter = size.minDimension - strokeWidth - totalInset * 2f
-                    val topLeft = Offset(
-                        (size.width - diameter) / 2f,
-                        (size.height - diameter) / 2f,
-                    )
-                    val arcSize = Size(diameter, diameter)
-                    val centerX = size.width / 2f
-                    val centerY = size.height / 2f
-                    val radius = diameter / 2f
+            VideoCircleProgressOverlay(
+                visible = isActive,
+                isPlaying = isPlaying,
+                isPaused = isPaused,
+                pauseProgress = pauseProgress,
+                overshootPauseProgress = overshootPauseProgress,
+                progress = progress.floatValue,
+                progressColor = progressColor,
+            )
 
-                    // Telegram: dim background circle when paused (30% alpha)
-                    if (pauseProgress > 0f) {
-                        drawCircle(
-                            color = Color.White.copy(alpha = 0.3f * pauseProgress),
-                            radius = radius,
-                            center = Offset(centerX, centerY),
-                            style = Stroke(width = strokeWidth),
-                        )
-                    }
-
-                    // Background ring (full circle, dim)
-                    drawArc(
-                        color = Color.White.copy(alpha = 0.15f),
-                        startAngle = -90f,
-                        sweepAngle = 360f,
-                        useCenter = false,
-                        topLeft = topLeft,
-                        size = arcSize,
-                        style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
-                    )
-
-                    // Progress arc
-                    if (progress.floatValue > 0f) {
-                        drawArc(
-                            color = progressColor,
-                            startAngle = -90f,
-                            sweepAngle = 360f * progress.floatValue,
-                            useCenter = false,
-                            topLeft = topLeft,
-                            size = arcSize,
-                            style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
-                        )
-                    }
-
-                    // Telegram: seek knob when paused (white dot at progress position on ring)
-                    if (overshootPauseProgress > 0f) {
-                        val knobOffset = progressToRingOffset(
-                            progress = progress.floatValue,
-                            center = Offset(centerX, centerY),
-                            radius = radius,
-                        )
-                        val knobRadius = (3f + 5f * overshootPauseProgress) * density
-                        drawCircle(
-                            color = Color.White.copy(alpha = overshootPauseProgress),
-                            radius = knobRadius,
-                            center = knobOffset,
-                        )
-                    }
-                }
-            }
-
-            // Playing indicator: 3 animated equalizer bars (Telegram: RoundVideoPlayingDrawable)
-            if (isActive && !isPaused) {
-                Canvas(
-                    modifier = Modifier
-                        .fillMaxSize()
-                ) {
-                    val density = this.density
-                    val barWidth = 2f * density
-                    val barMaxHeight = 8f * density
-                    val barSpacing = 3f * density
-                    val barsWidth = 3f * barWidth + 2f * barSpacing
-                    // Bottom-right corner, offset inward
-                    val startX = size.width - barsWidth - 6f * density
-                    val startY = size.height - 6f * density
-
-                    val playingColor = Color.White.copy(alpha = 0.7f)
-                    for (i in 0..2) {
-                        val barProgress = when (i) {
-                            0 -> bar1Progress.floatValue
-                            1 -> bar2Progress.floatValue
-                            else -> bar3Progress.floatValue
-                        }
-                        val barHeight = 2f * density + barMaxHeight * barProgress
-                        val x = startX + i * (barWidth + barSpacing)
-                        drawRect(
-                            color = playingColor,
-                            topLeft = Offset(x, startY - barHeight),
-                            size = Size(barWidth, barHeight),
-                        )
-                    }
-                }
-            }
+            VideoCirclePlayingEqualizer(
+                visible = isActive && !isPaused,
+                bar1 = bar1Progress.floatValue,
+                bar2 = bar2Progress.floatValue,
+                bar3 = bar3Progress.floatValue,
+            )
 
             Box(
                 modifier = Modifier
@@ -338,88 +253,120 @@ fun MessageCirclePlayer(
                             Modifier
                         }
                     )
-                    .pointerInput(isPaused, player) {
-                        awaitEachGesture {
-                            val down = awaitFirstDown(
-                                requireUnconsumed = false,
-                                pass = PointerEventPass.Initial,
-                            )
-                            val currentPlayer = player
-                            if (currentPlayer == null) {
-                                val up = waitForUpOrCancellation()
-                                if (up != null) {
-                                    up.consume()
-                                    currentOnTogglePlayback()
-                                }
-                                return@awaitEachGesture
-                            }
+                    .videoCircleSeekGesture(
+                        isPaused = isPaused,
+                        player = player,
+                        progress = progress,
+                        onSeekingChange = { isSeeking = it },
+                        onTogglePlayback = currentOnTogglePlayback,
+                        onSeekProgress = currentOnSeekProgress,
+                    ),
+            )
+        }
+    }
+}
 
-                            if (!isPaused) {
-                                val up = waitForUpOrCancellation()
-                                if (up != null) {
-                                    up.consume()
-                                    currentOnTogglePlayback()
-                                }
-                                return@awaitEachGesture
-                            }
+@Composable
+private fun VideoCircleProgressOverlay(
+    visible: Boolean,
+    isPlaying: Boolean,
+    isPaused: Boolean,
+    pauseProgress: Float,
+    overshootPauseProgress: Float,
+    progress: Float,
+    progressColor: Color,
+) {
+    if (!visible) return
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        val density = this.density
+        val baseInset = if (isPlaying && !isPaused) PlayingInsetDp * density else 0f
+        val totalInset = baseInset + PauseExtraInsetDp * density * overshootPauseProgress
+        val strokeWidth = (5f * density) + 5f * density * 0.5f * pauseProgress
+        val diameter = size.minDimension - strokeWidth - totalInset * 2f
+        val topLeft = Offset(
+            (size.width - diameter) / 2f,
+            (size.height - diameter) / 2f,
+        )
+        val arcSize = Size(diameter, diameter)
+        val center = Offset(size.width / 2f, size.height / 2f)
+        val radius = diameter / 2f
 
-                            val startedOnKnob = isSeekKnobTouch(
-                                position = down.position,
-                                size = size,
-                                progress = progress.floatValue,
-                                density = this@pointerInput.density,
-                            )
-                            val startedOnRing = !startedOnKnob && isSeekRingTouch(
-                                position = down.position,
-                                size = size,
-                                density = this@pointerInput.density,
-                            )
+        if (pauseProgress > 0f) {
+            drawCircle(
+                color = Color.White.copy(alpha = 0.3f * pauseProgress),
+                radius = radius,
+                center = center,
+                style = Stroke(width = strokeWidth),
+            )
+        }
 
-                            if (!startedOnKnob && !startedOnRing) {
-                                val up = waitForUpOrCancellation()
-                                if (up != null) {
-                                    up.consume()
-                                    currentOnTogglePlayback()
-                                }
-                                return@awaitEachGesture
-                            }
+        drawArc(
+            color = Color.White.copy(alpha = 0.15f),
+            startAngle = -90f,
+            sweepAngle = 360f,
+            useCenter = false,
+            topLeft = topLeft,
+            size = arcSize,
+            style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
+        )
 
-                            var seekStarted = false
-                            down.consume()
-                            isSeeking = true
-                            try {
-                                if (startedOnRing) {
-                                    seekStarted = true
-                                    seekToTouchProgress(currentPlayer, down.position, size, progress, currentOnSeekProgress)
-                                }
+        if (progress > 0f) {
+            drawArc(
+                color = progressColor,
+                startAngle = -90f,
+                sweepAngle = 360f * progress,
+                useCenter = false,
+                topLeft = topLeft,
+                size = arcSize,
+                style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
+            )
+        }
 
-                                while (true) {
-                                    val event = awaitPointerEvent(pass = PointerEventPass.Initial)
-                                    val change = event.changes.firstOrNull { it.id == down.id }
-                                        ?: break
-                                    if (!change.pressed) {
-                                        break
-                                    }
+        if (overshootPauseProgress > 0f) {
+            val knobOffset = progressToRingOffset(
+                progress = progress,
+                center = center,
+                radius = radius,
+            )
+            val knobRadius = (3f + 5f * overshootPauseProgress) * density
+            drawCircle(
+                color = Color.White.copy(alpha = overshootPauseProgress),
+                radius = knobRadius,
+                center = knobOffset,
+            )
+        }
+    }
+}
 
-                                    val dragDistance = hypot(
-                                        change.position.x - down.position.x,
-                                        change.position.y - down.position.y,
-                                    )
-                                    if (startedOnKnob && !seekStarted && dragDistance > viewConfiguration.touchSlop) {
-                                        seekStarted = true
-                                    }
-                                    if (startedOnKnob && seekStarted) {
-                                        change.consume()
-                                        seekToTouchProgress(currentPlayer, change.position, size, progress, currentOnSeekProgress)
-                                    } else if (startedOnRing) {
-                                        change.consume()
-                                    }
-                                }
-                            } finally {
-                                isSeeking = false
-                            }
-                        }
-                    },
+@Composable
+private fun VideoCirclePlayingEqualizer(
+    visible: Boolean,
+    bar1: Float,
+    bar2: Float,
+    bar3: Float,
+) {
+    if (!visible) return
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        val density = this.density
+        val barWidth = 2f * density
+        val barMaxHeight = 8f * density
+        val barSpacing = 3f * density
+        val barsWidth = 3f * barWidth + 2f * barSpacing
+        val startX = size.width - barsWidth - 6f * density
+        val startY = size.height - 6f * density
+        val playingColor = Color.White.copy(alpha = 0.7f)
+        repeat(3) { index ->
+            val barProgress = when (index) {
+                0 -> bar1
+                1 -> bar2
+                else -> bar3
+            }
+            val barHeight = 2f * density + barMaxHeight * barProgress
+            val x = startX + index * (barWidth + barSpacing)
+            drawRect(
+                color = playingColor,
+                topLeft = Offset(x, startY - barHeight),
+                size = Size(barWidth, barHeight),
             )
         }
     }
@@ -511,6 +458,93 @@ private fun seekRingRadius(
     val pausedInset = PauseExtraInsetDp * density
     return ((minOf(size.width, size.height) - pausedStrokeWidth - pausedInset * 2f) / 2f)
         .coerceAtLeast(1f)
+}
+
+private fun Modifier.videoCircleSeekGesture(
+    isPaused: Boolean,
+    player: ExoPlayer?,
+    progress: androidx.compose.runtime.MutableFloatState,
+    onSeekingChange: (Boolean) -> Unit,
+    onTogglePlayback: () -> Unit,
+    onSeekProgress: (Float) -> Unit,
+): Modifier = pointerInput(isPaused, player) {
+    awaitEachGesture {
+        val down = awaitFirstDown(
+            requireUnconsumed = false,
+            pass = PointerEventPass.Initial,
+        )
+        val currentPlayer = player
+        if (currentPlayer == null) {
+            val up = waitForUpOrCancellation()
+            if (up != null) {
+                up.consume()
+                onTogglePlayback()
+            }
+            return@awaitEachGesture
+        }
+
+        if (!isPaused) {
+            val up = waitForUpOrCancellation()
+            if (up != null) {
+                up.consume()
+                onTogglePlayback()
+            }
+            return@awaitEachGesture
+        }
+
+        val startedOnKnob = isSeekKnobTouch(
+            position = down.position,
+            size = size,
+            progress = progress.floatValue,
+            density = this@pointerInput.density,
+        )
+        val startedOnRing = !startedOnKnob && isSeekRingTouch(
+            position = down.position,
+            size = size,
+            density = this@pointerInput.density,
+        )
+
+        if (!startedOnKnob && !startedOnRing) {
+            val up = waitForUpOrCancellation()
+            if (up != null) {
+                up.consume()
+                onTogglePlayback()
+            }
+            return@awaitEachGesture
+        }
+
+        var seekStarted = false
+        down.consume()
+        onSeekingChange(true)
+        try {
+            if (startedOnRing) {
+                seekStarted = true
+                seekToTouchProgress(currentPlayer, down.position, size, progress, onSeekProgress)
+            }
+
+            while (true) {
+                val event = awaitPointerEvent(pass = PointerEventPass.Initial)
+                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                if (!change.pressed) break
+
+                val dragDistance = hypot(
+                    change.position.x - down.position.x,
+                    change.position.y - down.position.y,
+                )
+                if (startedOnKnob && !seekStarted && dragDistance > viewConfiguration.touchSlop) {
+                    seekStarted = true
+                }
+                if (startedOnKnob && seekStarted) {
+                    change.consume()
+                    seekToTouchProgress(currentPlayer, change.position, size, progress, onSeekProgress)
+                } else if (startedOnRing) {
+                    change.consume()
+                }
+            }
+        } finally {
+            onSeekingChange(false)
+        }
+    }
 }
 
 private fun seekToTouchProgress(

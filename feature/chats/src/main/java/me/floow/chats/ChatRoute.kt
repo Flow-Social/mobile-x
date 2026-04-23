@@ -31,7 +31,6 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import me.floow.chats.camera.AndroidVideoRecorderBridge
 import me.floow.chats.camera.VideoRecorder
 import me.floow.chats.uilogic.chat.DirectChatOpenMode
 import me.floow.chats.uilogic.chat.AndroidVideoCircleMessageSender
@@ -114,14 +113,13 @@ fun ChatRoute(
 
 	val recordingStateHolder = remember { VideoRecordingStateHolder() }
 	val recordingState by recordingStateHolder.state.collectAsState()
-	val recorderBridge = remember { AndroidVideoRecorderBridge(videoRecorder) }
 	val bubbleBoundsByMessageKey = remember { mutableStateMapOf<String, androidx.compose.ui.geometry.Rect>() }
 	val playbackCoordinator = rememberVideoCirclePlaybackCoordinator()
 	val videoCirclePlaybackState by playbackCoordinator.state.collectAsState()
 	var videoCircleInteractionActive by remember { mutableStateOf(false) }
 
-	DisposableEffect(recorderBridge) {
-		recordingStateHolder.recorder = recorderBridge
+	DisposableEffect(videoRecorder) {
+		recordingStateHolder.recorder = videoRecorder
 		onDispose { recordingStateHolder.recorder = null }
 	}
 
