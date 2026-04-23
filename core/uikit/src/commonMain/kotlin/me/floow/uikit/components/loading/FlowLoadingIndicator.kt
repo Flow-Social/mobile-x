@@ -1,12 +1,8 @@
 package me.floow.uikit.components.loading
 
-import androidx.compose.foundation.layout.requiredSize
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -19,12 +15,19 @@ object FlowLoadingIndicatorDefaults {
 @Composable
 fun FlowLoadingIndicator(
     modifier: Modifier = Modifier,
-    color: Color = MaterialTheme.colorScheme.primary,
+    color: Color = platformFlowLoadingIndicatorColor(),
 ) {
-    CircularProgressIndicator(
-        modifier = modifier
-            .requiredSize(FlowLoadingIndicatorDefaults.Size)
-            .testTag(FLOW_LOADING_INDICATOR_TAG),
+    PlatformFlowLoadingIndicator(
+        modifier = modifier,
         color = color,
     )
 }
+
+@Composable
+internal expect fun PlatformFlowLoadingIndicator(
+    modifier: Modifier = Modifier,
+    color: Color,
+)
+
+@Composable
+internal expect fun platformFlowLoadingIndicatorColor(): Color
