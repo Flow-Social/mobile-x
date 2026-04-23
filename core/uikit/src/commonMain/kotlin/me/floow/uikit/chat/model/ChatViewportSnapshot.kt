@@ -10,5 +10,13 @@ data class ChatViewportSnapshot(
 	val firstVisibleItemIndex: Int,
 	val firstVisibleItemScrollOffsetPx: Int,
 	val visibleReadCandidateId: Long?,
-	val isAtBottom: Boolean
+	val isAtBottom: Boolean,
+	val visibleItems: List<ChatVisibleItemSnapshot> = emptyList(),
+)
+
+@Immutable
+data class ChatVisibleItemSnapshot(
+	val itemKey: Any,
+	val messageId: Long,
+	val visibleFraction: Float,
 )

@@ -16,7 +16,8 @@ import kotlin.math.min
 enum class ChatInputMode {
 	None,
 	Keyboard,
-	Emoji
+	Emoji,
+	Recording
 }
 
 private enum class ChatInputUiState {
@@ -25,7 +26,8 @@ private enum class ChatInputUiState {
 	KeyboardRequested,
 	KeyboardVisible,
 	KeyboardClosing,
-	SwitchingEmojiToKeyboard
+	SwitchingEmojiToKeyboard,
+	Recording
 }
 
 private const val MIN_VALID_KEYBOARD_HEIGHT_PX = 200
@@ -70,6 +72,8 @@ class ChatInputController internal constructor(
 	private var isTextFieldFocused by mutableStateOf(false)
 	private var imeWasOpenDuringCurrentSession by mutableStateOf(false)
 	private var shouldRestoreKeyboardOnResume by mutableStateOf(false)
+	
+	private var wasKeyboardOpenBeforeRecording by mutableStateOf(false)
 
 	val inputMode: ChatInputMode
 		get() = when (uiState) {
@@ -79,6 +83,7 @@ class ChatInputController internal constructor(
 			ChatInputUiState.KeyboardVisible,
 			ChatInputUiState.KeyboardClosing,
 			ChatInputUiState.SwitchingEmojiToKeyboard -> ChatInputMode.Keyboard
+			ChatInputUiState.Recording -> ChatInputMode.Recording
 		}
 
 	val keyboardLayoutHeightPx: Int
@@ -91,6 +96,11 @@ class ChatInputController internal constructor(
 			ChatInputUiState.KeyboardVisible -> imeHeightPx
 			ChatInputUiState.KeyboardClosing -> imeHeightPx
 			ChatInputUiState.SwitchingEmojiToKeyboard -> max(imeHeightPx, keyboardHandoffHeightPx)
+			ChatInputUiState.Recording -> if (wasKeyboardOpenBeforeRecording) {
+				max(imeHeightPx, max(stableKeyboardHeightPx, fallbackPanelHeightPx))
+			} else {
+				0
+			}
 			ChatInputUiState.Closed,
 			ChatInputUiState.EmojiVisible -> 0
 		}
@@ -101,6 +111,32 @@ class ChatInputController internal constructor(
 		} else {
 			0
 		}
+
+	fun enterRecording() {
+		wasKeyboardOpenBeforeRecording = imeHeightPx > 0 || inputMode == ChatInputMode.Keyboard
+		uiState = ChatInputUiState.Recording
+		logState("enterRecording() wasKeyboardOpen=$wasKeyboardOpenBeforeRecording")
+	}
+
+	fun exitRecording() {
+		clearKeyboardHandoff()
+		imeWasOpenDuringCurrentSession = false
+		uiState = if (wasKeyboardOpenBeforeRecording) {
+			if (imeHeightPx > 0) ChatInputUiState.KeyboardVisible else ChatInputUiState.KeyboardRequested
+		} else {
+			ChatInputUiState.Closed
+		}
+		wasKeyboardOpenBeforeRecording = false
+		if (uiState == ChatInputUiState.KeyboardRequested) {
+			keyboardRequestToken += 1
+		}
+		logState("exitRecording() restoreKeyboard=${uiState != ChatInputUiState.Closed}")
+	}
+	
+	fun exitRecordingWithRestore() {
+		exitRecording()
+		logState("exitRecordingWithRestore()")
+	}
 
 	fun onTextFieldValueChange(value: TextFieldValue) {
 		val trimmedText = value.text.trimToMaxLength()
@@ -163,6 +199,7 @@ class ChatInputController internal constructor(
 				ChatInputUiState.KeyboardVisible,
 				ChatInputUiState.KeyboardClosing,
 				ChatInputUiState.SwitchingEmojiToKeyboard -> Unit
+				ChatInputUiState.Recording -> Unit
 				ChatInputUiState.EmojiVisible -> {
 					if (!keepEmojiModeUntilImeHidden) {
 						if (imeHeightPx < max(stableKeyboardHeightPx, fallbackPanelHeightPx)) {
@@ -283,6 +320,10 @@ class ChatInputController internal constructor(
 				clearKeyboardHandoff()
 				uiState = ChatInputUiState.KeyboardRequested
 			}
+			ChatInputUiState.Recording -> {
+				clearKeyboardHandoff()
+				uiState = ChatInputUiState.KeyboardRequested
+			}
 		}
 		keyboardRequestToken += 1
 		logState("openKeyboard()")
@@ -383,6 +424,10 @@ class ChatInputController internal constructor(
 		return when (uiState) {
 			ChatInputUiState.Closed -> false
 			ChatInputUiState.KeyboardClosing -> false
+			ChatInputUiState.Recording -> {
+				exitRecording()
+				true
+			}
 			else -> {
 				closeInput()
 				true

@@ -117,6 +117,38 @@ data class ReplyInMessage(
 ) : ChatReplyMessage
 
 @Immutable
+enum class VideoCircleUploadStatus {
+	Pending,
+	Uploading,
+	Uploaded,
+	Failed,
+}
+
+@Immutable
+data class VideoCircleOutMessage(
+	override val id: Long,
+	override val uiKey: String = "msg_$id",
+	override val clientMessageId: String? = null,
+	override val messageText: String = "",
+	override val createdAtMillis: Long,
+	override val isPinned: Boolean = false,
+	override val authorName: String? = null,
+	override val authorUsername: String? = null,
+	override val authorAvatarUrl: String? = null,
+	override val deliveryStatus: ChatMessageDeliveryStatus = ChatMessageDeliveryStatus.SENDING,
+	val localVideoPath: String?,
+	val remoteVideoUrl: String? = null,
+	val durationMs: Long = 0L,
+	val thumbnailPath: String? = null,
+	val videoWidth: Int = 0,
+	val videoHeight: Int = 0,
+	val uploadStatus: VideoCircleUploadStatus = VideoCircleUploadStatus.Pending,
+) : ChatMessage {
+	/** Returns the best available playable source (remote preferred, falls back to local). */
+	val playableSource: String? get() = remoteVideoUrl ?: localVideoPath
+}
+
+@Immutable
 data class PostPreviewMessage(
 	override val id: Long,
 	override val uiKey: String = "msg_$id",

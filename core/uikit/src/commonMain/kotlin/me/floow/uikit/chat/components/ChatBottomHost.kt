@@ -30,6 +30,7 @@ fun ChatBottomHost(
 		ChatInputMode.Keyboard -> maxOf(actualImeHeightPx, controller.keyboardLayoutHeightPx)
 		ChatInputMode.Emoji -> controller.emojiPanelHeightPx
 		ChatInputMode.None -> 0
+		ChatInputMode.Recording -> 0
 	}
 	val bottomSpacerHeightDp = with(density) { bottomSpacerHeightPx.toDp() }
 

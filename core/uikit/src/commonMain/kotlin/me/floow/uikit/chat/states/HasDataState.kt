@@ -84,12 +84,14 @@ import me.floow.uikit.chat.components.DateSeparator
 import androidx.compose.material3.HorizontalDivider
 import me.floow.uikit.chat.components.ScrollToBottomButton
 import me.floow.uikit.chat.components.ChatPostBubble
+import me.floow.uikit.chat.components.replyable.ReplyableChatContent
 import me.floow.uikit.chat.components.replyable.ReplyableChatBubble
 import me.floow.uikit.chat.model.ChatContextMenuAction
 import me.floow.uikit.chat.model.ChatLayoutMode
 import me.floow.uikit.chat.model.ChatMessage
 import me.floow.uikit.chat.model.ChatScreenConfig
 import me.floow.uikit.chat.model.ChatScreenUiState
+import me.floow.uikit.chat.model.ChatVisibleItemSnapshot
 import me.floow.uikit.chat.model.ChatViewportSnapshot
 import me.floow.uikit.chat.model.DatedChatMessages
 import me.floow.uikit.chat.model.ChatJumpAlignment
@@ -98,6 +100,7 @@ import me.floow.uikit.chat.model.PrimaryInMessage
 import me.floow.uikit.chat.model.ReplyOutMessage
 import me.floow.uikit.chat.model.ReplyInMessage
 import me.floow.uikit.chat.model.PostPreviewMessage
+import me.floow.uikit.chat.model.VideoCircleOutMessage
 import me.floow.uikit.chat.model.ChatMessageTapOutcome
 import me.floow.uikit.chat.model.resolveMessageTapOutcome
 import me.floow.uikit.chat.model.currentChatTimeMillis
@@ -114,6 +117,7 @@ private data class ChatViewportCoordinatorSnapshot(
 	val firstVisibleItemScrollOffset: Int,
 	val visibleItemKeys: Set<Any>,
 	val visibleMessageIds: Set<Long>,
+	val visibleItems: List<ChatVisibleItemSnapshot>,
 	val viewportAnchorMessageId: Long?,
 	val viewportAnchorOffsetPx: Int,
 	val visibleReadCandidateId: Long?,
@@ -122,6 +126,18 @@ private data class ChatViewportCoordinatorSnapshot(
 
 private inline fun <T> traceChatUiSection(name: String, block: () -> T): T {
 	return block()
+}
+
+private fun androidx.compose.foundation.lazy.LazyListItemInfo.visibleFraction(
+	viewportStart: Int,
+	viewportEnd: Int,
+): Float {
+	if (size <= 0) return 0f
+	val itemStart = offset
+	val itemEnd = offset + size
+	val visibleStart = maxOf(itemStart, viewportStart)
+	val visibleEnd = minOf(itemEnd, viewportEnd)
+	return ((visibleEnd - visibleStart).coerceAtLeast(0).toFloat() / size.toFloat()).coerceIn(0f, 1f)
 }
 
 @OptIn(ExperimentalFoundationApi::class, FlowPreview::class)
@@ -152,6 +168,8 @@ fun HasDataState(
 	bubbleBoundsByMessageKey: MutableMap<String, Rect>,
 	onLoadMore: () -> Unit,
 	config: ChatScreenConfig,
+	messageListScrollEnabled: Boolean = true,
+	videoCircleContent: @Composable (VideoCircleOutMessage) -> Unit = {},
 	modifier: Modifier = Modifier
 ) {
 	val interactionPolicy = config.interactionPolicy
@@ -592,6 +610,18 @@ fun HasDataState(
 				val visibleMessageIds = visibleItems
 					.mapNotNull { item -> messageIdByKeySnapshot[item.key] }
 					.toSet()
+				val visibleItemSnapshots = visibleItems
+					.mapNotNull { item ->
+						val messageId = messageIdByKeySnapshot[item.key] ?: return@mapNotNull null
+						ChatVisibleItemSnapshot(
+							itemKey = item.key,
+							messageId = messageId,
+							visibleFraction = item.visibleFraction(
+								viewportStart = layoutInfo.viewportStartOffset,
+								viewportEnd = layoutInfo.viewportEndOffset,
+							),
+						)
+					}
 				val readCandidateId = visibleItems
 					.asSequence()
 					.mapNotNull { item ->
@@ -618,6 +648,7 @@ fun HasDataState(
 					firstVisibleItemScrollOffset = firstVisibleOffset,
 					visibleItemKeys = visibleKeys,
 					visibleMessageIds = visibleMessageIds,
+					visibleItems = visibleItemSnapshots,
 					viewportAnchorMessageId = viewportAnchor.messageId,
 					viewportAnchorOffsetPx = viewportAnchor.offsetPx,
 					visibleReadCandidateId = readCandidateId,
@@ -656,6 +687,7 @@ fun HasDataState(
 				onViewportSnapshotChanged(
 					ChatViewportSnapshot(
 						visibleMessageIds = snapshot.visibleMessageIds,
+						visibleItems = snapshot.visibleItems,
 						firstVisibleMessageId = snapshot.viewportAnchorMessageId,
 						firstVisibleOffsetPx = snapshot.viewportAnchorOffsetPx,
 						firstVisibleItemIndex = index,
@@ -1075,6 +1107,7 @@ fun HasDataState(
 			LazyColumn(
 				state = lazyListState,
 				reverseLayout = isReverseLayout,
+				userScrollEnabled = messageListScrollEnabled,
 				modifier = Modifier
 					.nestedScroll(keyboardDismissOnUserScrollConnection)
 					.fillMaxWidth()
@@ -1113,6 +1146,7 @@ fun HasDataState(
 							}
 
 							val isPostPreview = message is PostPreviewMessage
+							val isVideoCircle = message is VideoCircleOutMessage
 							val isOut = message is PrimaryOutMessage || message is ReplyOutMessage
 							val isRowHighlighted = highlightRequest?.messageId == message.id
 							val isSelected = message.id in selectionState.selectedMessageIds
@@ -1151,6 +1185,7 @@ fun HasDataState(
 								SelectableMessageRow(
 									showSelector = isSelectionMode,
 									selected = isSelected,
+									interactionEnabled = true,
 									modifier = Modifier
 										.fillMaxWidth()
 										.then(contextMenuAnchorModifier)
@@ -1211,6 +1246,23 @@ fun HasDataState(
 												},
 												modifier = Modifier.widthIn(max = 280.dp)
 											)
+										}
+									} else if (isVideoCircle) {
+										ReplyableChatContent(
+											chatMessage = message,
+											onReply = {
+												if (!isSelectionMode) onReply(it)
+											},
+											modifier = Modifier.fillMaxWidth(),
+										) {
+											Row(
+												modifier = Modifier.fillMaxWidth(),
+												horizontalArrangement = Arrangement.End
+											) {
+												Box(modifier = contextMenuHighlightModifier) {
+													videoCircleContent(message as VideoCircleOutMessage)
+												}
+											}
 										}
 									} else if (isOut) {
 										Row(

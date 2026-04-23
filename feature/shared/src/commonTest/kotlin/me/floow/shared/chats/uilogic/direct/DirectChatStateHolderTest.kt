@@ -9,13 +9,16 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import me.floow.shared.chats.model.ChatMessageContent
 import me.floow.shared.chats.model.ChatMessageItemModel
 import me.floow.shared.chats.model.ChatDeliveryState
 import me.floow.shared.chats.model.ChatOpenMode
 import me.floow.shared.chats.model.ChatThreadHeaderModel
 import me.floow.shared.chats.model.ChatThreadSnapshot
+import me.floow.shared.chats.model.VideoUploadState
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class DirectChatStateHolderTest {
@@ -188,6 +191,110 @@ class DirectChatStateHolderTest {
 		assertTrue(state != null)
 		assertEquals(1, state.messages.size)
 		assertEquals("hello", state.messages.first().text)
+	}
+
+	@Test
+	fun `local video circle uses stable pending media state and survives reload merge`() = runTest {
+		val holder = DirectChatStateHolder(
+			repository = StaticChatThreadRepository(),
+			scope = this,
+		)
+		val request = DirectChatInitialRequest(
+			peerUserId = "u1",
+			peerDisplayName = "User",
+			openMode = ChatOpenMode.FROM_LAST_SEEN,
+		)
+
+		holder.load(request)
+		advanceUntilIdle()
+
+		val uiKey = holder.addLocalVideoCircle(
+			RecordedClip(
+				path = "/tmp/video_circle.mp4",
+				durationMs = 1_200L,
+				width = 720,
+				height = 720,
+			)
+		)
+		val clientMessageId = uiKey.removePrefix("cmid_")
+		val stateAfterInsert = holder.state.value as DirectChatScreenState.HasData
+		val inserted = stateAfterInsert.messages.firstOrNull { it.clientMessageId == clientMessageId }
+		assertNotNull(inserted)
+		assertEquals(ChatDeliveryState.SENDING, inserted.deliveryState)
+		val insertedContent = inserted.content as? ChatMessageContent.VideoCircle
+		assertNotNull(insertedContent)
+		assertEquals(VideoUploadState.Pending, insertedContent.uploadState)
+		assertEquals("/tmp/video_circle.mp4", insertedContent.localPath)
+
+		holder.load(request)
+		advanceUntilIdle()
+
+		val stateAfterReload = holder.state.value as DirectChatScreenState.HasData
+		val reloaded = stateAfterReload.messages.firstOrNull { it.clientMessageId == clientMessageId }
+		assertNotNull(reloaded)
+		assertTrue(reloaded.content is ChatMessageContent.VideoCircle)
+	}
+
+	@Test
+	fun `local video circle transitions through uploading failure and sent states`() = runTest {
+		val holder = DirectChatStateHolder(
+			repository = StaticChatThreadRepository(),
+			scope = this,
+		)
+		holder.load(
+			DirectChatInitialRequest(
+				peerUserId = "u1",
+				peerDisplayName = "User",
+				openMode = ChatOpenMode.FROM_LAST_SEEN,
+			)
+		)
+		advanceUntilIdle()
+
+		val clientMessageId = holder.addLocalVideoCircle(
+			RecordedClip(
+				path = "/tmp/video_circle_state.mp4",
+				durationMs = 1_500L,
+				width = 360,
+				height = 360,
+			)
+		).removePrefix("cmid_")
+
+		holder.markLocalVideoCircleUploading(clientMessageId)
+		var state = holder.state.value as DirectChatScreenState.HasData
+		var message = state.messages.first { it.clientMessageId == clientMessageId }
+		assertEquals(VideoUploadState.Uploading, (message.content as ChatMessageContent.VideoCircle).uploadState)
+		assertEquals(ChatDeliveryState.SENDING, message.deliveryState)
+
+		holder.markLocalVideoCircleFailed(clientMessageId)
+		state = holder.state.value as DirectChatScreenState.HasData
+		message = state.messages.first { it.clientMessageId == clientMessageId }
+		assertEquals(VideoUploadState.Failed, (message.content as ChatMessageContent.VideoCircle).uploadState)
+		assertEquals(ChatDeliveryState.FAILED, message.deliveryState)
+
+		holder.resolveLocalVideoCircleSent(
+			clientMessageId = clientMessageId,
+			serverMessage = ChatMessageItemModel(
+				id = 77L,
+				clientMessageId = clientMessageId,
+				senderUserId = "self",
+				text = "Видеосообщение",
+				createdAtMillis = 77L,
+				isOutgoing = true,
+			),
+			remoteUrl = "https://cdn.example.com/video_circle.mp4",
+			durationMs = 1_500L,
+			width = 360,
+			height = 360,
+		)
+
+		state = holder.state.value as DirectChatScreenState.HasData
+		message = state.messages.first { it.clientMessageId == clientMessageId }
+		val content = message.content as? ChatMessageContent.VideoCircle
+		assertNotNull(content)
+		assertEquals(VideoUploadState.Uploaded, content.uploadState)
+		assertEquals("https://cdn.example.com/video_circle.mp4", content.remoteUrl)
+		assertEquals(ChatDeliveryState.SENT, message.deliveryState)
+		assertEquals(77L, message.id)
 	}
 
 	@Test

@@ -38,6 +38,35 @@ internal fun ReplyableChatBubble(
 	bubbleBoundsModifier: Modifier = Modifier
 ) {
 	val isOut = chatMessage is PrimaryOutMessage || chatMessage is ReplyOutMessage
+	ReplyableChatContent(
+		chatMessage = chatMessage,
+		onReply = onReply,
+		modifier = modifier,
+		contentModifier = if (isOut) Modifier.fillMaxWidth() else Modifier,
+	) { contentModifier ->
+		ChatBubble(
+			chatMessage = chatMessage,
+			onReplyClick = onReplyClick,
+			onRetrySendClick = onRetrySendClick,
+			isHighlighted = isHighlighted,
+			showAuthorHeaderForInMessages = showAuthorHeaderForInMessages,
+			showUnreadDot = showUnreadDot,
+			showMessageStatus = showMessageStatus,
+			showReplyPreview = showReplyPreview,
+			modifier = contentModifier,
+			bubbleBoundsModifier = bubbleBoundsModifier
+		)
+	}
+}
+
+@Composable
+internal fun ReplyableChatContent(
+	chatMessage: ChatMessage,
+	onReply: (ChatMessage) -> Unit,
+	modifier: Modifier = Modifier,
+	contentModifier: Modifier = Modifier,
+	content: @Composable (Modifier) -> Unit,
+) {
 	val currentViewConfiguration = LocalViewConfiguration.current
 	val density = LocalDensity.current
 	val state = remember {
@@ -74,18 +103,7 @@ internal fun ReplyableChatBubble(
 						IntOffset(x = state.requireOffset().roundToInt(), y = 0)
 					},
 				) {
-					ChatBubble(
-						chatMessage = chatMessage,
-						onReplyClick = onReplyClick,
-						onRetrySendClick = onRetrySendClick,
-						isHighlighted = isHighlighted,
-						showAuthorHeaderForInMessages = showAuthorHeaderForInMessages,
-						showUnreadDot = showUnreadDot,
-						showMessageStatus = showMessageStatus,
-						showReplyPreview = showReplyPreview,
-						modifier = if (isOut) Modifier.fillMaxWidth() else Modifier,
-						bubbleBoundsModifier = bubbleBoundsModifier
-					)
+					content(contentModifier)
 				}
 			}
 		}
@@ -95,6 +113,7 @@ internal fun ReplyableChatBubble(
 private fun Modifier.widthByBubbleType(chatMessage: ChatMessage): Modifier {
 	return when (chatMessage) {
 		is PrimaryOutMessage, is ReplyOutMessage -> this.then(Modifier.fillMaxWidth())
+		is me.floow.uikit.chat.model.VideoCircleOutMessage -> this.then(Modifier.fillMaxWidth())
 		else -> this
 	}
 }
