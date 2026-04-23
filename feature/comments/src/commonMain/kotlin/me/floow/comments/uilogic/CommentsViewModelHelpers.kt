@@ -212,7 +212,7 @@ internal fun CommentsVmState.buildPostPreviewMessage(): PostPreviewMessage? {
 			)
 		},
 		likesCount = postLikesCount,
-		authorAvatarUrl = postAuthorAvatarUrl?.toString(),
+			authorAvatarUrl = postAuthorAvatarUrl,
 		authorName = postAuthorName,
 		authorUsername = postAuthorUsername
 	)

@@ -146,16 +146,15 @@ private fun ChatListItem(
 					)
 				}
 
-				if (showDeliveryStatusIcon) {
-					Icon(
-						painter = when (chat.deliveryStatus) {
-							ChatsListDeliveryStatus.Sent -> sentIcon
-							ChatsListDeliveryStatus.Read -> readIcon
-							null -> sentIcon
-						},
-						contentDescription = null,
-						tint = Color.Unspecified,
-					)
+					if (showDeliveryStatusIcon) {
+						Icon(
+							painter = when (chat.deliveryStatus) {
+								ChatsListDeliveryStatus.Sent -> sentIcon
+								ChatsListDeliveryStatus.Read -> readIcon
+							},
+							contentDescription = null,
+							tint = Color.Unspecified,
+						)
 					Spacer(Modifier.width(4.dp))
 				}
 

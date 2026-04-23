@@ -641,6 +641,7 @@ private fun VerticalDivider(
 }
 
 @Composable
+@Suppress("DEPRECATION")
 private fun SharedLinkifiedText(
     text: String,
     modifier: Modifier = Modifier,

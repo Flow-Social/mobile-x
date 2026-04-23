@@ -600,11 +600,10 @@ class DirectChatStateHolder(
 			is DirectChatScreenState.NoMessages -> current.header
 			else -> return ""
 		}
-		val conversationId = when (current) {
-			is DirectChatScreenState.HasData -> current.conversationId
-			is DirectChatScreenState.NoMessages -> current.conversationId
-			else -> null
-		}
+			val conversationId = when (current) {
+				is DirectChatScreenState.HasData -> current.conversationId
+				is DirectChatScreenState.NoMessages -> current.conversationId
+			}
 		val optimisticId = nextOptimisticMessageId()
 			val clientMessageId = nextClientMessageId(optimisticId)
 			val message = ChatMessageItemModel(

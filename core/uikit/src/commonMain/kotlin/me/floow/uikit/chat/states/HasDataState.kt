@@ -1219,9 +1219,9 @@ fun HasDataState(
 											onChatBubbleLongClick(message)
 										}
 									}
-								) {
-									if (isPostPreview) {
-										val preview = message as PostPreviewMessage
+									) {
+										if (isPostPreview) {
+											val preview = message
 										Row(
 											verticalAlignment = Alignment.Bottom,
 											horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1255,15 +1255,15 @@ fun HasDataState(
 											},
 											modifier = Modifier.fillMaxWidth(),
 										) {
-											Row(
-												modifier = Modifier.fillMaxWidth(),
-												horizontalArrangement = Arrangement.End
-											) {
-												Box(modifier = contextMenuHighlightModifier) {
-													videoCircleContent(message as VideoCircleOutMessage)
+												Row(
+													modifier = Modifier.fillMaxWidth(),
+													horizontalArrangement = Arrangement.End
+												) {
+													Box(modifier = contextMenuHighlightModifier) {
+														videoCircleContent(message)
+													}
 												}
 											}
-										}
 									} else if (isOut) {
 										Row(
 											modifier = Modifier.fillMaxWidth(),

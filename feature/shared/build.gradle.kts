@@ -1,4 +1,5 @@
 @file:OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
+@file:Suppress("DEPRECATION")
 
 @Suppress("DSL_SCOPE_VIOLATION")
 plugins {
@@ -10,6 +11,10 @@ plugins {
 }
 
 kotlin {
+    compilerOptions {
+        freeCompilerArgs.add("-Xexpect-actual-classes")
+    }
+
     androidTarget()
 
     wasmJs {

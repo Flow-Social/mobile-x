@@ -1,6 +1,7 @@
 package me.floow.chats
 
 import android.Manifest
+import android.content.ClipData
 import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -20,10 +21,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.runtime.mutableStateMapOf
 import me.floow.uikit.chat.model.VideoRecordingMode
 import androidx.core.content.ContextCompat
@@ -79,7 +80,7 @@ fun ChatRoute(
 	val context = LocalContext.current
 	val lifecycleOwner = LocalLifecycleOwner.current
 	val scope = rememberCoroutineScope()
-	val clipboardManager = LocalClipboardManager.current
+	val clipboard = LocalClipboard.current
 	val haptics = LocalHapticFeedback.current
 	val snackbarHostState = remember { SnackbarHostState() }
 	val initialRequest = remember(initialData) { initialData.toSharedInitialRequest() }
@@ -204,9 +205,11 @@ fun ChatRoute(
 		onShowMessage = { message ->
 			scope.launch { snackbarHostState.showSnackbar(message) }
 		},
-		onCopyText = { text ->
-			clipboardManager.setText(AnnotatedString(text))
-		},
+			onCopyText = { text ->
+				scope.launch {
+					clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("chat-message", text)))
+				}
+			},
 		onHeaderClick = if (initialRequest.isSavedMessages || initialRequest.peerUserId.isBlank()) {
 			null
 		} else {

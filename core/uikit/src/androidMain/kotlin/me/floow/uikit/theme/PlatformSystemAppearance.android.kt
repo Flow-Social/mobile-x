@@ -29,6 +29,7 @@ actual fun PlatformSystemAppearance(
 
     if (view.isInEditMode) return
 
+    @Suppress("DEPRECATION")
     SideEffect {
         val window = (view.context as Activity).window
         window.setBackgroundDrawable(ColorDrawable(colorScheme.surfaceContainer.toArgb()))

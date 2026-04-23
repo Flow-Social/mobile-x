@@ -303,10 +303,11 @@ fun ChatScreen(
 			canDeleteSelection = selectionState?.canDelete == true,
 			onSelectionCloseClick = onClearSelection,
 			onCopySelectionClick = {
-				if (!selectionState?.copyText.isNullOrBlank()) {
+				val copyText = selectionState?.copyText
+				if (!copyText.isNullOrBlank()) {
 					coroutineScope.launch {
 						clipboard.setClipEntry(
-							ClipEntry(ClipData.newPlainText("chat-selection", selectionState?.copyText.orEmpty())),
+							ClipEntry(ClipData.newPlainText("chat-selection", copyText)),
 						)
 					}
 				}
