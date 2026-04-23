@@ -51,6 +51,22 @@ dependencies {
 	implementation(libs.appcompat)
 	implementation(libs.activity.compose)
 
+	val cameraxVersion = "1.4.1"
+	implementation("androidx.camera:camera-core:$cameraxVersion")
+	implementation("androidx.camera:camera-camera2:$cameraxVersion")
+	implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
+	implementation("androidx.camera:camera-view:$cameraxVersion")
+	implementation("androidx.camera:camera-video:$cameraxVersion")
+	implementation("com.google.guava:guava:33.0.0-android")
+
+	val media3Version = "1.5.1"
+	implementation("androidx.media3:media3-exoplayer:$media3Version")
+	implementation("androidx.media3:media3-ui:$media3Version")
+	implementation("androidx.media3:media3-datasource:$media3Version")
+	implementation("androidx.media3:media3-database:$media3Version")
+	implementation("androidx.media3:media3-transformer:$media3Version")
+	implementation("androidx.media3:media3-effect:$media3Version")
+
 	api(platform(libs.koin.bom))
 	api(libs.koin.core)
 	api(libs.koin.android)

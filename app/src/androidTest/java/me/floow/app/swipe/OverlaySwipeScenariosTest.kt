@@ -42,7 +42,7 @@ import androidx.compose.ui.test.moveBy
 import androidx.compose.ui.test.up
 import androidx.compose.ui.unit.dp
 import java.util.concurrent.atomic.AtomicBoolean
-import me.floow.profile.ui.profile.segments.summary.ProfileSummarySegment
+import me.floow.shared.profile.ui.segments.summary.ProfileSummarySegment
 import me.floow.uikit.components.media.viewer2.FullscreenImageViewerAction
 import me.floow.uikit.components.media.viewer2.FullscreenImageViewerModel
 import me.floow.uikit.components.media.viewer2.FullscreenImageViewerV2
@@ -471,10 +471,11 @@ private fun ProfileHeaderHarness(
                 .background(Color.Black)
         ) {
             ProfileSummarySegment(
-                profileAvatarUri = Uri.parse("https://example.com/avatar.png"),
+                profileAvatarUri = "https://example.com/avatar.png",
                 displayName = "test_user",
                 description = "About test user",
                 totalLikesReceived = 123,
+                statusLabel = "online",
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.Center)
