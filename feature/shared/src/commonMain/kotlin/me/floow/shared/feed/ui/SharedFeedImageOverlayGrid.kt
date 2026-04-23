@@ -85,6 +85,7 @@ internal fun SharedFeedImageOverlayGrid(
     onImageClick: (Int, SharedImageOrigin?, Painter?) -> Unit = { _, _, _ -> },
     onOriginChanged: (Int, SharedImageOrigin?) -> Unit = { _, _ -> },
     onDetachedCountChange: (Int) -> Unit = {},
+    onPhaseChanged: (SharedFeedOverlayPhase) -> Unit = {},
     hiddenSourceKey: String? = null,
     hiddenSourceRevealProgress: Float = 0f,
     onClosedAnimationEnd: () -> Unit = {},
@@ -111,6 +112,18 @@ internal fun SharedFeedImageOverlayGrid(
     var sourceDetachCount by remember(post.id) { mutableStateOf(0) }
     var phase by remember(post.id) { mutableStateOf(SharedFeedOverlayScenePhase.Opening) }
     var showCloseHint by remember(post.id) { mutableStateOf(false) }
+
+    fun publishPhase(scenePhase: SharedFeedOverlayScenePhase) {
+        phase = scenePhase
+        onPhaseChanged(
+            when (scenePhase) {
+                SharedFeedOverlayScenePhase.Opening -> SharedFeedOverlayPhase.Opening
+                SharedFeedOverlayScenePhase.Opened -> SharedFeedOverlayPhase.Opened
+                SharedFeedOverlayScenePhase.Closing -> SharedFeedOverlayPhase.Closing
+                SharedFeedOverlayScenePhase.Transfer -> SharedFeedOverlayPhase.Transfer
+            },
+        )
+    }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         LaunchedEffect(visible, phase) {
@@ -251,7 +264,7 @@ internal fun SharedFeedImageOverlayGrid(
             val scrimSpec = tween<Float>(durationMillis = 140, easing = FastOutSlowInEasing)
 
             if (visible) {
-                phase = SharedFeedOverlayScenePhase.Opening
+                publishPhase(SharedFeedOverlayScenePhase.Opening)
                 detachedCount = if (activeCount > 0) 1 else 0
                 sourceDetachCount = detachedCount
                 onDetachedCountChange(sourceDetachCount)
@@ -290,9 +303,9 @@ internal fun SharedFeedImageOverlayGrid(
                     }
                 }
                 openJobs.joinAll()
-                phase = SharedFeedOverlayScenePhase.Opened
+                publishPhase(SharedFeedOverlayScenePhase.Opened)
             } else {
-                phase = SharedFeedOverlayScenePhase.Closing
+                publishPhase(SharedFeedOverlayScenePhase.Closing)
                 detachedCount = activeCount
                 sourceDetachCount = activeCount
                 onDetachedCountChange(sourceDetachCount)
@@ -325,7 +338,7 @@ internal fun SharedFeedImageOverlayGrid(
                 }
                 closeJobs.joinAll()
                 scrimJob.join()
-                phase = SharedFeedOverlayScenePhase.Transfer
+                publishPhase(SharedFeedOverlayScenePhase.Transfer)
                 onClosedAnimationEnd()
             }
         }

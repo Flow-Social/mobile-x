@@ -45,6 +45,13 @@ fun SharedFeedRoute(
     val state by stateHolder.state.collectAsState()
     var undoAnimationSignal by remember { mutableLongStateOf(0L) }
     var undoAnimationFrom by remember { mutableStateOf(SharedUndoAnimationFrom.LEFT) }
+    val platformUxAdapter = remember(onPresentFullscreenViewer) {
+        SharedFeedPlatformUxAdapter(
+            usesHostedFullscreenViewer = onPresentFullscreenViewer != null,
+            presentFullscreenViewer = { viewer -> onPresentFullscreenViewer?.invoke(viewer) },
+            clearFullscreenViewer = { onPresentFullscreenViewer?.invoke(null) },
+        )
+    }
 
     if (manageLifecycle) {
         LaunchedEffect(stateHolder) {
@@ -110,7 +117,7 @@ fun SharedFeedRoute(
             onCommentsClick = onCommentsClick,
             onSharePost = onSharePost,
             onEditPost = onEditPost,
-            onPresentFullscreenViewer = onPresentFullscreenViewer,
+            platformUxAdapter = platformUxAdapter,
             isMockBuild = isMockBuild,
             isDebugBuild = isDebugBuild,
             contentPadding = innerPadding,

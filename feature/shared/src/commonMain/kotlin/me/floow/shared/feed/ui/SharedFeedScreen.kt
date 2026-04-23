@@ -196,7 +196,7 @@ internal fun SharedFeedScreen(
     onCommentsClick: (Post) -> Unit,
     onSharePost: (Post) -> Unit,
     onEditPost: (ProfilePostItem) -> Unit,
-    onPresentFullscreenViewer: ((HostedFullscreenImageViewer?) -> Unit)?,
+    platformUxAdapter: SharedFeedPlatformUxAdapter,
     isMockBuild: Boolean,
     isDebugBuild: Boolean,
     contentPadding: PaddingValues = PaddingValues(0.dp),
@@ -222,7 +222,7 @@ internal fun SharedFeedScreen(
             onCommentsClick = onCommentsClick,
             onSharePost = onSharePost,
             onEditPost = onEditPost,
-            onPresentFullscreenViewer = onPresentFullscreenViewer,
+            platformUxAdapter = platformUxAdapter,
             isMockBuild = isMockBuild,
             isDebugBuild = isDebugBuild,
             contentPadding = contentPadding,
@@ -249,7 +249,7 @@ private fun SharedFeedSuccessState(
     onCommentsClick: (Post) -> Unit,
     onSharePost: (Post) -> Unit,
     onEditPost: (ProfilePostItem) -> Unit,
-    onPresentFullscreenViewer: ((HostedFullscreenImageViewer?) -> Unit)?,
+    platformUxAdapter: SharedFeedPlatformUxAdapter,
     isMockBuild: Boolean,
     isDebugBuild: Boolean,
     contentPadding: PaddingValues,
@@ -260,10 +260,7 @@ private fun SharedFeedSuccessState(
     var postToDelete by remember { mutableStateOf<Post?>(null) }
     var viewerPost by remember { mutableStateOf<Post?>(null) }
     var viewerOpeningPainter by remember { mutableStateOf<Painter?>(null) }
-    var overlayPost by remember { mutableStateOf<Post?>(null) }
-    var overlayLaunchData by remember { mutableStateOf<SharedFeedOverlayLaunchData?>(null) }
-    var overlayDetachedCount by remember { mutableStateOf(0) }
-    var hiddenOverlaySourceKey by remember { mutableStateOf<String?>(null) }
+    var overlayState by remember { mutableStateOf<SharedFeedOverlayState?>(null) }
     val overlayOrigins = remember { mutableStateListOf<SharedImageOrigin?>() }
     val viewerState = rememberFullscreenImageViewerState()
     val viewerModelProvider = {
@@ -278,7 +275,7 @@ private fun SharedFeedSuccessState(
         }
     }
     val viewerModel = viewerModelProvider()
-    val hostedViewer = remember(viewerState, onPresentFullscreenViewer) {
+    val hostedViewer = remember(viewerState, platformUxAdapter) {
         HostedFullscreenImageViewer(
             modelProvider = viewerModelProvider,
             state = viewerState,
@@ -288,8 +285,11 @@ private fun SharedFeedSuccessState(
                 if (action == FullscreenImageViewerAction.CloseAnimationFinished) {
                     viewerPost = null
                     viewerOpeningPainter = null
-                    hiddenOverlaySourceKey = null
-                    onPresentFullscreenViewer?.invoke(null)
+                    overlayState = overlayState?.copy(
+                        phase = SharedFeedOverlayPhase.Opened,
+                        hiddenSourceKey = null,
+                    )
+                    platformUxAdapter.clearFullscreenViewer()
                 }
             },
         )
@@ -297,8 +297,8 @@ private fun SharedFeedSuccessState(
     val sheetState = rememberModalBottomSheetState()
     val isViewerActive = viewerState.visible
 
-    DisposableEffect(onPresentFullscreenViewer) {
-        onDispose { onPresentFullscreenViewer?.invoke(null) }
+    DisposableEffect(platformUxAdapter) {
+        onDispose { platformUxAdapter.clearFullscreenViewer() }
     }
 
     if (showProfileDeleteDialog) {
@@ -386,19 +386,23 @@ private fun SharedFeedSuccessState(
                     onPostMenuClick = { showPostMenuFor = it },
                     onOpenImageOverlay = { post, launchData ->
                         if (isViewerActive) return@SharedFeedSwipeablePostCard
-                        overlayPost = post
-                        overlayLaunchData = launchData
+                        overlayState = SharedFeedOverlayState(
+                            post = post,
+                            launchData = launchData,
+                            visible = true,
+                            phase = SharedFeedOverlayPhase.Opening,
+                        )
                         overlayOrigins.clear()
                         repeat(post.content.viewerImageUrls().size) { overlayOrigins += null }
                     },
                     onOverlaySourceSnapshot = { post, launchData ->
-                        if (overlayPost?.id == post.id) {
-                            overlayLaunchData = launchData
+                        if (overlayState?.post?.id == post.id) {
+                            overlayState = overlayState?.copy(launchData = launchData)
                         }
                     },
                     isViewerActive = isViewerActive,
-                    activeOverlayPostId = overlayPost?.id,
-                    overlayDetachedCount = overlayDetachedCount,
+                    activeOverlayPostId = overlayState?.post?.id,
+                    overlayDetachedCount = overlayState?.detachedCount ?: 0,
                     modifier = Modifier.fillMaxHeight().widthIn(max = SharedFeedCardMaxWidth),
                 )
             }
@@ -481,19 +485,20 @@ private fun SharedFeedSuccessState(
             modifier = Modifier.align(Alignment.TopCenter),
         )
 
-        overlayPost?.let { post ->
+        overlayState?.let { currentOverlay ->
+            val post = currentOverlay.post
             SharedFeedImageOverlayGrid(
                 post = post,
-                startRect = overlayLaunchData?.buttonRect,
-                launchData = overlayLaunchData,
-                visible = true,
+                startRect = currentOverlay.launchData.buttonRect,
+                launchData = currentOverlay.launchData,
+                visible = currentOverlay.visible,
                 onDismiss = {
-                    if (!viewerState.visible) {
-                        overlayPost = null
-                        overlayLaunchData = null
-                        overlayDetachedCount = 0
-                        hiddenOverlaySourceKey = null
-                        overlayOrigins.clear()
+                    if (!viewerState.visible && currentOverlay.visible) {
+                        overlayState = currentOverlay.copy(
+                            visible = false,
+                            phase = SharedFeedOverlayPhase.Closing,
+                            hiddenSourceKey = null,
+                        )
                     }
                 },
                 onImageClick = { index, origin, painter ->
@@ -505,10 +510,13 @@ private fun SharedFeedSuccessState(
                     if (index in 0 until overlayOrigins.size) {
                         overlayOrigins[index] = origin
                     }
-                    hiddenOverlaySourceKey = origin?.sourceKey
+                    overlayState = overlayState?.copy(
+                        phase = SharedFeedOverlayPhase.Transfer,
+                        hiddenSourceKey = origin?.sourceKey,
+                    )
                     viewerOpeningPainter = painter
                     viewerPost = post
-                    onPresentFullscreenViewer?.invoke(hostedViewer)
+                    platformUxAdapter.presentFullscreenViewer(hostedViewer)
                     hostedViewer.onAction(
                         FullscreenImageViewerAction.Open(
                             page = index.coerceIn(0, imageCount - 1),
@@ -525,8 +533,17 @@ private fun SharedFeedSuccessState(
                         overlayOrigins[index] = origin
                     }
                 },
-                onDetachedCountChange = { overlayDetachedCount = it },
-                hiddenSourceKey = if (viewerState.visible) hiddenOverlaySourceKey else null,
+                onDetachedCountChange = { detachedCount ->
+                    overlayState = overlayState?.copy(detachedCount = detachedCount)
+                },
+                onPhaseChanged = { phase ->
+                    overlayState = overlayState?.copy(phase = phase)
+                },
+                onClosedAnimationEnd = {
+                    overlayState = null
+                    overlayOrigins.clear()
+                },
+                hiddenSourceKey = if (viewerState.visible) currentOverlay.hiddenSourceKey else null,
                 hiddenSourceRevealProgress = if (viewerState.phase == me.floow.uikit.components.media.viewer2.ViewerPhase.Closing) {
                     1f - viewerState.transitionProgress
                 } else {
@@ -536,7 +553,7 @@ private fun SharedFeedSuccessState(
             )
         }
 
-        if (onPresentFullscreenViewer == null && viewerModel != null) {
+        if (!platformUxAdapter.usesHostedFullscreenViewer && viewerModel != null) {
             SharedFullscreenImageViewer(
                 model = viewerModel,
                 state = viewerState,
