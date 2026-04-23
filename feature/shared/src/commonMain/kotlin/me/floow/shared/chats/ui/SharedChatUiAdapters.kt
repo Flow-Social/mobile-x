@@ -1,7 +1,9 @@
 package me.floow.shared.chats.ui
 
 import me.floow.shared.chats.model.ChatDeliveryState
+import me.floow.shared.chats.model.ChatMessageContent
 import me.floow.shared.chats.model.ChatMessageItemModel
+import me.floow.shared.chats.model.VideoUploadState
 import me.floow.shared.chats.model.ChatThreadHeaderModel
 import me.floow.shared.chats.model.RepliesThreadItemModel
 import me.floow.shared.chats.uilogic.direct.DirectChatScreenState
@@ -15,10 +17,13 @@ import me.floow.uikit.chat.model.ChatScreenUiState
 import me.floow.uikit.chat.model.ChatSelectionState
 import me.floow.uikit.chat.model.DatedChatMessages
 import me.floow.uikit.chat.model.MessageFieldReply
+import me.floow.uikit.chat.model.PostPreviewMessage
 import me.floow.uikit.chat.model.PrimaryInMessage
 import me.floow.uikit.chat.model.PrimaryOutMessage
 import me.floow.uikit.chat.model.ReplyInMessage
 import me.floow.uikit.chat.model.ReplyOutMessage
+import me.floow.uikit.chat.model.VideoCircleOutMessage
+import me.floow.uikit.chat.model.VideoCircleUploadStatus
 import me.floow.uikit.chat.model.chatLocalDayStartMillis
 
 internal data class SharedJumpRequest(
@@ -185,6 +190,47 @@ private fun ChatMessageItemModel.toChatMessage(): ChatMessage {
 		ChatDeliveryState.READ,
 		null -> ChatMessageDeliveryStatus.SENT
 	}
+	val videoCircle = content as? ChatMessageContent.VideoCircle
+	if (videoCircle != null) {
+		return VideoCircleOutMessage(
+			id = id,
+			uiKey = clientMessageId?.let { "cmid_$it" } ?: "msg_$id",
+			clientMessageId = clientMessageId,
+			messageText = text,
+			createdAtMillis = createdAtMillis,
+			isPinned = isPinned,
+			authorName = senderDisplayName,
+			deliveryStatus = deliveryStatus,
+			localVideoPath = videoCircle.localPath,
+			remoteVideoUrl = videoCircle.remoteUrl,
+			durationMs = videoCircle.durationMs,
+			thumbnailPath = videoCircle.thumbnailPath,
+			videoWidth = videoCircle.width,
+			videoHeight = videoCircle.height,
+			uploadStatus = videoCircle.uploadState.toUploadStatus(),
+		)
+	}
+	val postPreview = content as? ChatMessageContent.PostPreview
+	if (postPreview != null) {
+		return PostPreviewMessage(
+			id = id,
+			uiKey = clientMessageId?.let { "cmid_$it" } ?: "msg_$id",
+			clientMessageId = clientMessageId,
+			messageText = text,
+			createdAtMillis = createdAtMillis,
+			imageVariants = listOf(
+				me.floow.uikit.chat.model.ChatPostImageVariant(
+					previewUrl = postPreview.imageUrl,
+					fullUrl = postPreview.imageUrl,
+				)
+			),
+			likesCount = postPreview.likesCount,
+			authorAvatarUrl = null,
+			isPinned = isPinned,
+			authorName = senderDisplayName,
+			deliveryStatus = deliveryStatus,
+		)
+	}
 	return when {
 		isOutgoing && replyToMessageId != null -> ReplyOutMessage(
 			id = id,
@@ -288,6 +334,13 @@ private fun RepliesThreadItemModel.toChatMessage(): ChatMessage {
 		authorName = actorDisplayName,
 		authorAvatarUrl = actorAvatarUrl,
 	)
+}
+
+private fun VideoUploadState.toUploadStatus(): VideoCircleUploadStatus = when (this) {
+	VideoUploadState.Pending -> VideoCircleUploadStatus.Pending
+	VideoUploadState.Uploading -> VideoCircleUploadStatus.Uploading
+	VideoUploadState.Uploaded -> VideoCircleUploadStatus.Uploaded
+	VideoUploadState.Failed -> VideoCircleUploadStatus.Failed
 }
 
 private fun ChatMessageItemModel.toFieldReply(): MessageFieldReply {

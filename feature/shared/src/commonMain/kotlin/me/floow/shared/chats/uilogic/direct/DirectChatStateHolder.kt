@@ -16,10 +16,12 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import me.floow.shared.chats.model.ChatDeliveryState
+import me.floow.shared.chats.model.ChatMessageContent
 import me.floow.shared.chats.model.ChatMessageItemModel
 import me.floow.shared.chats.model.ChatPresenceState
 import me.floow.shared.chats.model.ChatTypingState
 import me.floow.shared.chats.model.ChatThreadHeaderModel
+import me.floow.shared.chats.model.VideoUploadState
 import me.floow.shared.chats.ui.currentChatEpochMillis
 import me.floow.shared.chats.ui.formatChatClockTime
 import me.floow.uikit.chat.model.ChatViewportSnapshot
@@ -72,6 +74,7 @@ class DirectChatStateHolder(
 		const val MIN_INCOMING_TYPING_TTL_MS = 800L
 		const val UNDO_DELETE_TIMEOUT_MS = 4_000L
 		const val MAX_CANCELLED_CLIENT_MESSAGE_IDS = 64
+		const val LOCAL_ONLY_CONVERSATION_ID = -1L
 	}
 
 	private fun isOutgoingMessage(senderUserId: String?, header: ChatThreadHeaderModel): Boolean {
@@ -148,11 +151,12 @@ class DirectChatStateHolder(
 	private var lastOutgoingTypingSentMark: TimeMark? = null
 	private var optimisticMessageIdSeed: Long = -1L
 	private val pendingOutgoingClientMessageIds = mutableMapOf<Long, String>()
-	private val pendingOutgoingSendJobs = mutableMapOf<Long, Job>()
-	private val cancelledClientMessageIds = LinkedHashSet<String>()
-	private var pendingDeleteJob: Job? = null
-	private var pendingDeletedMessage: ChatMessageItemModel? = null
-	private var pendingDeleteConversationId: Long? = null
+    private val pendingOutgoingSendJobs = mutableMapOf<Long, Job>()
+    private val cancelledClientMessageIds = LinkedHashSet<String>()
+    private var pendingDeleteJob: Job? = null
+    private var pendingDeletedMessage: ChatMessageItemModel? = null
+    private var pendingDeleteConversationId: Long? = null
+    private val localVideoCircleMessages = LinkedHashMap<String, ChatMessageItemModel>()
 
 	private fun nextScrollRequestToken(): Long = currentChatEpochMillis()
 	private fun nextOptimisticMessageId(): Long = optimisticMessageIdSeed--
@@ -177,6 +181,10 @@ class DirectChatStateHolder(
 	}
 
 	fun dispose() {
+		disposeActiveWork(clearLocalVideoCircles = true)
+	}
+
+	private fun disposeActiveWork(clearLocalVideoCircles: Boolean) {
 		realtimeJob?.cancel()
 		realtimeJob = null
 		presenceJob?.cancel()
@@ -197,6 +205,9 @@ class DirectChatStateHolder(
 		pendingOutgoingSendJobs.values.forEach(Job::cancel)
 		pendingOutgoingSendJobs.clear()
 		cancelledClientMessageIds.clear()
+		if (clearLocalVideoCircles) {
+			localVideoCircleMessages.clear()
+		}
 		pendingDeleteJob?.cancel()
 		pendingDeleteJob = null
 		pendingDeletedMessage = null
@@ -204,7 +215,7 @@ class DirectChatStateHolder(
 	}
 
 	fun load(request: DirectChatInitialRequest) {
-		dispose()
+		disposeActiveWork(clearLocalVideoCircles = false)
 		scope.launch {
 			val cachedSnapshot = repository.loadCachedInitial(request).getOrNull()
 			if (cachedSnapshot != null) {
@@ -251,10 +262,13 @@ class DirectChatStateHolder(
 		}
 	}
 
-	private fun snapshotToScreenState(snapshot: me.floow.shared.chats.model.ChatThreadSnapshot): DirectChatScreenState {
-		val peerLastReadMessageId = snapshot.peerLastReadMessageId ?: 0L
-		val normalizedMessages = applyPeerReadState(snapshot.messages, peerLastReadMessageId)
-		return if (snapshot.messages.isEmpty()) {
+    private fun snapshotToScreenState(snapshot: me.floow.shared.chats.model.ChatThreadSnapshot): DirectChatScreenState {
+        val peerLastReadMessageId = snapshot.peerLastReadMessageId ?: 0L
+        val normalizedMessages = applyPeerReadState(
+            mergeLocalVideoCircleMessages(snapshot.messages),
+            peerLastReadMessageId,
+        )
+		return if (normalizedMessages.isEmpty()) {
 			DirectChatScreenState.NoMessages(
 				conversationId = snapshot.conversationId,
 				header = mergeLiveHeader(snapshot.header),
@@ -262,7 +276,20 @@ class DirectChatStateHolder(
 				scrollToBottomRequestToken = 0L,
 			)
 		} else if (snapshot.conversationId == null) {
-			DirectChatScreenState.Error("chat conversation id is missing")
+			if (snapshot.messages.isEmpty()) {
+				DirectChatScreenState.HasData(
+					conversationId = LOCAL_ONLY_CONVERSATION_ID,
+					header = mergeLiveHeader(snapshot.header),
+					messages = normalizedMessages,
+					canLoadMore = snapshot.canLoadMore,
+					nextBeforeMessageId = snapshot.nextBeforeMessageId,
+					highlightedMessageId = snapshot.highlightedMessageId,
+					scrollToBottomBadgeCount = 0,
+					peerLastReadMessageId = peerLastReadMessageId,
+				)
+			} else {
+				DirectChatScreenState.Error("chat conversation id is missing")
+			}
 		} else {
 			DirectChatScreenState.HasData(
 				conversationId = snapshot.conversationId,
@@ -561,6 +588,129 @@ class DirectChatStateHolder(
 			sendJob.invokeOnCompletion {
 				pendingOutgoingSendJobs.remove(optimisticId)
 				pendingOutgoingClientMessageIds.remove(optimisticId)
+			}
+		}
+	}
+
+	fun addLocalVideoCircle(clip: RecordedClip): String {
+		val videoPath = clip.path
+		val current = _state.value
+		val header = when (current) {
+			is DirectChatScreenState.HasData -> current.header
+			is DirectChatScreenState.NoMessages -> current.header
+			else -> return ""
+		}
+		val conversationId = when (current) {
+			is DirectChatScreenState.HasData -> current.conversationId
+			is DirectChatScreenState.NoMessages -> current.conversationId
+			else -> null
+		}
+		val optimisticId = nextOptimisticMessageId()
+			val clientMessageId = nextClientMessageId(optimisticId)
+			val message = ChatMessageItemModel(
+				id = optimisticId,
+				clientMessageId = clientMessageId,
+				senderUserId = header.selfUserId?.trim()?.takeIf(String::isNotEmpty) ?: header.peerUserId,
+				text = "",
+				createdAtMillis = currentChatEpochMillis(),
+				isOutgoing = true,
+				deliveryState = ChatDeliveryState.SENDING,
+				content = me.floow.shared.chats.model.ChatMessageContent.VideoCircle(
+					localPath = videoPath,
+					durationMs = clip.durationMs,
+					width = clip.width,
+					height = clip.height,
+					uploadState = me.floow.shared.chats.model.VideoUploadState.Pending,
+				),
+			)
+			localVideoCircleMessages[clientMessageId] = message
+			_state.update { state ->
+			when (state) {
+				is DirectChatScreenState.HasData -> state.copy(
+					messages = upsertMessage(state.messages, message),
+					scrollToBottomRequestToken = nextScrollRequestToken(),
+				)
+				is DirectChatScreenState.NoMessages -> {
+					DirectChatScreenState.HasData(
+						conversationId = conversationId ?: LOCAL_ONLY_CONVERSATION_ID,
+						header = header,
+						messages = listOf(message),
+						scrollToBottomRequestToken = nextScrollRequestToken(),
+					)
+				}
+				else -> state
+			}
+		}
+        return "cmid_$clientMessageId"
+	}
+
+	fun activeConversationIdOrNull(): Long? {
+		return when (val current = _state.value) {
+			is DirectChatScreenState.HasData -> current.conversationId.takeIf { it > 0L }
+			is DirectChatScreenState.NoMessages -> current.conversationId?.takeIf { it > 0L }
+			else -> null
+		}
+	}
+
+	fun markLocalVideoCircleUploading(clientMessageId: String) {
+		updateLocalVideoCircleMessage(clientMessageId) { message ->
+			message.copy(
+				deliveryState = ChatDeliveryState.SENDING,
+				content = (message.content as? ChatMessageContent.VideoCircle)?.copy(
+					uploadState = VideoUploadState.Uploading,
+				) ?: message.content,
+			)
+		}
+	}
+
+	fun markLocalVideoCircleFailed(clientMessageId: String) {
+		updateLocalVideoCircleMessage(clientMessageId) { message ->
+			message.copy(
+				deliveryState = ChatDeliveryState.FAILED,
+				content = (message.content as? ChatMessageContent.VideoCircle)?.copy(
+					uploadState = VideoUploadState.Failed,
+				) ?: message.content,
+			)
+		}
+	}
+
+	fun resolveLocalVideoCircleSent(
+		clientMessageId: String,
+		serverMessage: ChatMessageItemModel,
+		remoteUrl: String,
+		durationMs: Long,
+		width: Int,
+		height: Int,
+	) {
+		val normalizedClientMessageId = clientMessageId.trim().takeIf(String::isNotEmpty) ?: return
+		val localMessage = localVideoCircleMessages[normalizedClientMessageId]
+		val localContent = localMessage?.content as? ChatMessageContent.VideoCircle
+		val resolvedContent = ChatMessageContent.VideoCircle(
+			localPath = localContent?.localPath,
+			remoteUrl = remoteUrl,
+			durationMs = durationMs,
+			thumbnailPath = localContent?.thumbnailPath,
+			width = if (width > 0) width else (localContent?.width ?: 0),
+			height = if (height > 0) height else (localContent?.height ?: 0),
+			uploadState = VideoUploadState.Uploaded,
+		)
+		val resolvedMessage = serverMessage.copy(
+			clientMessageId = serverMessage.clientMessageId ?: normalizedClientMessageId,
+			deliveryState = ChatDeliveryState.SENT,
+			isOutgoing = true,
+			content = resolvedContent,
+		)
+		localVideoCircleMessages[normalizedClientMessageId] = resolvedMessage
+		_state.update { state ->
+			when (state) {
+				is DirectChatScreenState.HasData -> {
+					val updatedMessages = upsertMessage(state.messages, resolvedMessage)
+					state.copy(
+						messages = applyPeerReadState(updatedMessages, state.peerLastReadMessageId),
+						scrollToBottomRequestToken = nextScrollRequestToken(),
+					)
+				}
+				else -> state
 			}
 		}
 	}
@@ -866,26 +1016,61 @@ class DirectChatStateHolder(
 		)
 	}
 
-	private fun upsertMessage(
-		currentMessages: List<ChatMessageItemModel>,
-		message: ChatMessageItemModel,
-	): List<ChatMessageItemModel> {
+    private fun upsertMessage(
+        currentMessages: List<ChatMessageItemModel>,
+        message: ChatMessageItemModel,
+    ): List<ChatMessageItemModel> {
 		val normalizedClientMessageId = message.clientMessageId?.trim()?.takeIf(String::isNotEmpty)
 		val optimistic = normalizedClientMessageId?.let { clientMessageId ->
 			currentMessages.firstOrNull { it.clientMessageId == clientMessageId }
 		}
 		val normalizedMessage = if (optimistic != null && optimistic.id <= 0L && message.id > 0L) {
-			message.copy(createdAtMillis = optimistic.createdAtMillis)
+			// Preserve non-default content (e.g. VideoCircle) from the optimistic message
+			// when the server message falls back to Text because the API doesn't carry media type yet.
+			val preservedContent = if (
+				optimistic.content !is ChatMessageContent.Text &&
+				message.content is ChatMessageContent.Text
+			) optimistic.content else message.content
+			message.copy(
+				createdAtMillis = optimistic.createdAtMillis,
+				content = preservedContent,
+			)
 		} else {
 			message
 		}
 		return (currentMessages.filterNot { existing ->
 			existing.id == normalizedMessage.id ||
 				(normalizedClientMessageId != null && existing.clientMessageId == normalizedClientMessageId)
-		} + normalizedMessage).sortedBy(ChatMessageItemModel::createdAtMillis)
+            } + normalizedMessage).sortedBy(ChatMessageItemModel::createdAtMillis)
+    }
+
+    private fun mergeLocalVideoCircleMessages(messages: List<ChatMessageItemModel>): List<ChatMessageItemModel> {
+        if (localVideoCircleMessages.isEmpty()) return messages
+        return localVideoCircleMessages.values.fold(messages) { current, localMessage ->
+            upsertMessage(current, localMessage)
+        }
+    }
+
+	private fun updateLocalVideoCircleMessage(
+		clientMessageId: String,
+		transform: (ChatMessageItemModel) -> ChatMessageItemModel,
+	) {
+		val normalizedClientMessageId = clientMessageId.trim().takeIf(String::isNotEmpty) ?: return
+		val currentMessage = localVideoCircleMessages[normalizedClientMessageId] ?: return
+		val updatedMessage = transform(currentMessage)
+		localVideoCircleMessages[normalizedClientMessageId] = updatedMessage
+		_state.update { state ->
+			when (state) {
+				is DirectChatScreenState.HasData -> {
+					val updatedMessages = upsertMessage(state.messages, updatedMessage)
+					state.copy(messages = applyPeerReadState(updatedMessages, state.peerLastReadMessageId))
+				}
+				else -> state
+			}
+		}
 	}
 
-	private fun observePresence(peerUserId: String) {
+    private fun observePresence(peerUserId: String) {
 		if (peerUserId.isBlank() || presenceContract == null) return
 		presenceJob?.cancel()
 		presenceJob = scope.launch {
@@ -1141,23 +1326,23 @@ class DirectChatStateHolder(
 			}.getOrElse {
 				Result.failure(it)
 			}
-			result.onSuccess { snapshot ->
-				val latestMessageId = snapshot.messages.lastOrNull()?.id
-				_state.update { current ->
-					when (current) {
-						is DirectChatScreenState.HasData -> {
-							if (snapshot.conversationId == null) {
-								DirectChatScreenState.Error("chat conversation id is missing")
-							} else {
-								current.copy(
-									conversationId = snapshot.conversationId,
-									header = mergeLiveHeader(snapshot.header),
-									messages = snapshot.messages,
-									canLoadMore = snapshot.canLoadMore,
-									nextBeforeMessageId = snapshot.nextBeforeMessageId,
-									isLoadingMore = false,
-									highlightedMessageId = snapshot.highlightedMessageId ?: current.highlightedMessageId,
-								)
+	result.onSuccess { snapshot ->
+					val latestMessageId = snapshot.messages.lastOrNull()?.id
+					_state.update { current ->
+						when (current) {
+							is DirectChatScreenState.HasData -> {
+								if (snapshot.conversationId == null) {
+									DirectChatScreenState.Error("chat conversation id is missing")
+								} else {
+									current.copy(
+										conversationId = snapshot.conversationId,
+										header = mergeLiveHeader(snapshot.header),
+										messages = mergeLocalVideoCircleMessages(snapshot.messages),
+										canLoadMore = snapshot.canLoadMore,
+										nextBeforeMessageId = snapshot.nextBeforeMessageId,
+										isLoadingMore = false,
+										highlightedMessageId = snapshot.highlightedMessageId ?: current.highlightedMessageId,
+									)
 							}
 						}
 						is DirectChatScreenState.NoMessages -> {
@@ -1166,17 +1351,17 @@ class DirectChatStateHolder(
 									conversationId = snapshot.conversationId,
 									header = mergeLiveHeader(snapshot.header),
 								)
-							} else if (snapshot.conversationId == null) {
-								DirectChatScreenState.Error("chat conversation id is missing")
-							} else {
-								DirectChatScreenState.HasData(
-									conversationId = snapshot.conversationId,
-									header = mergeLiveHeader(snapshot.header),
-									messages = snapshot.messages,
-									canLoadMore = snapshot.canLoadMore,
-									nextBeforeMessageId = snapshot.nextBeforeMessageId,
-									highlightedMessageId = snapshot.highlightedMessageId,
-								)
+								} else if (snapshot.conversationId == null) {
+									DirectChatScreenState.Error("chat conversation id is missing")
+								} else {
+									DirectChatScreenState.HasData(
+										conversationId = snapshot.conversationId,
+										header = mergeLiveHeader(snapshot.header),
+										messages = mergeLocalVideoCircleMessages(snapshot.messages),
+										canLoadMore = snapshot.canLoadMore,
+										nextBeforeMessageId = snapshot.nextBeforeMessageId,
+										highlightedMessageId = snapshot.highlightedMessageId,
+									)
 							}
 						}
 						else -> current

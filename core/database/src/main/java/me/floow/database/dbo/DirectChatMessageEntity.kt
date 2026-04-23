@@ -29,6 +29,22 @@ data class DirectChatMessageEntity(
 	val senderAvatarUrl: String?,
 	@ColumnInfo(name = "text")
 	val text: String,
+	@ColumnInfo(name = "content_type")
+	val contentType: String?,
+	@ColumnInfo(name = "media_url")
+	val mediaUrl: String?,
+	@ColumnInfo(name = "media_object_key")
+	val mediaObjectKey: String?,
+	@ColumnInfo(name = "media_mime_type")
+	val mediaMimeType: String?,
+	@ColumnInfo(name = "media_size_bytes")
+	val mediaSizeBytes: Long?,
+	@ColumnInfo(name = "media_duration_ms")
+	val mediaDurationMs: Long?,
+	@ColumnInfo(name = "media_width")
+	val mediaWidth: Int?,
+	@ColumnInfo(name = "media_height")
+	val mediaHeight: Int?,
 	@ColumnInfo(name = "client_message_id")
 	val clientMessageId: String?,
 	@ColumnInfo(name = "reply_to_message_id")

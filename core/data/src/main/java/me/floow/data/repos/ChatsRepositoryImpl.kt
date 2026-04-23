@@ -34,6 +34,7 @@ import me.floow.domain.data.repos.DirectMessagesOutgoingRetryScheduler
 import me.floow.domain.models.DirectChatAnchoredMessagesWindow
 import me.floow.domain.models.DirectChatConversation
 import me.floow.domain.models.DirectChatMessage
+import me.floow.domain.models.DirectChatMessageMedia
 import me.floow.domain.models.DirectChatConversationsPage
 import me.floow.domain.models.DirectChatMessagesPage
 import me.floow.domain.models.DirectChatPeer
@@ -1046,6 +1047,8 @@ private fun ChatMessageItem.toDomain(): DirectChatMessage {
 		conversationId = conversationId,
 		sender = sender.toDomain(),
 		text = text,
+		contentType = contentType,
+		media = media?.toDomain(),
 		clientMessageId = clientMessageId,
 		replyToMessageId = replyToMessageId,
 		replyToMessageText = replyToMessageText,
@@ -1054,6 +1057,18 @@ private fun ChatMessageItem.toDomain(): DirectChatMessage {
 		pinnedByUserId = pinnedByUserId,
 		createdAt = createdAt,
 		updatedAt = updatedAt
+	)
+}
+
+private fun me.floow.domain.api.models.ChatMessageMediaItem.toDomain(): DirectChatMessageMedia {
+	return DirectChatMessageMedia(
+		url = url,
+		objectKey = objectKey,
+		mimeType = mimeType,
+		sizeBytes = sizeBytes,
+		durationMs = durationMs,
+		width = width,
+		height = height
 	)
 }
 

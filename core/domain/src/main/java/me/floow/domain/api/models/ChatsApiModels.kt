@@ -12,6 +12,8 @@ data class ChatMessageItem(
 	val conversationId: Long,
 	val sender: ChatUserItem,
 	val text: String,
+	val contentType: String? = null,
+	val media: ChatMessageMediaItem? = null,
 	val clientMessageId: String? = null,
 	val replyToMessageId: Long?,
 	val replyToMessageText: String?,
@@ -20,6 +22,16 @@ data class ChatMessageItem(
 	val pinnedByUserId: String?,
 	val createdAt: Long,
 	val updatedAt: Long
+)
+
+data class ChatMessageMediaItem(
+	val url: String,
+	val objectKey: String,
+	val mimeType: String,
+	val sizeBytes: Long,
+	val durationMs: Long,
+	val width: Int? = null,
+	val height: Int? = null,
 )
 
 data class ChatConversationItem(

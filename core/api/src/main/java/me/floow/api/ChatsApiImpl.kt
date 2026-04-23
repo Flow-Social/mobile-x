@@ -59,8 +59,21 @@ private data class CreateDirectChatRequest(
 @Serializable
 private data class SendChatMessageRequest(
 	val text: String,
+	@SerialName("content_type") val contentType: String? = null,
+	val media: SendChatMessageMediaRequest? = null,
 	@SerialName("idempotency_key") val clientMessageId: String? = null,
 	@SerialName("reply_to_message_id") val replyToMessageId: String? = null
+)
+
+@Serializable
+private data class SendChatMessageMediaRequest(
+	@SerialName("url") val url: String,
+	@SerialName("object_key") val objectKey: String,
+	@SerialName("mime_type") val mimeType: String,
+	@SerialName("size_bytes") val sizeBytes: Long,
+	@SerialName("duration_ms") val durationMs: Long,
+	@SerialName("width") val width: Int? = null,
+	@SerialName("height") val height: Int? = null,
 )
 
 @Serializable
@@ -369,6 +382,84 @@ class ChatsApiImpl(
 			ChatsSendMessageResponse.Success(
 				message = message,
 				deduped = deduped
+			)
+		}
+	}
+
+	override suspend fun sendVideoCircleMessage(
+		conversationId: Long,
+		clientMessageId: String?,
+		replyToMessageId: Long?,
+		mediaUrl: String,
+		objectKey: String,
+		mimeType: String,
+		sizeBytes: Long,
+		durationMs: Long,
+		width: Int?,
+		height: Int?,
+	): ChatsSendMessageResponse {
+		return safeApiCall(errorResponse = ChatsSendMessageResponse.Error) {
+			val authToken = authenticationManager.getAuthTokenOrNull()
+				?: return@safeApiCall ChatsSendMessageResponse.Error
+			if (
+				conversationId <= 0L ||
+				mediaUrl.isBlank() ||
+				objectKey.isBlank() ||
+				mimeType.isBlank() ||
+				sizeBytes <= 0L ||
+				durationMs <= 0L
+			) {
+				return@safeApiCall ChatsSendMessageResponse.Error
+			}
+
+			val response = httpClient.post("$baseUrl/chats/conversations/$conversationId/messages") {
+				addAuthTokenHeader(authToken)
+				contentType(ContentType.Application.Json)
+				setBody(
+					JsonSerializer.encodeToString(
+						SendChatMessageRequest(
+							text = "Видеосообщение",
+							contentType = "video_circle",
+							media = SendChatMessageMediaRequest(
+								url = mediaUrl.trim(),
+								objectKey = objectKey.trim(),
+								mimeType = mimeType.trim(),
+								sizeBytes = sizeBytes,
+								durationMs = durationMs,
+								width = width?.takeIf { it > 0 },
+								height = height?.takeIf { it > 0 },
+							),
+							clientMessageId = clientMessageId?.trim()?.takeIf(String::isNotEmpty),
+							replyToMessageId = replyToMessageId?.takeIf { it > 0L }?.toString(),
+						)
+					)
+				)
+			}
+
+			logger.logKtorRequest("ChatsApiImpl.sendVideoCircleMessage", response.call.request)
+			val bodyText = response.bodyAsText()
+			if (response.status == HttpStatusCode.NotFound) {
+				return@safeApiCall ChatsSendMessageResponse.NotFound
+			}
+			if (response.status == HttpStatusCode.Conflict) {
+				return@safeApiCall ChatsSendMessageResponse.Conflict
+			}
+			if (!response.status.isSuccess()) {
+				logger.logFailureResponse("ChatsApiImpl.sendVideoCircleMessage", response.status, bodyText)
+				return@safeApiCall ChatsSendMessageResponse.Error
+			}
+
+			val root = runCatching { JsonSerializer.parseToJsonElement(bodyText).jsonObject }.getOrNull()
+				?: return@safeApiCall ChatsSendMessageResponse.Error
+			val messageObject = root.objectOrNull("message")
+				?: return@safeApiCall ChatsSendMessageResponse.Error
+			val message = messageObject.toChatMessageItemOrNull()
+				?: return@safeApiCall ChatsSendMessageResponse.Error
+			val deduped = root.booleanOrNullFlexible("deduped") ?: false
+
+			ChatsSendMessageResponse.Success(
+				message = message,
+				deduped = deduped,
 			)
 		}
 	}

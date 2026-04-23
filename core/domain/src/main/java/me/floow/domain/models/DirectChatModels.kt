@@ -18,6 +18,8 @@ data class DirectChatMessage(
 	val conversationId: Long,
 	val sender: DirectChatPeer,
 	val text: String,
+	val contentType: String? = null,
+	val media: DirectChatMessageMedia? = null,
 	val clientMessageId: String? = null,
 	val replyToMessageId: Long?,
 	val replyToMessageText: String?,
@@ -27,6 +29,16 @@ data class DirectChatMessage(
 	val deliveryStatus: MessageDeliveryStatus = MessageDeliveryStatus.SENT,
 	val createdAt: Long,
 	val updatedAt: Long
+)
+
+data class DirectChatMessageMedia(
+	val url: String,
+	val objectKey: String,
+	val mimeType: String,
+	val sizeBytes: Long,
+	val durationMs: Long,
+	val width: Int? = null,
+	val height: Int? = null
 )
 
 data class DirectChatConversation(

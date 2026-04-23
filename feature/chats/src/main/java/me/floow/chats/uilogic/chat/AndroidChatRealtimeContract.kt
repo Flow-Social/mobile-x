@@ -8,7 +8,9 @@ import me.floow.domain.data.repos.ChatsRepository
 import me.floow.domain.models.DirectChatRealtimeEvent
 import me.floow.domain.models.MessageDeliveryStatus
 import me.floow.shared.chats.model.ChatDeliveryState
+import me.floow.shared.chats.model.ChatMessageContent
 import me.floow.shared.chats.model.ChatMessageItemModel
+import me.floow.shared.chats.model.VideoUploadState
 import me.floow.shared.chats.uilogic.direct.ChatRealtimeContract
 import me.floow.shared.chats.uilogic.direct.ChatRealtimeEvent
 import me.floow.shared.chats.uilogic.direct.RealtimeConnectionState
@@ -69,6 +71,19 @@ private fun DirectChatRealtimeEvent.toSharedEvent(selfUserId: String?): ChatReal
 
 private fun me.floow.domain.models.DirectChatMessage.toRealtimeItemModel(selfUserId: String?): ChatMessageItemModel {
 	val isOutgoing = selfUserId?.takeIf(String::isNotBlank) == sender.id
+	val messageMedia = media
+	val content = if (contentType == "video_circle" && messageMedia != null) {
+		ChatMessageContent.VideoCircle(
+			localPath = null,
+			remoteUrl = messageMedia.url,
+			durationMs = messageMedia.durationMs,
+			width = messageMedia.width ?: 0,
+			height = messageMedia.height ?: 0,
+			uploadState = VideoUploadState.Uploaded
+		)
+	} else {
+		ChatMessageContent.Text
+	}
 	return ChatMessageItemModel(
 		id = id,
 		clientMessageId = clientMessageId,
@@ -86,5 +101,6 @@ private fun me.floow.domain.models.DirectChatMessage.toRealtimeItemModel(selfUse
 			MessageDeliveryStatus.SENT -> ChatDeliveryState.SENT
 			MessageDeliveryStatus.FAILED -> ChatDeliveryState.FAILED
 		},
+		content = content,
 	)
 }

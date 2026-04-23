@@ -84,6 +84,7 @@ internal fun HighlightedMessageRow(
 internal fun SelectableMessageRow(
 	showSelector: Boolean,
 	selected: Boolean,
+	interactionEnabled: Boolean = true,
 	modifier: Modifier = Modifier,
 	onClick: () -> Unit,
 	onLongClick: () -> Unit,
@@ -99,11 +100,17 @@ internal fun SelectableMessageRow(
 		Box(
 			modifier = Modifier
 				.weight(1f)
-				.combinedClickable(
-					interactionSource = remember { MutableInteractionSource() },
-					indication = null,
-					onClick = onClick,
-					onLongClick = onLongClick
+				.then(
+					if (interactionEnabled) {
+						Modifier.combinedClickable(
+							interactionSource = remember { MutableInteractionSource() },
+							indication = null,
+							onClick = onClick,
+							onLongClick = onLongClick
+						)
+					} else {
+						Modifier
+					}
 				)
 		) {
 			content()

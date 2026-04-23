@@ -24,6 +24,8 @@ import me.floow.shared.chats.uilogic.direct.DirectChatStateHolder
 import me.floow.uikit.chat.input.ChatInputController
 import me.floow.uikit.chat.model.ChatContextMenuAction
 import me.floow.uikit.chat.model.ChatSelectionState
+import me.floow.uikit.chat.model.ChatViewportSnapshot
+import me.floow.uikit.chat.model.VideoCircleOutMessage
 
 @Composable
 fun SharedDirectChatRoute(
@@ -34,6 +36,18 @@ fun SharedDirectChatRoute(
 	onCopyText: (String) -> Unit = {},
 	onHeaderClick: (() -> Unit)? = null,
 	emojiPanel: @Composable (ChatInputController) -> Unit = {},
+	videoRecordingOverlay: @Composable (Int, Rect?, Modifier) -> Unit = { _, _, _ -> },
+	recordingState: me.floow.uikit.chat.model.VideoRecordingState = me.floow.uikit.chat.model.VideoRecordingState(),
+	onRecordButtonPress: () -> Unit = {},
+	onRecordButtonRelease: () -> Unit = {},
+	onRecordSwipeUp: () -> Unit = {},
+	onRecordSwipeLeft: () -> Unit = {},
+	onRecordDrag: (Float, Float) -> Unit = { _, _ -> },
+	onRecordStopClick: () -> Unit = {},
+	onViewportSnapshotChanged: (ChatViewportSnapshot) -> Unit = {},
+	videoCircleInteractionActive: Boolean = false,
+	videoCircleContent: @Composable (me.floow.uikit.chat.model.VideoCircleOutMessage) -> Unit = {},
+	bubbleBoundsByMessageKey: androidx.compose.runtime.snapshots.SnapshotStateMap<String, androidx.compose.ui.geometry.Rect> = androidx.compose.runtime.mutableStateMapOf(),
 	modifier: Modifier = Modifier,
 ) {
 	val state by stateHolder.state.collectAsState()
@@ -148,7 +162,10 @@ fun SharedDirectChatRoute(
 		onLoadMore = stateHolder::loadMore,
 		onRequestScrollToBottom = stateHolder::requestScrollToBottom,
 		onUserStartedScroll = stateHolder::onUserStartedScroll,
-		onViewportSnapshotChanged = stateHolder::onViewportSnapshotChanged,
+		onViewportSnapshotChanged = { snapshot ->
+			stateHolder.onViewportSnapshotChanged(snapshot)
+			onViewportSnapshotChanged(snapshot)
+		},
 		onMessageClick = { messageId ->
 			if (selectionMode) {
 				selectedMessageIds = selectedMessageIds.toggle(messageId)
@@ -233,6 +250,17 @@ fun SharedDirectChatRoute(
 		onPinnedMessageClick = stateHolder::jumpToMessage,
 		snackbarHostState = snackbarHostState,
 		emojiPanel = emojiPanel,
+		videoRecordingOverlay = videoRecordingOverlay,
+		recordingState = recordingState,
+		onRecordButtonPress = onRecordButtonPress,
+		onRecordButtonRelease = onRecordButtonRelease,
+		onRecordSwipeUp = onRecordSwipeUp,
+		onRecordSwipeLeft = onRecordSwipeLeft,
+		onRecordDrag = onRecordDrag,
+		onRecordStopClick = onRecordStopClick,
+		videoCircleInteractionActive = videoCircleInteractionActive,
+		videoCircleContent = videoCircleContent,
+		bubbleBoundsByMessageKey = bubbleBoundsByMessageKey,
 		modifier = modifier,
 	)
 }
