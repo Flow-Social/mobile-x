@@ -5,4 +5,6 @@
     <string name="replies_inbox_title">Ответы</string>
     <string name="replies_fallback_actor_name">Пользователь</string>
     <string name="replies_fallback_message_text">Новый ответ</string>
+    <string name="saved_messages_title">Избранное</string>
+    <string name="saved_messages_empty">Нет сообщений</string>
 </resources>

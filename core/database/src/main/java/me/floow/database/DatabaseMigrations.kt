@@ -8,8 +8,8 @@ import kotlinx.serialization.json.Json
 
 object DatabaseMigrations {
     val MIGRATION_1_2 = object : Migration(1, 2) {
-        override fun migrate(database: SupportSQLiteDatabase) {
-            database.execSQL(
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
                 """
                 CREATE TABLE IF NOT EXISTS profiles (
                     userId TEXT NOT NULL PRIMARY KEY,
@@ -23,7 +23,7 @@ object DatabaseMigrations {
                 """.trimIndent()
             )
 
-            database.execSQL(
+            db.execSQL(
                 """
                 CREATE TABLE IF NOT EXISTS posts (
                     postId TEXT NOT NULL PRIMARY KEY,
@@ -44,15 +44,15 @@ object DatabaseMigrations {
                 """.trimIndent()
             )
 
-            database.execSQL(
+            db.execSQL(
                 "CREATE INDEX IF NOT EXISTS index_posts_userId ON posts(userId)"
             )
         }
     }
 
     val MIGRATION_2_3 = object : Migration(2, 3) {
-        override fun migrate(database: SupportSQLiteDatabase) {
-            database.execSQL(
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
                 """
                 CREATE TABLE IF NOT EXISTS posts_new (
                     postId TEXT NOT NULL PRIMARY KEY,
@@ -76,7 +76,7 @@ object DatabaseMigrations {
             val json = Json { encodeDefaults = true }
             val serializer = ListSerializer(String.serializer())
 
-            val cursor = database.query(
+            val cursor = db.query(
                 """
                 SELECT postId, userId, authorId, authorName, authorUsername, authorAvatarUrl,
                        imageUrl, description, category, createdAt, likesCount, updatedAt
@@ -101,7 +101,7 @@ object DatabaseMigrations {
                     val imageUrl = cursor.getString(idxImageUrl) ?: ""
                     val imageUrlsJson = json.encodeToString(serializer, listOf(imageUrl))
 
-                    database.execSQL(
+                    db.execSQL(
                         """
                         INSERT INTO posts_new(
                             postId, userId, authorId, authorName, authorUsername, authorAvatarUrl,
@@ -128,15 +128,15 @@ object DatabaseMigrations {
                 }
             }
 
-            database.execSQL("DROP TABLE posts")
-            database.execSQL("ALTER TABLE posts_new RENAME TO posts")
-            database.execSQL("CREATE INDEX IF NOT EXISTS index_posts_userId ON posts(userId)")
+            db.execSQL("DROP TABLE posts")
+            db.execSQL("ALTER TABLE posts_new RENAME TO posts")
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_posts_userId ON posts(userId)")
         }
     }
 
     val MIGRATION_3_4 = object : Migration(3, 4) {
-        override fun migrate(database: SupportSQLiteDatabase) {
-            database.execSQL(
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
                 """
                 CREATE TABLE IF NOT EXISTS posts_new (
                     postId TEXT NOT NULL,
@@ -158,7 +158,7 @@ object DatabaseMigrations {
                 """.trimIndent()
             )
 
-            database.execSQL(
+            db.execSQL(
                 """
                 INSERT INTO posts_new(
                     postId, userId, authorId, authorName, authorUsername, authorAvatarUrl,
@@ -171,58 +171,58 @@ object DatabaseMigrations {
                 """.trimIndent()
             )
 
-            database.execSQL("DROP TABLE posts")
-            database.execSQL("ALTER TABLE posts_new RENAME TO posts")
-            database.execSQL("CREATE INDEX IF NOT EXISTS index_posts_userId ON posts(userId)")
+            db.execSQL("DROP TABLE posts")
+            db.execSQL("ALTER TABLE posts_new RENAME TO posts")
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_posts_userId ON posts(userId)")
         }
     }
 
     val MIGRATION_4_5 = object : Migration(4, 5) {
-        override fun migrate(database: SupportSQLiteDatabase) {
-            database.execSQL(
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
                 "ALTER TABLE posts ADD COLUMN commentsCount INTEGER NOT NULL DEFAULT 0"
             )
         }
     }
 
     val MIGRATION_5_6 = object : Migration(5, 6) {
-        override fun migrate(database: SupportSQLiteDatabase) {
-            database.execSQL(
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
                 "ALTER TABLE posts ADD COLUMN commenters_preview TEXT NOT NULL DEFAULT '[]'"
             )
         }
     }
 
     val MIGRATION_6_7 = object : Migration(6, 7) {
-        override fun migrate(database: SupportSQLiteDatabase) {
-            database.execSQL(
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
                 "ALTER TABLE profiles ADD COLUMN backgroundUrl TEXT"
             )
-            database.execSQL(
+            db.execSQL(
                 "ALTER TABLE profiles ADD COLUMN backgroundUpdatedAt INTEGER"
             )
         }
     }
 
     val MIGRATION_7_8 = object : Migration(7, 8) {
-        override fun migrate(database: SupportSQLiteDatabase) {
-            database.execSQL(
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
                 "ALTER TABLE profiles ADD COLUMN totalLikesReceived INTEGER NOT NULL DEFAULT 0"
             )
         }
     }
 
     val MIGRATION_8_9 = object : Migration(8, 9) {
-        override fun migrate(database: SupportSQLiteDatabase) {
-            database.execSQL(
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
                 "ALTER TABLE posts ADD COLUMN image_variants TEXT NOT NULL DEFAULT '[]'"
             )
         }
     }
 
 	val MIGRATION_9_10 = object : Migration(9, 10) {
-		override fun migrate(database: SupportSQLiteDatabase) {
-			database.execSQL(
+		override fun migrate(db: SupportSQLiteDatabase) {
+			db.execSQL(
 				"""
 				CREATE TABLE IF NOT EXISTS feed_sync_commands (
 					id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -237,36 +237,36 @@ object DatabaseMigrations {
 				""".trimIndent()
 			)
 
-			database.execSQL(
+			db.execSQL(
 				"CREATE INDEX IF NOT EXISTS index_feed_sync_commands_userId_id ON feed_sync_commands(userId, id)"
 			)
 		}
 	}
 
 	val MIGRATION_10_11 = object : Migration(10, 11) {
-		override fun migrate(database: SupportSQLiteDatabase) {
-			if (!hasColumn(database, "feed_sync_commands", "nextAttemptAt")) {
-				database.execSQL(
+		override fun migrate(db: SupportSQLiteDatabase) {
+			if (!hasColumn(db, "feed_sync_commands", "nextAttemptAt")) {
+				db.execSQL(
 					"ALTER TABLE feed_sync_commands ADD COLUMN nextAttemptAt INTEGER NOT NULL DEFAULT 0"
 				)
 			}
-			database.execSQL(
+			db.execSQL(
 				"UPDATE feed_sync_commands SET nextAttemptAt = createdAt WHERE nextAttemptAt = 0"
 			)
 		}
 	}
 
 	val MIGRATION_11_12 = object : Migration(11, 12) {
-		override fun migrate(database: SupportSQLiteDatabase) {
-			database.execSQL(
+		override fun migrate(db: SupportSQLiteDatabase) {
+			db.execSQL(
 				"CREATE INDEX IF NOT EXISTS index_feed_sync_commands_userId_nextAttemptAt_id ON feed_sync_commands(userId, nextAttemptAt, id)"
 			)
 		}
 	}
 
 	val MIGRATION_12_13 = object : Migration(12, 13) {
-		override fun migrate(database: SupportSQLiteDatabase) {
-			database.execSQL(
+		override fun migrate(db: SupportSQLiteDatabase) {
+			db.execSQL(
 				"""
 				CREATE TABLE IF NOT EXISTS replies_inbox_notifications (
 					seq INTEGER NOT NULL PRIMARY KEY,
@@ -292,13 +292,13 @@ object DatabaseMigrations {
 				)
 				""".trimIndent()
 			)
-			database.execSQL(
+			db.execSQL(
 				"CREATE INDEX IF NOT EXISTS index_replies_inbox_notifications_created_at ON replies_inbox_notifications(created_at)"
 			)
-			database.execSQL(
+			db.execSQL(
 				"CREATE INDEX IF NOT EXISTS index_replies_inbox_notifications_is_read_seq ON replies_inbox_notifications(is_read, seq)"
 			)
-			database.execSQL(
+			db.execSQL(
 				"""
 				CREATE TABLE IF NOT EXISTS replies_inbox_meta (
 					channel TEXT NOT NULL PRIMARY KEY,
@@ -314,8 +314,8 @@ object DatabaseMigrations {
 	}
 
 	val MIGRATION_13_14 = object : Migration(13, 14) {
-		override fun migrate(database: SupportSQLiteDatabase) {
-			database.execSQL(
+		override fun migrate(db: SupportSQLiteDatabase) {
+			db.execSQL(
 				"""
 				CREATE TABLE IF NOT EXISTS direct_chat_conversations (
 					id INTEGER NOT NULL PRIMARY KEY,
@@ -339,10 +339,10 @@ object DatabaseMigrations {
 				)
 				""".trimIndent()
 			)
-			database.execSQL(
+			db.execSQL(
 				"CREATE INDEX IF NOT EXISTS index_direct_chat_conversations_updated_at ON direct_chat_conversations(updated_at)"
 			)
-			database.execSQL(
+			db.execSQL(
 				"""
 				CREATE TABLE IF NOT EXISTS direct_chat_messages (
 					id INTEGER NOT NULL PRIMARY KEY,
@@ -357,13 +357,13 @@ object DatabaseMigrations {
 				)
 				""".trimIndent()
 			)
-			database.execSQL(
+			db.execSQL(
 				"CREATE INDEX IF NOT EXISTS index_direct_chat_messages_conversation_id_id ON direct_chat_messages(conversation_id, id)"
 			)
-			database.execSQL(
+			db.execSQL(
 				"CREATE INDEX IF NOT EXISTS index_direct_chat_messages_conversation_id_created_at ON direct_chat_messages(conversation_id, created_at)"
 			)
-			database.execSQL(
+			db.execSQL(
 				"""
 				CREATE TABLE IF NOT EXISTS direct_chat_read_state (
 					conversation_id INTEGER NOT NULL PRIMARY KEY,
@@ -379,14 +379,14 @@ object DatabaseMigrations {
 	}
 
 	val MIGRATION_14_15 = object : Migration(14, 15) {
-		override fun migrate(database: SupportSQLiteDatabase) {
-			if (!hasColumn(database, "direct_chat_messages", "reply_to_message_id")) {
-				database.execSQL(
+		override fun migrate(db: SupportSQLiteDatabase) {
+			if (!hasColumn(db, "direct_chat_messages", "reply_to_message_id")) {
+				db.execSQL(
 					"ALTER TABLE direct_chat_messages ADD COLUMN reply_to_message_id INTEGER"
 				)
 			}
-			if (!hasColumn(database, "direct_chat_messages", "reply_to_message_text")) {
-				database.execSQL(
+			if (!hasColumn(db, "direct_chat_messages", "reply_to_message_text")) {
+				db.execSQL(
 					"ALTER TABLE direct_chat_messages ADD COLUMN reply_to_message_text TEXT"
 				)
 			}
@@ -394,32 +394,32 @@ object DatabaseMigrations {
 	}
 
 	val MIGRATION_15_16 = object : Migration(15, 16) {
-		override fun migrate(database: SupportSQLiteDatabase) {
-			if (!hasColumn(database, "direct_chat_messages", "is_pinned")) {
-				database.execSQL(
+		override fun migrate(db: SupportSQLiteDatabase) {
+			if (!hasColumn(db, "direct_chat_messages", "is_pinned")) {
+				db.execSQL(
 					"ALTER TABLE direct_chat_messages ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0"
 				)
 			}
-			if (!hasColumn(database, "direct_chat_messages", "pinned_at")) {
-				database.execSQL(
+			if (!hasColumn(db, "direct_chat_messages", "pinned_at")) {
+				db.execSQL(
 					"ALTER TABLE direct_chat_messages ADD COLUMN pinned_at INTEGER"
 				)
 			}
-			if (!hasColumn(database, "direct_chat_messages", "pinned_by_user_id")) {
-				database.execSQL(
+			if (!hasColumn(db, "direct_chat_messages", "pinned_by_user_id")) {
+				db.execSQL(
 					"ALTER TABLE direct_chat_messages ADD COLUMN pinned_by_user_id TEXT"
 				)
 			}
-			database.execSQL(
+			db.execSQL(
 				"CREATE INDEX IF NOT EXISTS index_direct_chat_messages_conversation_id_pinned_at ON direct_chat_messages(conversation_id, pinned_at DESC, id DESC)"
 			)
 		}
 	}
 
 	val MIGRATION_16_17 = object : Migration(16, 17) {
-		override fun migrate(database: SupportSQLiteDatabase) {
-			if (!hasColumn(database, "direct_chat_conversations", "peer_last_read_message_id")) {
-				database.execSQL(
+		override fun migrate(db: SupportSQLiteDatabase) {
+			if (!hasColumn(db, "direct_chat_conversations", "peer_last_read_message_id")) {
+				db.execSQL(
 					"ALTER TABLE direct_chat_conversations ADD COLUMN peer_last_read_message_id INTEGER"
 				)
 			}
@@ -427,9 +427,9 @@ object DatabaseMigrations {
 	}
 
 	val MIGRATION_17_18 = object : Migration(17, 18) {
-		override fun migrate(database: SupportSQLiteDatabase) {
-			if (!hasColumn(database, "direct_chat_messages", "client_message_id")) {
-				database.execSQL(
+		override fun migrate(db: SupportSQLiteDatabase) {
+			if (!hasColumn(db, "direct_chat_messages", "client_message_id")) {
+				db.execSQL(
 					"ALTER TABLE direct_chat_messages ADD COLUMN client_message_id TEXT"
 				)
 			}
@@ -437,8 +437,8 @@ object DatabaseMigrations {
 	}
 
 	val MIGRATION_18_19 = object : Migration(18, 19) {
-		override fun migrate(database: SupportSQLiteDatabase) {
-			database.execSQL(
+		override fun migrate(db: SupportSQLiteDatabase) {
+			db.execSQL(
 				"CREATE INDEX IF NOT EXISTS index_direct_chat_messages_conversation_id_client_message_id " +
 					"ON direct_chat_messages(conversation_id, client_message_id)"
 			)
@@ -446,44 +446,44 @@ object DatabaseMigrations {
 	}
 
 	val MIGRATION_19_20 = object : Migration(19, 20) {
-		override fun migrate(database: SupportSQLiteDatabase) {
-			addColumnIfMissing(database, "direct_chat_messages", "content_type", "TEXT")
-			addColumnIfMissing(database, "direct_chat_messages", "media_url", "TEXT")
-			addColumnIfMissing(database, "direct_chat_messages", "media_object_key", "TEXT")
-			addColumnIfMissing(database, "direct_chat_messages", "media_mime_type", "TEXT")
-			addColumnIfMissing(database, "direct_chat_messages", "media_size_bytes", "INTEGER")
-			addColumnIfMissing(database, "direct_chat_messages", "media_duration_ms", "INTEGER")
-			addColumnIfMissing(database, "direct_chat_messages", "media_width", "INTEGER")
-			addColumnIfMissing(database, "direct_chat_messages", "media_height", "INTEGER")
+		override fun migrate(db: SupportSQLiteDatabase) {
+			addColumnIfMissing(db, "direct_chat_messages", "content_type", "TEXT")
+			addColumnIfMissing(db, "direct_chat_messages", "media_url", "TEXT")
+			addColumnIfMissing(db, "direct_chat_messages", "media_object_key", "TEXT")
+			addColumnIfMissing(db, "direct_chat_messages", "media_mime_type", "TEXT")
+			addColumnIfMissing(db, "direct_chat_messages", "media_size_bytes", "INTEGER")
+			addColumnIfMissing(db, "direct_chat_messages", "media_duration_ms", "INTEGER")
+			addColumnIfMissing(db, "direct_chat_messages", "media_width", "INTEGER")
+			addColumnIfMissing(db, "direct_chat_messages", "media_height", "INTEGER")
 
-			addColumnIfMissing(database, "direct_chat_conversations", "last_message_content_type", "TEXT")
-			addColumnIfMissing(database, "direct_chat_conversations", "last_message_media_url", "TEXT")
-			addColumnIfMissing(database, "direct_chat_conversations", "last_message_media_object_key", "TEXT")
-			addColumnIfMissing(database, "direct_chat_conversations", "last_message_media_mime_type", "TEXT")
-			addColumnIfMissing(database, "direct_chat_conversations", "last_message_media_size_bytes", "INTEGER")
-			addColumnIfMissing(database, "direct_chat_conversations", "last_message_media_duration_ms", "INTEGER")
-			addColumnIfMissing(database, "direct_chat_conversations", "last_message_media_width", "INTEGER")
-			addColumnIfMissing(database, "direct_chat_conversations", "last_message_media_height", "INTEGER")
+			addColumnIfMissing(db, "direct_chat_conversations", "last_message_content_type", "TEXT")
+			addColumnIfMissing(db, "direct_chat_conversations", "last_message_media_url", "TEXT")
+			addColumnIfMissing(db, "direct_chat_conversations", "last_message_media_object_key", "TEXT")
+			addColumnIfMissing(db, "direct_chat_conversations", "last_message_media_mime_type", "TEXT")
+			addColumnIfMissing(db, "direct_chat_conversations", "last_message_media_size_bytes", "INTEGER")
+			addColumnIfMissing(db, "direct_chat_conversations", "last_message_media_duration_ms", "INTEGER")
+			addColumnIfMissing(db, "direct_chat_conversations", "last_message_media_width", "INTEGER")
+			addColumnIfMissing(db, "direct_chat_conversations", "last_message_media_height", "INTEGER")
 		}
 	}
 
 	private fun addColumnIfMissing(
-		database: SupportSQLiteDatabase,
+		db: SupportSQLiteDatabase,
 		tableName: String,
 		columnName: String,
 		columnDefinition: String
 	) {
-		if (!hasColumn(database, tableName, columnName)) {
-			database.execSQL("ALTER TABLE $tableName ADD COLUMN $columnName $columnDefinition")
+		if (!hasColumn(db, tableName, columnName)) {
+			db.execSQL("ALTER TABLE $tableName ADD COLUMN $columnName $columnDefinition")
 		}
 	}
 
 	private fun hasColumn(
-		database: SupportSQLiteDatabase,
+		db: SupportSQLiteDatabase,
 		tableName: String,
 		columnName: String
 	): Boolean {
-		database.query("PRAGMA table_info($tableName)").use { cursor ->
+		db.query("PRAGMA table_info($tableName)").use { cursor ->
 			val nameIndex = cursor.getColumnIndex("name")
 			if (nameIndex == -1) return false
 			while (cursor.moveToNext()) {

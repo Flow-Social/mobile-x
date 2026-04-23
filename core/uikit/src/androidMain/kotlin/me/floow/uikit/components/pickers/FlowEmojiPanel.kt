@@ -23,7 +23,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -46,7 +45,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -95,7 +93,7 @@ private enum class EmojiPanelMode {
 private data class EmojiCategoryDefinition(
 	val key: String,
 	val titleResId: Int,
-	val iconResId: Int,
+	val icon: String,
 	val rawResId: Int
 )
 
@@ -103,7 +101,7 @@ private data class EmojiCategoryDefinition(
 private data class EmojiCategoryUi(
 	val key: String,
 	val title: String,
-	val iconResId: Int,
+	val icon: String,
 	val items: List<EmojiItemUi>
 )
 
@@ -117,7 +115,7 @@ private data class EmojiItemUi(
 private data class EmojiSectionUi(
 	val key: String,
 	val title: String,
-	val iconResId: Int,
+	val icon: String,
 	val items: List<EmojiItemUi>
 )
 
@@ -125,7 +123,7 @@ private data class EmojiSectionUi(
 private data class EmojiPanelTabUi(
 	val key: String,
 	val title: String,
-	val iconResId: Int
+	val icon: String
 )
 
 @Immutable
@@ -146,55 +144,55 @@ private val emojiCategoryDefinitions = listOf(
 	EmojiCategoryDefinition(
 		key = "smileys",
 		titleResId = R.string.chat_emoji_category_smileys,
-		iconResId = androidx.emoji2.emojipicker.R.drawable.gm_filled_emoji_emotions_vd_theme_24,
+		icon = "\uD83D\uDE42",
 		rawResId = androidx.emoji2.emojipicker.R.raw.emoji_category_emotions
 	),
 	EmojiCategoryDefinition(
 		key = "people",
 		titleResId = R.string.chat_emoji_category_people,
-		iconResId = androidx.emoji2.emojipicker.R.drawable.gm_filled_emoji_people_vd_theme_24,
+		icon = "\uD83D\uDC4B",
 		rawResId = androidx.emoji2.emojipicker.R.raw.emoji_category_people
 	),
 	EmojiCategoryDefinition(
 		key = "nature",
 		titleResId = R.string.chat_emoji_category_nature,
-		iconResId = androidx.emoji2.emojipicker.R.drawable.gm_filled_emoji_nature_vd_theme_24,
+		icon = "\uD83C\uDF3F",
 		rawResId = androidx.emoji2.emojipicker.R.raw.emoji_category_animals_nature
 	),
 	EmojiCategoryDefinition(
 		key = "food",
 		titleResId = R.string.chat_emoji_category_food,
-		iconResId = androidx.emoji2.emojipicker.R.drawable.gm_filled_emoji_food_beverage_vd_theme_24,
+		icon = "\uD83C\uDF74",
 		rawResId = androidx.emoji2.emojipicker.R.raw.emoji_category_food_drink
 	),
 	EmojiCategoryDefinition(
 		key = "travel",
 		titleResId = R.string.chat_emoji_category_travel,
-		iconResId = androidx.emoji2.emojipicker.R.drawable.gm_filled_emoji_transportation_vd_theme_24,
+		icon = "\uD83C\uDF0D",
 		rawResId = androidx.emoji2.emojipicker.R.raw.emoji_category_travel_places
 	),
 	EmojiCategoryDefinition(
 		key = "activities",
 		titleResId = R.string.chat_emoji_category_activities,
-		iconResId = androidx.emoji2.emojipicker.R.drawable.gm_filled_emoji_events_vd_theme_24,
+		icon = "\u26BD",
 		rawResId = androidx.emoji2.emojipicker.R.raw.emoji_category_activity
 	),
 	EmojiCategoryDefinition(
 		key = "objects",
 		titleResId = R.string.chat_emoji_category_objects,
-		iconResId = androidx.emoji2.emojipicker.R.drawable.gm_filled_emoji_objects_vd_theme_24,
+		icon = "\uD83D\uDCA1",
 		rawResId = androidx.emoji2.emojipicker.R.raw.emoji_category_objects
 	),
 	EmojiCategoryDefinition(
 		key = "symbols",
 		titleResId = R.string.chat_emoji_category_symbols,
-		iconResId = androidx.emoji2.emojipicker.R.drawable.gm_filled_emoji_symbols_vd_theme_24,
+		icon = "#",
 		rawResId = androidx.emoji2.emojipicker.R.raw.emoji_category_symbols
 	),
 	EmojiCategoryDefinition(
 		key = "flags",
 		titleResId = R.string.chat_emoji_category_flags,
-		iconResId = androidx.emoji2.emojipicker.R.drawable.gm_filled_flag_vd_theme_24,
+		icon = "\uD83C\uDFF3",
 		rawResId = androidx.emoji2.emojipicker.R.raw.emoji_category_flags
 	)
 )
@@ -246,7 +244,7 @@ fun FlowEmojiPanel(
 					EmojiSectionUi(
 						key = "recent",
 						title = context.getString(R.string.chat_emoji_category_recent),
-						iconResId = androidx.emoji2.emojipicker.R.drawable.quantum_gm_ic_access_time_filled_vd_theme_24,
+						icon = "\u23F1",
 						items = recentItems
 					)
 				)
@@ -255,7 +253,7 @@ fun FlowEmojiPanel(
 						EmojiSectionUi(
 							key = category.key,
 							title = category.title,
-							iconResId = category.iconResId,
+							icon = category.icon,
 							items = category.items
 						)
 					}
@@ -282,7 +280,7 @@ fun FlowEmojiPanel(
 				EmojiPanelTabUi(
 					key = section.key,
 					title = section.title,
-					iconResId = section.iconResId
+					icon = section.icon
 				)
 			}
 		}
@@ -381,10 +379,12 @@ private fun EmojiPanelCategoryHeader(
 					modifier = Modifier.weight(1f),
 					contentAlignment = Alignment.Center
 				) {
-					Icon(
-						painter = painterResource(tab.iconResId),
-						contentDescription = tab.title,
-						tint = tint,
+					Text(
+						text = tab.icon,
+						color = tint,
+						fontSize = 18.sp,
+						textAlign = TextAlign.Center,
+						maxLines = 1,
 						modifier = Modifier.size(EmojiPanelHeaderIconSize)
 					)
 				}
@@ -683,7 +683,7 @@ private suspend fun loadEmojiCategories(context: Context): List<EmojiCategoryUi>
 		EmojiCategoryUi(
 			key = definition.key,
 			title = context.getString(definition.titleResId),
-			iconResId = definition.iconResId,
+			icon = definition.icon,
 			items = parseEmojiCategory(context, definition.rawResId)
 		)
 	}

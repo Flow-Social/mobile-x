@@ -1,3 +1,5 @@
+@file:OptIn(kotlin.js.ExperimentalWasmJsInterop::class)
+
 package me.floow.shared.platform
 
 @JsFun("(text) => { if (navigator.share) { navigator.share({title: 'Flow', url: text, text: text}); } else { navigator.clipboard.writeText(text); } }")

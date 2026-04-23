@@ -30,7 +30,8 @@ import me.floow.database.dbo.TestDbo
 		DirectChatMessageEntity::class,
 		DirectChatReadStateEntity::class
     ],
-    version = 20
+    version = 20,
+    exportSchema = true
 )
 @TypeConverters(DatabaseConverters::class)
 abstract class AppDatabase : RoomDatabase() {

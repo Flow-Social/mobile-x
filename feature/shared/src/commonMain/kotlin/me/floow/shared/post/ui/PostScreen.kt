@@ -88,10 +88,9 @@ import me.floow.uikit.components.media.viewer2.reduce
 import me.floow.uikit.components.media.transfer.PostMediaSourceOwner
 import me.floow.uikit.components.media.transfer.PostMediaSourceSnapshot
 import me.floow.uikit.theme.NinehedronShape
-import org.jetbrains.compose.resources.painterResource
-import androidx.compose.foundation.text.ClickableText
 import kotlin.math.abs
 import kotlin.math.max
+import org.jetbrains.compose.resources.painterResource
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -641,7 +640,6 @@ private fun VerticalDivider(
 }
 
 @Composable
-@Suppress("DEPRECATION")
 private fun SharedLinkifiedText(
     text: String,
     modifier: Modifier = Modifier,
@@ -655,18 +653,20 @@ private fun SharedLinkifiedText(
     }
     var textLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
 
-    ClickableText(
+    Text(
         text = annotated,
         style = style,
-        modifier = modifier,
-        onClick = { offset ->
-            annotated.getStringAnnotations(TAG_POST, offset, offset).firstOrNull()?.let { ann ->
-                val parts = ann.item.split("/", limit = 2)
-                if (parts.size == 2) onPostLinkClick(parts[0], parts[1])
-                return@ClickableText
-            }
-            annotated.getStringAnnotations(TAG_PROFILE, offset, offset).firstOrNull()?.let { ann ->
-                onProfileTagClick(ann.item)
+        modifier = modifier.pointerInput(annotated, onProfileTagClick, onPostLinkClick) {
+            detectTapGestures { position ->
+                val offset = textLayout?.getOffsetForPosition(position) ?: return@detectTapGestures
+                annotated.getStringAnnotations(TAG_POST, offset, offset).firstOrNull()?.let { ann ->
+                    val parts = ann.item.split("/", limit = 2)
+                    if (parts.size == 2) onPostLinkClick(parts[0], parts[1])
+                    return@detectTapGestures
+                }
+                annotated.getStringAnnotations(TAG_PROFILE, offset, offset).firstOrNull()?.let { ann ->
+                    onProfileTagClick(ann.item)
+                }
             }
         },
         onTextLayout = { textLayout = it }

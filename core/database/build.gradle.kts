@@ -38,6 +38,10 @@ dependencies {
     add("kspAndroid", libs.room.compiler)
 }
 
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 android {
     namespace = "me.floow.database"
     compileSdk = 35

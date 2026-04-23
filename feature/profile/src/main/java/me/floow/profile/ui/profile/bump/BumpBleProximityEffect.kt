@@ -1,8 +1,11 @@
 package me.floow.profile.ui.profile.bump
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
+import android.bluetooth.le.BluetoothLeAdvertiser
+import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
@@ -75,17 +78,52 @@ fun BumpBleProximityEffect(
                 }
 
                 runCatching {
-                    advertiser.startAdvertising(advertiseSettings, advertiseData, advertiseCallback)
-                    scanner.startScan(null, scanSettings, scanCallback)
+                    startBleAdvertisingAfterPermissionCheck(advertiser, advertiseSettings, advertiseData, advertiseCallback)
+                    startBleScanAfterPermissionCheck(scanner, scanSettings, scanCallback)
                 }
 
                 onDispose {
-                    runCatching { advertiser.stopAdvertising(advertiseCallback) }
-                    runCatching { scanner.stopScan(scanCallback) }
+                    runCatching { stopBleAdvertisingAfterPermissionCheck(advertiser, advertiseCallback) }
+                    runCatching { stopBleScanAfterPermissionCheck(scanner, scanCallback) }
                 }
             }
         }
     }
+}
+
+@SuppressLint("MissingPermission")
+private fun startBleAdvertisingAfterPermissionCheck(
+    advertiser: BluetoothLeAdvertiser,
+    advertiseSettings: AdvertiseSettings,
+    advertiseData: AdvertiseData,
+    advertiseCallback: AdvertiseCallback,
+) {
+    advertiser.startAdvertising(advertiseSettings, advertiseData, advertiseCallback)
+}
+
+@SuppressLint("MissingPermission")
+private fun startBleScanAfterPermissionCheck(
+    scanner: BluetoothLeScanner,
+    scanSettings: ScanSettings,
+    scanCallback: ScanCallback,
+) {
+    scanner.startScan(null, scanSettings, scanCallback)
+}
+
+@SuppressLint("MissingPermission")
+private fun stopBleAdvertisingAfterPermissionCheck(
+    advertiser: BluetoothLeAdvertiser,
+    advertiseCallback: AdvertiseCallback,
+) {
+    advertiser.stopAdvertising(advertiseCallback)
+}
+
+@SuppressLint("MissingPermission")
+private fun stopBleScanAfterPermissionCheck(
+    scanner: BluetoothLeScanner,
+    scanCallback: ScanCallback,
+) {
+    scanner.stopScan(scanCallback)
 }
 
 private fun tokenToBlePayload(token: String): ByteArray {

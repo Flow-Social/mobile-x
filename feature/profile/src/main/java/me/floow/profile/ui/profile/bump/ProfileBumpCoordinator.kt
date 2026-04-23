@@ -1,6 +1,8 @@
 package me.floow.profile.ui.profile.bump
 
 import android.Manifest
+import android.annotation.SuppressLint
+import android.annotation.TargetApi
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
@@ -160,9 +162,7 @@ private fun readRecentLastKnownLocation(
     val now = System.currentTimeMillis()
     val candidates = candidateProviders
         .distinct()
-        .mapNotNull { provider ->
-            runCatching { manager.getLastKnownLocation(provider) }.getOrNull()
-        }
+        .mapNotNull { provider -> readLastKnownLocationAfterPermissionCheck(manager, provider) }
         .filter { isValidCoordinates(it.latitude, it.longitude) }
         .filter { location ->
             val ageMs = now - location.time
@@ -187,15 +187,15 @@ private suspend fun awaitCurrentLocation(
     val cancellationSignal = CancellationSignal()
     continuation.invokeOnCancellation { cancellationSignal.cancel() }
 
-    runCatching {
-        manager.getCurrentLocation(
-            provider,
-            cancellationSignal,
-            ContextCompat.getMainExecutor(context),
-        ) { location ->
+    readCurrentLocationAfterPermissionCheck(
+        context = context,
+        manager = manager,
+        provider = provider,
+        cancellationSignal = cancellationSignal,
+        onLocation = { location ->
             if (continuation.isActive) continuation.resume(location)
-        }
-    }.onFailure {
+        },
+    ).onFailure {
         if (continuation.isActive) continuation.resume(null)
     }
 }
@@ -215,9 +215,7 @@ private fun readLastKnownLocation(
     val now = System.currentTimeMillis()
     val candidates = providers
         .distinct()
-        .mapNotNull { provider ->
-            runCatching { manager.getLastKnownLocation(provider) }.getOrNull()
-        }
+        .mapNotNull { provider -> readLastKnownLocationAfterPermissionCheck(manager, provider) }
         .filter { isValidCoordinates(it.latitude, it.longitude) }
         .filter { location ->
             val ageMs = now - location.time
@@ -239,6 +237,33 @@ private fun hasLocationPermission(context: Context): Boolean {
     val hasFine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
     val hasCoarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
     return hasFine || hasCoarse
+}
+
+@SuppressLint("MissingPermission")
+private fun readLastKnownLocationAfterPermissionCheck(
+    manager: LocationManager,
+    provider: String,
+): Location? {
+    return runCatching { manager.getLastKnownLocation(provider) }.getOrNull()
+}
+
+@SuppressLint("MissingPermission")
+@TargetApi(Build.VERSION_CODES.R)
+private fun readCurrentLocationAfterPermissionCheck(
+    context: Context,
+    manager: LocationManager,
+    provider: String,
+    cancellationSignal: CancellationSignal,
+    onLocation: (Location?) -> Unit,
+): Result<Unit> {
+    return runCatching {
+        manager.getCurrentLocation(
+            provider,
+            cancellationSignal,
+            ContextCompat.getMainExecutor(context),
+            onLocation,
+        )
+    }
 }
 
 private fun isLocationServiceEnabled(manager: LocationManager): Boolean {

@@ -1,7 +1,6 @@
 package me.floow.chats.camera
 
 import android.content.Context
-import android.content.pm.PackageManager
 import android.media.MediaMetadataRetriever
 import android.os.Handler
 import android.os.Looper
@@ -226,10 +225,10 @@ class VideoRecorder(
             val pendingRecording = capture.output
                 .prepareRecording(context, outputOptions)
                 .apply {
-                    if (PermissionChecker.checkSelfPermission(
+                        if (PermissionChecker.checkSelfPermission(
                             context,
                             android.Manifest.permission.RECORD_AUDIO
-                        ) == PackageManager.PERMISSION_GRANTED
+                        ) == PermissionChecker.PERMISSION_GRANTED
                     ) {
                         withAudioEnabled()
                     }
