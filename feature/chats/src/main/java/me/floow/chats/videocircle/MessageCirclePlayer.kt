@@ -1,7 +1,6 @@
 package me.floow.chats.videocircle
 
 import android.media.MediaMetadataRetriever
-import android.util.Log
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -67,7 +66,6 @@ private val InactiveCircleSize = 228.dp
 private val ActiveCircleSize = 252.dp
 private val SeekKnobDragHitSlop = 44.dp
 private val SeekRingHitSlop = 18.dp
-private const val SeekDebugTag = "VideoCircleSeek"
 /** Telegram: 4dp inset when playing, 16dp extra inset when paused */
 private val PlayingInsetDp = 4f
 private val PauseExtraInsetDp = 16f
@@ -348,7 +346,6 @@ fun MessageCirclePlayer(
                             )
                             val currentPlayer = player
                             if (currentPlayer == null) {
-                                Log.d(SeekDebugTag, "down ignored: player=null position=${down.position}")
                                 val up = waitForUpOrCancellation()
                                 if (up != null) {
                                     up.consume()
@@ -358,7 +355,6 @@ fun MessageCirclePlayer(
                             }
 
                             if (!isPaused) {
-                                Log.d(SeekDebugTag, "down ignored: not paused position=${down.position}")
                                 val up = waitForUpOrCancellation()
                                 if (up != null) {
                                     up.consume()
@@ -377,10 +373,6 @@ fun MessageCirclePlayer(
                                 position = down.position,
                                 size = size,
                                 density = this@pointerInput.density,
-                            )
-                            Log.d(
-                                SeekDebugTag,
-                                "down position=${down.position} size=$size startedOnKnob=$startedOnKnob startedOnRing=$startedOnRing progress=${progress.floatValue}",
                             )
 
                             if (!startedOnKnob && !startedOnRing) {
@@ -406,10 +398,6 @@ fun MessageCirclePlayer(
                                     val change = event.changes.firstOrNull { it.id == down.id }
                                         ?: break
                                     if (!change.pressed) {
-                                        Log.d(
-                                            SeekDebugTag,
-                                            "up seekStarted=$seekStarted lastProgress=${progress.floatValue}",
-                                        )
                                         break
                                     }
 
@@ -417,13 +405,8 @@ fun MessageCirclePlayer(
                                         change.position.x - down.position.x,
                                         change.position.y - down.position.y,
                                     )
-                                    Log.d(
-                                        SeekDebugTag,
-                                        "move position=${change.position} dragDistance=$dragDistance seekStarted=$seekStarted consumed=${change.isConsumed}",
-                                    )
                                     if (startedOnKnob && !seekStarted && dragDistance > viewConfiguration.touchSlop) {
                                         seekStarted = true
-                                        Log.d(SeekDebugTag, "seek started by drag touchSlop=${viewConfiguration.touchSlop}")
                                     }
                                     if (startedOnKnob && seekStarted) {
                                         change.consume()
@@ -433,10 +416,6 @@ fun MessageCirclePlayer(
                                     }
                                 }
                             } finally {
-                                Log.d(
-                                    SeekDebugTag,
-                                    "finish seekStarted=$seekStarted progress=${progress.floatValue}",
-                                )
                                 isSeeking = false
                             }
                         }
@@ -544,10 +523,6 @@ private fun seekToTouchProgress(
     player.duration.takeIf { it > 0L } ?: return
     val nextProgress = progressFromTouch(position, size)
     progress.floatValue = nextProgress
-    Log.d(
-        SeekDebugTag,
-        "seek position=$position size=$size nextProgress=$nextProgress duration=${player.duration}",
-    )
     onSeekProgress(nextProgress)
 }
 

@@ -277,9 +277,6 @@ fun ChatRoute(
 						playbackCoordinator.unregister(messageUiKey)
 					}
 				}
-				androidx.compose.runtime.SideEffect {
-					playbackCoordinator.register(videoCircleMessage)
-				}
 				val playablePath = videoCircleMessage.playableSource
 				val isActiveMessage = videoCirclePlaybackState.activeUiKey == messageUiKey &&
 					videoCirclePlaybackState.status != VideoCirclePlaybackStatus.Idle
