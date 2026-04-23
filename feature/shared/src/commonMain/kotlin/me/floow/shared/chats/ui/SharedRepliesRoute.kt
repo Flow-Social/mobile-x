@@ -1,6 +1,7 @@
 package me.floow.shared.chats.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -29,6 +30,12 @@ fun SharedRepliesRoute(
 		stateHolder.load(openMode = openMode, anchorSeq = anchorSeq)
 	}
 
+	DisposableEffect(stateHolder) {
+		onDispose {
+			stateHolder.dispose()
+		}
+	}
+
 	LaunchedEffect(stateHolder) {
 		stateHolder.events.collectLatest { event ->
 			when (event) {
@@ -46,9 +53,12 @@ fun SharedRepliesRoute(
 	SharedRepliesScreen(
 		state = state,
 		onBackClick = onBackClick,
-		onThreadClick = stateHolder::openThread,
-		onActorClick = stateHolder::openActorProfile,
-		onSeeAllClick = stateHolder::seeAll,
-		modifier = modifier,
-	)
-}
+			onThreadClick = stateHolder::openThread,
+			onActorClick = stateHolder::openActorProfile,
+			onSeeAllClick = stateHolder::seeAll,
+			onUserStartedScroll = stateHolder::onUserStartedScroll,
+			onViewportSnapshotChanged = stateHolder::onViewportSnapshotChanged,
+			onAnchorRestoreSettled = stateHolder::onAnchorRestoreSettled,
+			modifier = modifier,
+		)
+	}

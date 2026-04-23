@@ -17,6 +17,7 @@ import me.floow.shared.chats.model.RepliesThreadItemModel
 import me.floow.shared.chats.uilogic.replies.RepliesScreenState
 import me.floow.uikit.chat.common.ChatScreenBody
 import me.floow.uikit.chat.model.ChatScreenConfig
+import me.floow.uikit.chat.model.ChatViewportSnapshot
 import me.floow.uikit.chat.states.HasDataState
 import me.floow.uikit.components.loading.FlowLoadingIndicator
 import org.jetbrains.compose.resources.painterResource
@@ -28,6 +29,9 @@ fun SharedRepliesScreen(
 	onThreadClick: (RepliesThreadItemModel) -> Unit,
 	onActorClick: (RepliesThreadItemModel) -> Unit,
 	onSeeAllClick: () -> Unit,
+	onUserStartedScroll: () -> Unit = {},
+	onViewportSnapshotChanged: (ChatViewportSnapshot) -> Unit = {},
+	onAnchorRestoreSettled: (Long, Int) -> Unit = { _, _ -> },
 	modifier: Modifier = Modifier,
 ) {
 	val strings = rememberSharedChatStrings()
@@ -115,11 +119,11 @@ fun SharedRepliesScreen(
 						onRetrySendClick = null,
 						onPostImageClick = { _, _, _, _ -> },
 						hiddenPostImageIndex = null,
-						hiddenPostImageRevealProgress = 0f,
-						onRequestScrollToBottom = onSeeAllClick,
-						onUserStartedScroll = {},
-						onViewportSnapshotChanged = {},
-						onAnchorRestoreSettled = { _, _ -> },
+							hiddenPostImageRevealProgress = 0f,
+							onRequestScrollToBottom = onSeeAllClick,
+							onUserStartedScroll = onUserStartedScroll,
+							onViewportSnapshotChanged = onViewportSnapshotChanged,
+							onAnchorRestoreSettled = onAnchorRestoreSettled,
 						onAnchorRestoreTimedOut = {},
 						resolveContextMenuActions = { emptyList() },
 						onContextMenuOpenRequest = { _, _, _ -> },

@@ -104,7 +104,7 @@ internal fun SharedDirectChatScreen(
 	onRecordDrag: (Float, Float) -> Unit = { _, _ -> },
 	onRecordStopClick: () -> Unit = {},
 	videoCircleInteractionActive: Boolean = false,
-	videoCircleContent: @Composable (me.floow.uikit.chat.model.VideoCircleOutMessage) -> Unit = {},
+	videoCircleContent: @Composable (me.floow.uikit.chat.model.VideoCircleOutMessage, () -> Unit) -> Unit = { _, _ -> },
 	bubbleBoundsByMessageKey: androidx.compose.runtime.snapshots.SnapshotStateMap<String, androidx.compose.ui.geometry.Rect> = androidx.compose.runtime.mutableStateMapOf(),
 	modifier: Modifier = Modifier,
 ) {

@@ -22,5 +22,5 @@ val chatsModule = module {
 	single { AndroidVideoCircleMessageSender(get(), get(), get(), get(), get()) }
 	single<ChatRealtimeContract> { AndroidChatRealtimeContract(get(), get(), get()) }
 	single<ChatPresenceContract> { AndroidChatPresenceContract(get()) }
-	single<RepliesRepository> { AndroidRepliesRepository(get(), get()) }
+	single<RepliesRepository> { AndroidRepliesRepository(get(), get(), get()) }
 }

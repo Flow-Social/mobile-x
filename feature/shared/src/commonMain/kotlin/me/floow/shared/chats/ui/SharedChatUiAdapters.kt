@@ -8,6 +8,7 @@ import me.floow.shared.chats.model.ChatThreadHeaderModel
 import me.floow.shared.chats.model.RepliesThreadItemModel
 import me.floow.shared.chats.uilogic.direct.DirectChatScreenState
 import me.floow.shared.chats.uilogic.replies.RepliesScreenState
+import me.floow.uikit.chat.model.ChatAnchorRequest
 import me.floow.uikit.chat.model.ChatHighlightRequest
 import me.floow.uikit.chat.model.ChatInitialViewport
 import me.floow.uikit.chat.model.ChatMessage
@@ -83,13 +84,26 @@ internal fun DirectChatScreenState.toSharedChatUiState(
 			messageFieldReply = currentReplyMessageId
 				?.let { replyMessageId -> messages.firstOrNull { it.id == replyMessageId } }
 				?.toFieldReply(),
-			timelineSessionToken = conversationId,
-			highlightRequest = jumpRequest?.let { request ->
-				ChatHighlightRequest(
-					messageId = request.messageId,
-					requestToken = request.requestToken,
-				)
-			},
+				timelineSessionToken = conversationId,
+				anchorRequest = anchorRequestMessageId?.let { messageId ->
+					ChatAnchorRequest(
+						messageId = messageId,
+						requestToken = anchorRequestToken,
+						initialOffsetPx = anchorRequestOffsetPx,
+						keepAnchored = keepAnchorRequest,
+					)
+				},
+				highlightRequest = jumpRequest?.let { request ->
+					ChatHighlightRequest(
+						messageId = request.messageId,
+						requestToken = request.requestToken,
+					)
+				} ?: highlightedMessageId?.let { messageId ->
+					ChatHighlightRequest(
+						messageId = messageId,
+						requestToken = anchorRequestToken,
+					)
+				},
 			scrollRequest = if (scrollToBottomRequestToken > 0L) {
 				ChatScrollRequest(requestToken = scrollToBottomRequestToken)
 			} else {
@@ -144,11 +158,22 @@ internal fun RepliesScreenState.toSharedRepliesUiState(): ChatScreenUiState = wh
 			openAnchorMessageId = openAnchorMessageId,
 			unreadBoundaryMessageId = unreadBoundaryMessageId,
 		),
-		initialViewport = repliesInitialViewport(
-			messages = items.toRepliesTimeline(),
-			openAnchorMessageId = openAnchorMessageId,
-		),
-		unreadBoundaryMessageId = unreadBoundaryMessageId,
+			initialViewport = repliesInitialViewport(
+				messages = items.toRepliesTimeline(),
+				openAnchorMessageId = openAnchorMessageId,
+			),
+			anchorRequest = openAnchorMessageId?.let { messageId ->
+				ChatAnchorRequest(
+					messageId = messageId,
+					requestToken = repliesTimelineSessionToken(
+						unreadCount = unreadCount,
+						openAnchorMessageId = openAnchorMessageId,
+						unreadBoundaryMessageId = unreadBoundaryMessageId,
+					),
+					keepAnchored = true,
+				)
+			},
+			unreadBoundaryMessageId = unreadBoundaryMessageId,
 		canLoadMore = false,
 		isLoadingMore = false,
 	)

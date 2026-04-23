@@ -22,6 +22,12 @@ data class DirectChatInitialRequest(
 	val allowCreateFromPeerUserId: Boolean = false,
 )
 
+data class DirectChatOpenViewportSnapshot(
+	val anchorMessageId: Long?,
+	val anchorOffsetPx: Int = 0,
+	val isBottomPinned: Boolean = false,
+)
+
 fun DirectChatInitialRequest.hasValidConversationTarget(): Boolean {
 	return isSavedMessages || (conversationId != null && conversationId > 0L)
 }
@@ -33,6 +39,11 @@ fun DirectChatInitialRequest.hasValidPeerCreateTarget(): Boolean {
 interface ChatThreadRepository {
 	suspend fun loadCachedInitial(request: DirectChatInitialRequest): Result<ChatThreadSnapshot?> = Result.success(null)
 	suspend fun loadInitial(request: DirectChatInitialRequest): Result<ChatThreadSnapshot>
+	suspend fun getLocalLastReadMessageId(conversationId: Long): Long = 0L
+	suspend fun getOpenViewportSnapshot(conversationId: Long): DirectChatOpenViewportSnapshot =
+		DirectChatOpenViewportSnapshot(anchorMessageId = null)
+	suspend fun setOpenViewportSnapshot(conversationId: Long, snapshot: DirectChatOpenViewportSnapshot): Result<Unit> =
+		Result.success(Unit)
 	suspend fun loadMore(conversationId: Long, beforeMessageId: Long?): Result<ChatThreadPage>
 	suspend fun sendMessage(conversationId: Long, text: String, replyToMessageId: Long? = null): Result<ChatMessageItemModel>
 	suspend fun sendMessage(

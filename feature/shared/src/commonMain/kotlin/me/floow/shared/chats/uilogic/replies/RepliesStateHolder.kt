@@ -2,6 +2,7 @@ package me.floow.shared.chats.uilogic.replies
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -10,6 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.floow.domain.readmodel.TimelineReadItem
 import me.floow.domain.readmodel.TimelineReadOpenMode
 import me.floow.domain.readmodel.TimelineReadProjectorInput
@@ -20,6 +22,7 @@ import me.floow.shared.chats.model.RepliesNavigationTarget
 import me.floow.shared.chats.model.RepliesThreadItemModel
 import me.floow.shared.chats.model.toActorTargetOrNull
 import me.floow.shared.chats.model.toNavigationTargetOrNull
+import me.floow.uikit.chat.model.ChatViewportSnapshot
 
 sealed interface RepliesScreenState {
 	data object Loading : RepliesScreenState
@@ -49,6 +52,9 @@ class RepliesStateHolder(
 
 	private val _events = MutableSharedFlow<Event>(extraBufferCapacity = 16)
 	val events: SharedFlow<Event> = _events.asSharedFlow()
+	private var latestViewportSnapshot: ChatViewportSnapshot? = null
+	private var pendingReadUpToSeq: Long? = null
+	private var pendingOpenAnchorSeq: Long? = null
 
 	fun load(
 		openMode: ChatOpenMode = ChatOpenMode.FROM_UNREAD,
@@ -58,11 +64,14 @@ class RepliesStateHolder(
 		scope.launch {
 			repository.load(openMode = openMode, anchorSeq = anchorSeq)
 				.onSuccess { data ->
-					val presentation = projectRepliesPresentation(
-						items = data.items,
-						openMode = openMode,
-						anchorSeq = anchorSeq,
-					)
+						val presentation = projectRepliesPresentation(
+							items = data.items,
+							serverReadUpToSeq = data.serverReadUpToSeq,
+							localReadUpToSeq = data.localReadUpToSeq,
+							storedOpenAnchorSeq = data.storedOpenAnchorSeq,
+							openMode = openMode,
+							anchorSeq = anchorSeq,
+						)
 					_state.value = if (data.items.isEmpty()) {
 						RepliesScreenState.Empty
 					} else {
@@ -117,6 +126,58 @@ class RepliesStateHolder(
 				}
 		}
 	}
+
+	fun onUserStartedScroll() {
+		latestViewportSnapshot = latestViewportSnapshot?.copy(isAtBottom = false)
+	}
+
+	fun onViewportSnapshotChanged(snapshot: ChatViewportSnapshot) {
+		latestViewportSnapshot = snapshot
+		snapshot.firstVisibleMessageId
+			?.takeIf { it > 0L }
+			?.let { seq ->
+				pendingOpenAnchorSeq = seq
+				scope.launch {
+					repository.setOpenAnchorSeq(seq)
+				}
+			}
+		snapshot.visibleReadCandidateId
+			?.takeIf { it > 0L }
+			?.let(::markReadUpToIfNeeded)
+	}
+
+	fun onAnchorRestoreSettled(messageId: Long, offsetPx: Int) {
+		if (messageId <= 0L) return
+		pendingOpenAnchorSeq = messageId
+		scope.launch {
+			repository.setOpenAnchorSeq(messageId)
+		}
+	}
+
+	fun dispose() {
+		val pendingRead = pendingReadUpToSeq
+		val pendingAnchor = pendingOpenAnchorSeq
+		if (pendingRead == null && pendingAnchor == null) return
+		scope.launch(NonCancellable) {
+			withContext(NonCancellable) {
+				pendingAnchor?.let { repository.setOpenAnchorSeq(it) }
+				pendingRead?.let { repository.markReadUpTo(it) }
+			}
+		}
+	}
+
+	private fun markReadUpToIfNeeded(seq: Long) {
+		if (seq <= 0L || pendingReadUpToSeq != null && seq <= (pendingReadUpToSeq ?: 0L)) return
+		pendingReadUpToSeq = seq
+		scope.launch {
+			repository.markReadUpTo(seq)
+				.onSuccess {
+					if (pendingReadUpToSeq == seq) {
+						pendingReadUpToSeq = null
+					}
+				}
+		}
+	}
 }
 
 private data class RepliesPresentationProjection(
@@ -126,15 +187,20 @@ private data class RepliesPresentationProjection(
 
 private fun projectRepliesPresentation(
 	items: List<RepliesThreadItemModel>,
+	serverReadUpToSeq: Long,
+	localReadUpToSeq: Long,
+	storedOpenAnchorSeq: Long,
 	openMode: ChatOpenMode,
 	anchorSeq: Long?,
 ): RepliesPresentationProjection {
-	val readUpToCursor = items
+	val fallbackReadUpToCursor = items
 		.asSequence()
 		.filterNot(RepliesThreadItemModel::isUnread)
 		.map(RepliesThreadItemModel::messageId)
 		.maxOrNull()
 		?: 0L
+	val resolvedServerReadUpToSeq = serverReadUpToSeq.takeIf { it > 0L } ?: fallbackReadUpToCursor
+	val resolvedLocalReadUpToSeq = localReadUpToSeq.takeIf { it > 0L } ?: resolvedServerReadUpToSeq
 	val projection = projectTimelineReadModel(
 		input = TimelineReadProjectorInput(
 			items = items.map { item ->
@@ -144,16 +210,16 @@ private fun projectRepliesPresentation(
 					isIncoming = true,
 				)
 			},
-			serverReadUpToCursor = readUpToCursor,
-			localReadUpToCursor = readUpToCursor,
+				serverReadUpToCursor = resolvedServerReadUpToSeq,
+				localReadUpToCursor = resolvedLocalReadUpToSeq,
 			firstUnreadCursor = items
 				.asSequence()
 				.filter(RepliesThreadItemModel::isUnread)
 				.map(RepliesThreadItemModel::messageId)
 				.minOrNull(),
-			storedOpenAnchorCursor = readUpToCursor.takeIf {
-				openMode == ChatOpenMode.FROM_LAST_SEEN && it > 0L
-			},
+				storedOpenAnchorCursor = storedOpenAnchorSeq.takeIf {
+					openMode == ChatOpenMode.FROM_LAST_SEEN && it > 0L
+				},
 			resolvedOpenAnchorCursor = null,
 			openMode = openMode.toTimelineReadOpenMode(),
 			messageLinkAnchorCursor = anchorSeq?.takeIf {

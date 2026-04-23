@@ -3,6 +3,7 @@ package me.floow.shared.chats.uilogic.direct
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -14,6 +15,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import me.floow.shared.chats.model.ChatDeliveryState
 import me.floow.shared.chats.model.ChatMessageContent
@@ -48,8 +50,12 @@ sealed interface DirectChatScreenState {
 		val sending: Boolean = false,
 		val currentReplyMessageId: Long? = null,
 		val editingMessageId: Long? = null,
-		val highlightedMessageId: Long? = null,
-		val scrollToBottomRequestToken: Long = 0L,
+			val highlightedMessageId: Long? = null,
+			val anchorRequestMessageId: Long? = null,
+			val anchorRequestOffsetPx: Int = 0,
+			val anchorRequestToken: Long = 0L,
+			val keepAnchorRequest: Boolean = false,
+			val scrollToBottomRequestToken: Long = 0L,
 		val scrollToBottomBadgeCount: Int = 0,
 		val peerLastReadMessageId: Long = 0L,
 	) : DirectChatScreenState
@@ -144,9 +150,12 @@ class DirectChatStateHolder(
 	private var latestPresenceState: ChatPresenceState = ChatPresenceState()
 	private var hasObservedPresenceState: Boolean = false
 	private var latestTypingState: ChatTypingState = ChatTypingState()
-	private var latestViewportSnapshot: ChatViewportSnapshot? = null
-	private var unseenIncomingMessageIds: Set<Long> = emptySet()
-	private var lastMarkedReadMessageId: Long = 0L
+		private var latestViewportSnapshot: ChatViewportSnapshot? = null
+		private var unseenIncomingMessageIds: Set<Long> = emptySet()
+		private var lastMarkedReadMessageId: Long = 0L
+		private var pendingReadUpToMessageId: Long? = null
+		private var pendingOpenViewportSnapshot: DirectChatOpenViewportSnapshot? = null
+		private var anchorRequestTokenSeed: Long = 0L
 	private var isOutgoingTypingActive: Boolean = false
 	private var lastOutgoingTypingSentMark: TimeMark? = null
 	private var optimisticMessageIdSeed: Long = -1L
@@ -158,7 +167,8 @@ class DirectChatStateHolder(
     private var pendingDeleteConversationId: Long? = null
     private val localVideoCircleMessages = LinkedHashMap<String, ChatMessageItemModel>()
 
-	private fun nextScrollRequestToken(): Long = currentChatEpochMillis()
+		private fun nextScrollRequestToken(): Long = currentChatEpochMillis()
+		private fun nextAnchorRequestToken(): Long = ++anchorRequestTokenSeed
 	private fun nextOptimisticMessageId(): Long = optimisticMessageIdSeed--
 	private fun nextClientMessageId(optimisticMessageId: Long): String =
 		"web-${currentChatEpochMillis()}-${kotlin.math.abs(optimisticMessageId)}"
@@ -185,7 +195,8 @@ class DirectChatStateHolder(
 	}
 
 	private fun disposeActiveWork(clearLocalVideoCircles: Boolean) {
-		realtimeJob?.cancel()
+			flushReadAndOpenAnchorOnClose()
+			realtimeJob?.cancel()
 		realtimeJob = null
 		presenceJob?.cancel()
 		presenceJob = null
@@ -197,8 +208,10 @@ class DirectChatStateHolder(
 		hasObservedPresenceState = false
 		latestTypingState = ChatTypingState()
 		latestViewportSnapshot = null
-		unseenIncomingMessageIds = emptySet()
-		lastMarkedReadMessageId = 0L
+			unseenIncomingMessageIds = emptySet()
+			lastMarkedReadMessageId = 0L
+			pendingReadUpToMessageId = null
+			pendingOpenViewportSnapshot = null
 		isOutgoingTypingActive = false
 		lastOutgoingTypingSentMark = null
 		pendingOutgoingClientMessageIds.clear()
@@ -242,14 +255,13 @@ class DirectChatStateHolder(
 					_events.tryEmit(Event.ShowMessage(message))
 				}
 				return@launch
-			}
-				.onSuccess { snapshot ->
-					val latestMessageId = snapshot.messages.lastOrNull()?.id
-					_state.value = snapshotToScreenState(snapshot)
-					if (snapshot.conversationId != null && latestMessageId != null) {
-						repository.markReadUpTo(snapshot.conversationId, latestMessageId)
-					}
-					observeRealtime(snapshot.conversationId)
+				}
+					.onSuccess { snapshot ->
+						_state.value = snapshotToScreenState(snapshot)
+						snapshot.conversationId?.takeIf { it > 0L }?.let { conversationId ->
+							lastMarkedReadMessageId = repository.getLocalLastReadMessageId(conversationId)
+						}
+						observeRealtime(snapshot.conversationId)
 					observePresence(snapshot.header.peerUserId)
 				}
 				.onFailure {
@@ -281,12 +293,16 @@ class DirectChatStateHolder(
 					conversationId = LOCAL_ONLY_CONVERSATION_ID,
 					header = mergeLiveHeader(snapshot.header),
 					messages = normalizedMessages,
-					canLoadMore = snapshot.canLoadMore,
-					nextBeforeMessageId = snapshot.nextBeforeMessageId,
-					highlightedMessageId = snapshot.highlightedMessageId,
-					scrollToBottomBadgeCount = 0,
-					peerLastReadMessageId = peerLastReadMessageId,
-				)
+						canLoadMore = snapshot.canLoadMore,
+						nextBeforeMessageId = snapshot.nextBeforeMessageId,
+						highlightedMessageId = snapshot.highlightedMessageId,
+						anchorRequestMessageId = snapshot.openAnchorMessageId,
+						anchorRequestOffsetPx = snapshot.openAnchorOffsetPx,
+						anchorRequestToken = if (snapshot.openAnchorMessageId != null) nextAnchorRequestToken() else 0L,
+						keepAnchorRequest = snapshot.keepOpenAnchorLocked,
+						scrollToBottomBadgeCount = 0,
+						peerLastReadMessageId = peerLastReadMessageId,
+					)
 			} else {
 				DirectChatScreenState.Error("chat conversation id is missing")
 			}
@@ -295,12 +311,16 @@ class DirectChatStateHolder(
 				conversationId = snapshot.conversationId,
 				header = mergeLiveHeader(snapshot.header),
 				messages = normalizedMessages,
-				canLoadMore = snapshot.canLoadMore,
-				nextBeforeMessageId = snapshot.nextBeforeMessageId,
-				highlightedMessageId = snapshot.highlightedMessageId,
-				scrollToBottomBadgeCount = 0,
-				peerLastReadMessageId = peerLastReadMessageId,
-			)
+					canLoadMore = snapshot.canLoadMore,
+					nextBeforeMessageId = snapshot.nextBeforeMessageId,
+					highlightedMessageId = snapshot.highlightedMessageId,
+					anchorRequestMessageId = snapshot.openAnchorMessageId,
+					anchorRequestOffsetPx = snapshot.openAnchorOffsetPx,
+					anchorRequestToken = if (snapshot.openAnchorMessageId != null) nextAnchorRequestToken() else 0L,
+					keepAnchorRequest = snapshot.keepOpenAnchorLocked,
+					scrollToBottomBadgeCount = 0,
+					peerLastReadMessageId = peerLastReadMessageId,
+				)
 		}
 	}
 
@@ -380,6 +400,15 @@ class DirectChatStateHolder(
 	fun onViewportSnapshotChanged(snapshot: ChatViewportSnapshot) {
 		latestViewportSnapshot = snapshot
 		val current = _state.value as? DirectChatScreenState.HasData ?: return
+		val openSnapshot = DirectChatOpenViewportSnapshot(
+			anchorMessageId = snapshot.firstVisibleMessageId,
+			anchorOffsetPx = snapshot.firstVisibleOffsetPx,
+			isBottomPinned = snapshot.isAtBottom,
+		)
+		pendingOpenViewportSnapshot = openSnapshot
+		scope.launch {
+			repository.setOpenViewportSnapshot(current.conversationId, openSnapshot)
+		}
 		unseenIncomingMessageIds = when {
 			snapshot.isAtBottom -> emptySet()
 			else -> unseenIncomingMessageIds - snapshot.visibleMessageIds
@@ -1262,8 +1291,32 @@ class DirectChatStateHolder(
 	) {
 		if (conversationId <= 0L || messageId <= 0L || messageId <= lastMarkedReadMessageId) return
 		lastMarkedReadMessageId = messageId
+		pendingReadUpToMessageId = messageId
 		scope.launch {
 			repository.markReadUpTo(conversationId, messageId)
+				.onSuccess {
+					if (pendingReadUpToMessageId == messageId) {
+						pendingReadUpToMessageId = null
+					}
+				}
+		}
+	}
+
+	private fun flushReadAndOpenAnchorOnClose() {
+		val current = _state.value as? DirectChatScreenState.HasData ?: return
+		val conversationId = current.conversationId.takeIf { it > 0L } ?: return
+		val pendingRead = pendingReadUpToMessageId
+		val pendingAnchor = pendingOpenViewportSnapshot
+		if (pendingRead == null && pendingAnchor == null) return
+		scope.launch(NonCancellable) {
+			withContext(NonCancellable) {
+				pendingAnchor?.let { snapshot ->
+					repository.setOpenViewportSnapshot(conversationId, snapshot)
+				}
+				pendingRead?.let { messageId ->
+					repository.markReadUpTo(conversationId, messageId)
+				}
+			}
 		}
 	}
 
@@ -1325,8 +1378,7 @@ class DirectChatStateHolder(
 			}.getOrElse {
 				Result.failure(it)
 			}
-	result.onSuccess { snapshot ->
-					val latestMessageId = snapshot.messages.lastOrNull()?.id
+		result.onSuccess { snapshot ->
 					_state.update { current ->
 						when (current) {
 							is DirectChatScreenState.HasData -> {
@@ -1338,10 +1390,14 @@ class DirectChatStateHolder(
 										header = mergeLiveHeader(snapshot.header),
 										messages = mergeLocalVideoCircleMessages(snapshot.messages),
 										canLoadMore = snapshot.canLoadMore,
-										nextBeforeMessageId = snapshot.nextBeforeMessageId,
-										isLoadingMore = false,
-										highlightedMessageId = snapshot.highlightedMessageId ?: current.highlightedMessageId,
-									)
+											nextBeforeMessageId = snapshot.nextBeforeMessageId,
+											isLoadingMore = false,
+											highlightedMessageId = snapshot.highlightedMessageId ?: current.highlightedMessageId,
+											anchorRequestMessageId = snapshot.openAnchorMessageId ?: current.anchorRequestMessageId,
+											anchorRequestOffsetPx = snapshot.openAnchorOffsetPx,
+											anchorRequestToken = if (snapshot.openAnchorMessageId != null) nextAnchorRequestToken() else current.anchorRequestToken,
+											keepAnchorRequest = snapshot.keepOpenAnchorLocked,
+										)
 							}
 						}
 						is DirectChatScreenState.NoMessages -> {
@@ -1357,19 +1413,20 @@ class DirectChatStateHolder(
 										conversationId = snapshot.conversationId,
 										header = mergeLiveHeader(snapshot.header),
 										messages = mergeLocalVideoCircleMessages(snapshot.messages),
-										canLoadMore = snapshot.canLoadMore,
-										nextBeforeMessageId = snapshot.nextBeforeMessageId,
-										highlightedMessageId = snapshot.highlightedMessageId,
-									)
+											canLoadMore = snapshot.canLoadMore,
+											nextBeforeMessageId = snapshot.nextBeforeMessageId,
+											highlightedMessageId = snapshot.highlightedMessageId,
+											anchorRequestMessageId = snapshot.openAnchorMessageId,
+											anchorRequestOffsetPx = snapshot.openAnchorOffsetPx,
+											anchorRequestToken = if (snapshot.openAnchorMessageId != null) nextAnchorRequestToken() else 0L,
+											keepAnchorRequest = snapshot.keepOpenAnchorLocked,
+										)
 							}
 						}
 						else -> current
 					}
 				}
-				if (snapshot.conversationId != null && latestMessageId != null) {
-					repository.markReadUpTo(snapshot.conversationId, latestMessageId)
-				}
-			}.onFailure {
+				}.onFailure {
 				_events.tryEmit(Event.ShowMessage(it.message ?: "chat resync failed"))
 			}
 		}
