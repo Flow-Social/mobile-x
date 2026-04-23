@@ -5,7 +5,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,7 +22,6 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.scrollBy
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -169,7 +167,7 @@ fun HasDataState(
 	onLoadMore: () -> Unit,
 	config: ChatScreenConfig,
 	messageListScrollEnabled: Boolean = true,
-	videoCircleContent: @Composable (VideoCircleOutMessage) -> Unit = {},
+	videoCircleContent: @Composable (VideoCircleOutMessage, () -> Unit) -> Unit = { _, _ -> },
 	modifier: Modifier = Modifier
 ) {
 	val interactionPolicy = config.interactionPolicy
@@ -1177,7 +1175,6 @@ fun HasDataState(
 							} else {
 								Modifier.wrapContentWidth()
 							}
-
 							HighlightedMessageRow(
 								highlighted = isRowHighlighted,
 								selected = isSelected
@@ -1260,7 +1257,14 @@ fun HasDataState(
 													horizontalArrangement = Arrangement.End
 												) {
 													Box(modifier = contextMenuHighlightModifier) {
-														videoCircleContent(message)
+														videoCircleContent(message) {
+															if (isSelectionMode) {
+																onToggleSelection(message.id)
+															} else {
+																onContextMenuDismissRequest()
+																onChatBubbleLongClick(message)
+															}
+														}
 													}
 												}
 											}

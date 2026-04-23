@@ -9,7 +9,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -43,7 +42,9 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -53,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.media3.exoplayer.ExoPlayer
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 import me.floow.uikit.util.overlayHorizontalSwipeZone
 import java.io.File
@@ -78,6 +80,7 @@ fun MessageCirclePlayer(
     isPaused: Boolean = false,
     autoplayMutedLoop: Boolean = false,
     onTogglePlayback: () -> Unit,
+    onLongPress: () -> Unit = {},
     onSeekProgress: (Float) -> Unit = {},
     onSeekInteractionChange: (Boolean) -> Unit = {},
     onPlaybackEnded: () -> Unit = {},
@@ -92,6 +95,7 @@ fun MessageCirclePlayer(
     var isSeeking by remember(videoPath) { mutableStateOf(false) }
     val knobSwipeZoneKey = remember(videoPath) { Any() }
     val currentOnTogglePlayback by rememberUpdatedState(onTogglePlayback)
+    val currentOnLongPress by rememberUpdatedState(onLongPress)
     val currentOnSeekProgress by rememberUpdatedState(onSeekProgress)
 
     val isActive = isPlaying || isPaused || autoplayMutedLoop
@@ -259,6 +263,7 @@ fun MessageCirclePlayer(
                         progress = progress,
                         onSeekingChange = { isSeeking = it },
                         onTogglePlayback = currentOnTogglePlayback,
+                        onLongPress = currentOnLongPress,
                         onSeekProgress = currentOnSeekProgress,
                     ),
             )
@@ -466,6 +471,7 @@ private fun Modifier.videoCircleSeekGesture(
     progress: androidx.compose.runtime.MutableFloatState,
     onSeekingChange: (Boolean) -> Unit,
     onTogglePlayback: () -> Unit,
+    onLongPress: () -> Unit,
     onSeekProgress: (Float) -> Unit,
 ): Modifier = pointerInput(isPaused, player) {
     awaitEachGesture {
@@ -475,20 +481,20 @@ private fun Modifier.videoCircleSeekGesture(
         )
         val currentPlayer = player
         if (currentPlayer == null) {
-            val up = waitForUpOrCancellation()
-            if (up != null) {
-                up.consume()
-                onTogglePlayback()
-            }
+            awaitVideoCircleTapOrLongPress(
+                down = down,
+                onTap = onTogglePlayback,
+                onLongPress = onLongPress,
+            )
             return@awaitEachGesture
         }
 
         if (!isPaused) {
-            val up = waitForUpOrCancellation()
-            if (up != null) {
-                up.consume()
-                onTogglePlayback()
-            }
+            awaitVideoCircleTapOrLongPress(
+                down = down,
+                onTap = onTogglePlayback,
+                onLongPress = onLongPress,
+            )
             return@awaitEachGesture
         }
 
@@ -505,11 +511,11 @@ private fun Modifier.videoCircleSeekGesture(
         )
 
         if (!startedOnKnob && !startedOnRing) {
-            val up = waitForUpOrCancellation()
-            if (up != null) {
-                up.consume()
-                onTogglePlayback()
-            }
+            awaitVideoCircleTapOrLongPress(
+                down = down,
+                onTap = onTogglePlayback,
+                onLongPress = onLongPress,
+            )
             return@awaitEachGesture
         }
 
@@ -544,6 +550,45 @@ private fun Modifier.videoCircleSeekGesture(
         } finally {
             onSeekingChange(false)
         }
+    }
+}
+
+private suspend fun AwaitPointerEventScope.awaitVideoCircleTapOrLongPress(
+    down: PointerInputChange,
+    onTap: () -> Unit,
+    onLongPress: () -> Unit,
+) {
+    down.consume()
+    val completedBeforeLongPress = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+        while (true) {
+            val event = awaitPointerEvent(pass = PointerEventPass.Initial)
+            val change = event.changes.firstOrNull { it.id == down.id }
+                ?: return@withTimeoutOrNull false
+            change.consume()
+            if (!change.pressed) return@withTimeoutOrNull true
+
+            val dragDistance = hypot(
+                change.position.x - down.position.x,
+                change.position.y - down.position.y,
+            )
+            if (dragDistance > viewConfiguration.touchSlop) {
+                return@withTimeoutOrNull false
+            }
+        }
+    }
+
+    when (completedBeforeLongPress) {
+        null -> {
+            onLongPress()
+            while (true) {
+                val event = awaitPointerEvent(pass = PointerEventPass.Initial)
+                val change = event.changes.firstOrNull { it.id == down.id } ?: return
+                change.consume()
+                if (!change.pressed) return
+            }
+        }
+        true -> onTap()
+        false -> Unit
     }
 }
 

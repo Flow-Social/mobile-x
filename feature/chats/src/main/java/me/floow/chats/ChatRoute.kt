@@ -267,7 +267,7 @@ fun ChatRoute(
 		onViewportSnapshotChanged = playbackCoordinator::onViewportSnapshotChanged,
 		videoCircleInteractionActive = videoCircleInteractionActive,
 		bubbleBoundsByMessageKey = bubbleBoundsByMessageKey,
-		videoCircleContent = { videoCircleMessage ->
+		videoCircleContent = { videoCircleMessage, onVideoCircleLongPress ->
 				val messageUiKey = videoCircleMessage.uiKey
 				DisposableEffect(messageUiKey) {
 					playbackCoordinator.register(videoCircleMessage)
@@ -301,6 +301,7 @@ fun ChatRoute(
 						onTogglePlayback = {
 							playbackCoordinator.onVideoCircleClick(videoCircleMessage)
 						},
+						onLongPress = onVideoCircleLongPress,
 					)
 				}
 			},
