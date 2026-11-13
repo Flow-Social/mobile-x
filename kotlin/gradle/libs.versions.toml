@@ -38,6 +38,7 @@ datastore = "1.1.1"
 exifinterface = "1.3.7"
 qrose = "1.0.1"
 sqlite = "2.5.0-alpha11"
+buildkonfig = "0.15.2"
 
 [libraries]
 androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "androidx-browser" }
@@ -121,3 +122,4 @@ serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref 
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 googleGmsGoogleServices = { id = "com.google.gms.google-services", version.ref = "gmsGoogleServices" }
 firebaseCrashlytics = { id = "com.google.firebase.crashlytics", version.ref = "firebaseCrashlytics" }
+buildkonfig = { id = "com.codingfeline.buildkonfig", version.ref = "buildkonfig" }

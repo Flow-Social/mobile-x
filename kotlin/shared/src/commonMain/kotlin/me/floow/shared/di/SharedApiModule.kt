@@ -57,7 +57,7 @@ val sharedApiModule = module {
     }
     single<ApiConfig> {
         ApiConfig(
-            apiUrl = "https://31.77.9.57.nip.io/api/v1",
+            apiUrl = me.floow.shared.config.AppConfig.BASE_URL,
         )
     }
     factory<BumpApi> { BumpApiImpl(get(), get(), get(), get()) }

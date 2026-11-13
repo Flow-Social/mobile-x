@@ -1,10 +1,35 @@
 @file:OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
 
+import com.codingfeline.buildkonfig.compiler.FieldSpec
+import java.util.Properties
+
 @Suppress("DSL_SCOPE_VIOLATION")
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidLibrary)
     alias(libs.plugins.serialization)
+    alias(libs.plugins.buildkonfig)
+}
+
+val localProps = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) {
+        file.inputStream().use { load(it) }
+    }
+}
+
+val serverUrl = localProps.getProperty("FLOW_API_BASE_URL")
+    ?: localProps.getProperty("flow.api.base.url")
+    ?: System.getenv("FLOW_API_BASE_URL")
+    ?: "https://31.77.9.57.nip.io/api/v1"
+
+buildkonfig {
+    packageName = "me.floow.api.config"
+    objectName = "AppConfig"
+    exposeObjectWithName = "AppConfig"
+    defaultConfigs {
+        buildConfigField(FieldSpec.Type.STRING, "BASE_URL", serverUrl)
+    }
 }
 
 kotlin {

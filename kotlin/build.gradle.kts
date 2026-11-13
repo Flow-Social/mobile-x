@@ -12,6 +12,7 @@ plugins {
     alias(libs.plugins.serialization) apply false
     alias(libs.plugins.googleGmsGoogleServices) apply false
     alias(libs.plugins.firebaseCrashlytics) apply false
+    alias(libs.plugins.buildkonfig) apply false
 }
 true // Needed to make the Suppress annotation work for the plugins block
 

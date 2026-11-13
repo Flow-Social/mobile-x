@@ -14,6 +14,7 @@ import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import me.floow.api.config.AppConfig
 import me.floow.auth.models.GoogleOAuthInfo
 import me.floow.domain.auth.GoogleOAuth
 import me.floow.domain.auth.models.GoogleOAuthResult
@@ -119,7 +120,7 @@ class GoogleOAuthImpl(
         } catch (e: Throwable) {
             android.util.Log.e("GoogleOAuthImpl", "Google OAuth exception: ${e.message}", e)
             runCatching {
-                httpClient.post("https://31.77.9.57.nip.io/api/v1/debug/log") {
+                httpClient.post("${AppConfig.BASE_URL}/debug/log") {
                     contentType(ContentType.Application.Json)
                     setBody("""{"event":"google_oauth_exception","hasSavedVerifier":$hasSavedVerifier,"error":"${e.message}"}""")
                 }

@@ -12,6 +12,7 @@ kotlin {
         commonMain {
             dependencies {
                 implementation(project(":core:domain"))
+                implementation(project(":core:api"))
             }
         }
 

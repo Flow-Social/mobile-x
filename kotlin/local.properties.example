@@ -1,0 +1,8 @@
+## Flow Local Properties Template
+## Copy this file to local.properties and customize as needed.
+
+# Android SDK location
+sdk.dir=/path/to/Android/sdk
+
+# Server API Base URL (defaults to https://31.77.9.57.nip.io/api/v1 if omitted)
+FLOW_API_BASE_URL=https://31.77.9.57.nip.io/api/v1
