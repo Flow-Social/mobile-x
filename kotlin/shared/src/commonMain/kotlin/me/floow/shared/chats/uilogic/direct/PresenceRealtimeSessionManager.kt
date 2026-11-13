@@ -301,7 +301,7 @@ internal class PresenceRealtimeSessionManager(
 		private const val UNKNOWN_AUTH_MODE = "unknown"
 		private const val INITIAL_RECONNECT_DELAY_MS = 500L
 		private const val MAX_RECONNECT_DELAY_MS = 5_000L
-		private val json = Json { ignoreUnknownKeys = true }
+		private val json = Json { ignoreUnknownKeys = true; coerceInputValues = true }
 		private var observerCounter: Long = 0L
 	}
 }
@@ -402,4 +402,4 @@ private fun JsonObject.booleanOrNullFlexible(key: String): Boolean? {
 private fun JsonObject.objectOrNull(key: String): JsonObject? = runCatching { this[key]?.jsonObject }.getOrNull()
 private fun JsonObject.arrayOrNull(key: String): JsonArray? = runCatching { this[key]?.jsonArray }.getOrNull()
 
-private val presenceRealtimeJson = Json { ignoreUnknownKeys = true }
+private val presenceRealtimeJson = Json { ignoreUnknownKeys = true; coerceInputValues = true }

@@ -47,7 +47,7 @@ class AndroidProfileRepository(
     private val usersApi: me.floow.domain.api.UsersApi,
     private val mediaOutboxEngine: MediaOutboxEngine? = null,
 ) : ProfileRepository {
-    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+    private val json = Json { ignoreUnknownKeys = true; coerceInputValues = true; encodeDefaults = true }
 
     override fun observeSelfPosts(): Flow<List<ProfilePost>> {
         return combine(

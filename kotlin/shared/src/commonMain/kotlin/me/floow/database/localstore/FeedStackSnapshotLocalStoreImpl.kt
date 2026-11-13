@@ -13,7 +13,7 @@ import me.floow.domain.cache.FeedStackSnapshotLocalStore
 class FeedStackSnapshotLocalStoreImpl(
     private val dao: FeedStackSnapshotDao,
 ) : FeedStackSnapshotLocalStore {
-    private val json = Json { encodeDefaults = true }
+    private val json = Json { ignoreUnknownKeys = true; coerceInputValues = true; encodeDefaults = true }
 
     override fun observeSnapshot(userId: String): Flow<FeedStackSnapshot?> {
         return flow {

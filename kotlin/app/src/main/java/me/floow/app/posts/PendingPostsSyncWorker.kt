@@ -48,7 +48,7 @@ class PendingPostsSyncWorker(
 }
 
 internal object PendingPostsSyncRunner {
-	private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+	private val json = Json { ignoreUnknownKeys = true; coerceInputValues = true; encodeDefaults = true }
 
 	suspend fun runSync(koin: org.koin.core.Koin) {
 		val authManager = koin.get<AuthenticationManager>()

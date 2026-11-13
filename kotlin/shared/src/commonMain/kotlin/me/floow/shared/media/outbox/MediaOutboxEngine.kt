@@ -211,7 +211,7 @@ class MediaOutboxEngine(
 
     private val postMutex = Mutex()
     private val postJobsByLocalPostId = mutableMapOf<String, Job>()
-    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+    private val json = Json { ignoreUnknownKeys = true; coerceInputValues = true; encodeDefaults = true }
 
     init {
         resumePendingTasks()

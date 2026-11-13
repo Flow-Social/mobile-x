@@ -74,7 +74,7 @@ object DatabaseMigrations {
                 """.trimIndent()
             )
 
-            val json = Json { encodeDefaults = true }
+            val json = Json { ignoreUnknownKeys = true; coerceInputValues = true; encodeDefaults = true }
             val serializer = ListSerializer(String.serializer())
 
             data class OldPostRow(

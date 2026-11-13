@@ -7,7 +7,7 @@ import kotlinx.serialization.json.jsonPrimitive
 
 object JwtPayloadParser {
 
-    private val json = Json { ignoreUnknownKeys = true; isLenient = true }
+    private val json = Json { ignoreUnknownKeys = true; coerceInputValues = true; isLenient = true }
 
     /**
      * Extracts user ID from JWT access token payload without verifying the cryptographic signature.

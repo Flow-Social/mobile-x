@@ -67,7 +67,7 @@ class RescueSyncManager(
 		private const val AUTH_USER_ID_KEY = "authUserId"
 	}
 
-	private val json = Json { ignoreUnknownKeys = true }
+	private val json = Json { ignoreUnknownKeys = true; coerceInputValues = true }
 
 	fun isMigrationNeeded(): Boolean {
 		val rescuePrefs = context.getSharedPreferences(RESCUE_PREFS, Context.MODE_PRIVATE)

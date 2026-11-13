@@ -51,7 +51,7 @@ class CommonPostComposerRepository(
     private val pendingPostsSyncScheduler: PendingPostsSyncScheduler,
     private val pendingPostMediaStore: PendingPostMediaStore,
 ) : PostComposerRepository {
-    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+    private val json = Json { ignoreUnknownKeys = true; coerceInputValues = true; encodeDefaults = true }
 
     override suspend fun loadCategories(): Result<List<PostCategory>> {
         return when (val response = categoryCatalogRepository.getOrRefresh()) {

@@ -2,9 +2,11 @@ package me.floow.shared.media.download
 
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.darwin.Darwin
-import io.ktor.client.request.get
-import io.ktor.client.statement.bodyAsBytes
+import io.ktor.client.request.prepareGet
+import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.isSuccess
+import io.ktor.utils.io.readAvailable
+import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
@@ -25,14 +27,17 @@ import me.floow.domain.media.MediaDownloadPriority
 import me.floow.domain.media.MediaDownloadState
 import platform.Foundation.NSCachesDirectory
 import platform.Foundation.NSData
+import platform.Foundation.NSFileHandle
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSSearchPathForDirectoriesInDomains
 import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSUserDomainMask
+import platform.Foundation.closeFile
 import platform.Foundation.create
-import platform.Foundation.writeToFile
+import platform.Foundation.fileHandleForWritingAtPath
+import platform.Foundation.writeData
 
-@OptIn(ExperimentalForeignApi::class)
+@OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
 class IosMediaDownloadManager(
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) : MediaDownloadController {
@@ -133,24 +138,29 @@ class IosMediaDownloadManager(
                     else -> url
                 }
 
-                val response = httpClient.get(effectiveUrl)
-                if (!response.status.isSuccess()) {
-                    error("HTTP ${response.status.value} from $effectiveUrl")
-                }
-
-                val bytes = response.bodyAsBytes()
-                val data = bytes.usePinned { pinned ->
-                    if (bytes.isNotEmpty()) {
-                        NSData.create(bytes = pinned.addressOf(0), length = bytes.size.toULong())
-                    } else {
-                        NSData()
-                    }
-                }
-
                 fileManager.removeItemAtPath(tempPath, error = null)
-                val written = data.writeToFile(tempPath, atomically = true)
-                if (!written) {
-                    error("Failed to write downloaded data to $tempPath")
+                fileManager.createFileAtPath(tempPath, contents = null, attributes = null)
+                val handle = NSFileHandle.fileHandleForWritingAtPath(tempPath)
+                    ?: error("Failed to open file for writing at $tempPath")
+
+                try {
+                    httpClient.prepareGet(effectiveUrl).execute { response ->
+                        if (!response.status.isSuccess()) {
+                            error("HTTP ${response.status.value} from $effectiveUrl")
+                        }
+                        val channel = response.bodyAsChannel()
+                        val buffer = ByteArray(64 * 1024)
+                        while (!channel.isClosedForRead) {
+                            val read = channel.readAvailable(buffer, 0, buffer.size)
+                            if (read <= 0) break
+                            val chunkData = buffer.usePinned { pinned ->
+                                NSData.create(bytes = pinned.addressOf(0), length = read.toULong())
+                            }
+                            handle.writeData(chunkData)
+                        }
+                    }
+                } finally {
+                    handle.closeFile()
                 }
 
                 fileManager.removeItemAtPath(targetPath, error = null)

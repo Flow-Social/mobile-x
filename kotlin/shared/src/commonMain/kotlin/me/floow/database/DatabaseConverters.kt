@@ -7,7 +7,7 @@ import kotlinx.serialization.json.Json
 import me.floow.domain.models.PostImageVariant
 
 class DatabaseConverters {
-    private val json = Json { encodeDefaults = true }
+    private val json = Json { ignoreUnknownKeys = true; coerceInputValues = true; encodeDefaults = true }
 
     @TypeConverter
     fun imageUrlsToJson(value: List<String>): String {

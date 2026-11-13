@@ -255,7 +255,7 @@ internal class ChatRealtimeSessionManager(
 		private const val DEFAULT_REPLAY_LIMIT = 200
 		private const val INITIAL_RECONNECT_DELAY_MS = 500L
 		private const val MAX_RECONNECT_DELAY_MS = 5_000L
-		private val json = Json { ignoreUnknownKeys = true }
+		private val json = Json { ignoreUnknownKeys = true; coerceInputValues = true }
 	}
 }
 
@@ -346,7 +346,7 @@ private fun parseRealtimeEvent(raw: String): ParsedRealtimeEvent? {
 	}
 }
 
-private val chatRealtimeJson = Json { ignoreUnknownKeys = true }
+private val chatRealtimeJson = Json { ignoreUnknownKeys = true; coerceInputValues = true }
 
 private fun JsonObject.toRealtimeMessageItemOrNull(): ChatMessageItemModel? {
 	val id = longOrNullFlexible("id") ?: return null
