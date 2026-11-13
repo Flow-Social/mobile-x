@@ -146,8 +146,10 @@ class IosKeychainTokenStorage : TokenStorage {
         }
         val fromPrefs = platform.Foundation.NSUserDefaults.standardUserDefaults.stringForKey(prefKey)
         if (!fromPrefs.isNullOrBlank()) {
-            // Restore back to keychain
+            // One-time migration from legacy unencrypted NSUserDefaults to Apple Keychain
             saveKeychain(account, fromPrefs)
+            platform.Foundation.NSUserDefaults.standardUserDefaults.removeObjectForKey(prefKey)
+            platform.Foundation.NSUserDefaults.standardUserDefaults.synchronize()
             return fromPrefs
         }
         return null
@@ -155,7 +157,7 @@ class IosKeychainTokenStorage : TokenStorage {
 
     private fun saveValue(account: String, prefKey: String, value: String) {
         saveKeychain(account, value)
-        platform.Foundation.NSUserDefaults.standardUserDefaults.setObject(value, forKey = prefKey)
+        platform.Foundation.NSUserDefaults.standardUserDefaults.removeObjectForKey(prefKey)
         platform.Foundation.NSUserDefaults.standardUserDefaults.synchronize()
     }
 

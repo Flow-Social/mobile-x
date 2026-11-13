@@ -121,6 +121,81 @@ class SharedFeedStateHolderCacheTest {
         coroutineContext.cancelChildren()
     }
 
+    @Test
+    fun `stale snapshot does not get deleted and restores immediately with stale while revalidate tail update`() = runTest {
+        val snapshotStore = FakeFeedStackSnapshotLocalStore()
+        val oldTimestamp = me.floow.domain.utils.currentTimeMillis() - 120_000L
+        snapshotStore.replaceSnapshot(
+            userId = PostsCacheKeys.feedStackUserId(PostsCacheKeys.SELF_USER_ID),
+            snapshot = FeedStackSnapshot(
+                items = listOf(
+                    testSnapshotItem("cached-active", "Active Cached"),
+                    testSnapshotItem("cached-stale-2", "Stale 2"),
+                ),
+            ),
+            updatedAt = oldTimestamp,
+        )
+
+        val holder = testHolder(
+            feedRepository = QueueFeedRepository(
+                FeedPost(testPost("fresh-1"), "FRESH_1"),
+                FeedPost(testPost("fresh-2"), "FRESH_2"),
+                FeedPost(testPost("fresh-3"), "FRESH_3"),
+            ),
+            snapshotStore = snapshotStore,
+        )
+
+        holder.onFeedScreenVisible()
+        advanceUntilIdle()
+
+        val updatedState = assertIs<SharedFeedScreenState.Success>(holder.state.value)
+        assertEquals("cached-active", updatedState.feedItems.first().post.id)
+        val itemIds = updatedState.feedItems.map { it.post.id }
+        assertEquals("cached-active", itemIds[0])
+        assertEquals("fresh-1", itemIds[1])
+
+        val storedIds = snapshotStore.snapshotForSelf()?.items.orEmpty().map { it.postId }
+        assertEquals("cached-active", storedIds[0])
+        assertEquals("fresh-1", storedIds[1])
+        coroutineContext.cancelChildren()
+    }
+
+    @Test
+    fun `stale snapshot preserves cached stack and offline queue when network fails`() = runTest {
+        val snapshotStore = FakeFeedStackSnapshotLocalStore()
+        val oldTimestamp = me.floow.domain.utils.currentTimeMillis() - 300_000L
+        snapshotStore.replaceSnapshot(
+            userId = PostsCacheKeys.feedStackUserId(PostsCacheKeys.SELF_USER_ID),
+            snapshot = FeedStackSnapshot(
+                items = listOf(
+                    testSnapshotItem("cached-1", "Reason 1"),
+                    testSnapshotItem("cached-2", "Reason 2"),
+                ),
+            ),
+            updatedAt = oldTimestamp,
+        )
+
+        val holder = testHolder(
+            feedRepository = QueueFeedRepository(),
+            snapshotStore = snapshotStore,
+        )
+
+        holder.onFeedScreenVisible()
+        advanceUntilIdle()
+
+        val state = assertIs<SharedFeedScreenState.Success>(holder.state.value)
+        assertEquals(2, state.feedItems.size)
+        assertEquals("cached-1", state.feedItems[0].post.id)
+        assertEquals("cached-2", state.feedItems[1].post.id)
+
+        holder.onSwipeRight()
+        advanceUntilIdle()
+
+        val afterSwipe = assertIs<SharedFeedScreenState.Success>(holder.state.value)
+        assertEquals("cached-2", afterSwipe.feedItems.first().post.id)
+        coroutineContext.cancelChildren()
+    }
+
 
     private fun TestScope.testHolder(
         feedRepository: FeedRepository,

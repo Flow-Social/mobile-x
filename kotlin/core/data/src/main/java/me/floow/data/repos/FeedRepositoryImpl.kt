@@ -23,52 +23,81 @@ class FeedRepositoryImpl(
 	private val feedApi: FeedApi,
 ) : FeedRepository {
 	private val buffer = ArrayDeque<FeedPost>()
-	
+
 	@OptIn(RawValueObjectCreate::class)
-	override suspend fun getNextPost(): GetDataResponse<FeedPost> {
-		logger.d("FeedRepositoryImpl.getNextPost", "Loading next post")
-		
-		if (buffer.isNotEmpty()) return GetDataResponse.Success(buffer.removeFirst())
-		
-		return when (val resp = feedApi.getFeed(limit = 10)) {
-			is GetFeedResponse.Success -> {
-				val mapped = resp.items.map { item ->
-					val authorName = item.authorName?.let { ProfileName.createRaw(it) }
-					val authorUsername = item.authorUsername?.let { ProfileUsername.createRaw(it) }
-					
-					FeedPost(
-						post = Post(
-							id = item.id,
-							author = PostAuthor(
-								id = item.authorId,
-								name = authorName,
-								username = authorUsername,
-								avatarUrl = item.authorAvatarUrl,
-								avatarThumb = item.authorAvatarThumb
-							),
-							content = PostContent(
-								imageUrls = item.imageUrls,
-								description = item.description,
-								imageVariants = item.imageVariants
-							),
-							category = item.category,
-							createdAt = item.createdAt,
-							likesCount = item.likesCount,
-							commentsCount = item.commentsCount,
-							commentersPreview = item.commentersPreview
-						),
-						reason = item.reason
-					)
-				}
-				
-				if (mapped.isEmpty()) return GetDataResponse.Error(GetDataError.NoData)
-				
-				buffer.addAll(mapped.drop(1))
-				GetDataResponse.Success(mapped.first())
-			}
-			
-			GetFeedResponse.Error -> GetDataResponse.Error(GetDataError.Other)
+	override suspend fun getNextPosts(limit: Int): GetDataResponse<List<FeedPost>> {
+		val requestedLimit = limit.coerceAtLeast(1)
+		logger.d("FeedRepositoryImpl.getNextPosts", "Loading next $requestedLimit posts")
+
+		val result = mutableListOf<FeedPost>()
+		while (buffer.isNotEmpty() && result.size < requestedLimit) {
+			result.add(buffer.removeFirst())
 		}
+		if (result.size >= requestedLimit) {
+			return GetDataResponse.Success(result)
+		}
+
+		val fetchLimit = maxOf(requestedLimit - result.size, 10)
+		return when (val resp = feedApi.getFeed(limit = fetchLimit)) {
+			is GetFeedResponse.Success -> {
+				val mapped = resp.items.map(::mapToFeedPost)
+				if (mapped.isEmpty() && result.isEmpty()) {
+					return GetDataResponse.Error(GetDataError.NoData)
+				}
+				val needed = requestedLimit - result.size
+				result.addAll(mapped.take(needed))
+				buffer.addAll(mapped.drop(needed))
+				GetDataResponse.Success(result)
+			}
+			is GetFeedResponse.Error -> {
+				if (result.isNotEmpty()) {
+					GetDataResponse.Success(result)
+				} else {
+					GetDataResponse.Error(GetDataError.Other)
+				}
+			}
+		}
+	}
+
+	override suspend fun getNextPost(): GetDataResponse<FeedPost> {
+		val posts = getNextPosts(1)
+		return when (posts) {
+			is GetDataResponse.Success -> {
+				val post = posts.data.firstOrNull()
+				if (post != null) GetDataResponse.Success(post) else GetDataResponse.Error(GetDataError.NoData)
+			}
+			is GetDataResponse.Error -> GetDataResponse.Error(posts.error)
+		}
+	}
+
+	@OptIn(RawValueObjectCreate::class)
+	private fun mapToFeedPost(item: me.floow.domain.api.models.FeedItem): FeedPost {
+		val authorName = item.authorName?.let { ProfileName.createRaw(it) }
+		val authorUsername = item.authorUsername?.let { ProfileUsername.createRaw(it) }
+
+		return FeedPost(
+			post = Post(
+				id = item.id,
+				author = PostAuthor(
+					id = item.authorId,
+					name = authorName,
+					username = authorUsername,
+					avatarUrl = item.authorAvatarUrl,
+					avatarThumb = item.authorAvatarThumb
+				),
+				content = PostContent(
+					imageUrls = item.imageUrls,
+					description = item.description,
+					imageVariants = item.imageVariants
+				),
+				category = item.category,
+				createdAt = item.createdAt,
+				likesCount = item.likesCount,
+				commentsCount = item.commentsCount,
+				commentersPreview = item.commentersPreview
+			),
+			reason = item.reason
+		)
 	}
 	
 	override suspend fun recordSwipe(postId: String, isLiked: Boolean): UpdateDataResponse {

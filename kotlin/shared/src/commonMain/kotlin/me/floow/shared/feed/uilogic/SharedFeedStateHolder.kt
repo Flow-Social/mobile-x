@@ -207,9 +207,15 @@ class SharedFeedStateHolder(
                 if (hasPending) {
                     triggerSync()
                 }
-                val result = feedRepository.getNextPost()
+                val result = feedRepository.getNextPosts(TARGET_STACK_SIZE)
                 if (result is GetDataResponse.Success) {
-                    if (tryAppendFeedItem(result.data)) {
+                    var anyAppended = false
+                    for (feedPost in result.data) {
+                        if (tryAppendFeedItem(feedPost)) {
+                            anyAppended = true
+                        }
+                    }
+                    if (anyAppended) {
                         stopNoMorePolling()
                         fillRemainingStackInBackground(
                             operation = TelemetryOperation.FeedInitialLoad,
@@ -368,16 +374,9 @@ class SharedFeedStateHolder(
         return activeUserId?.let(PostsCacheKeys::feedStackUserId)
     }
 
-    private suspend fun restoreCachedFeedStackIfNeeded() {
-        if (vmState.value.items.isNotEmpty()) return
-        val cacheUserId = currentFeedStackCacheUserId() ?: return
-        val lastUpdatedAt = feedStackSnapshotLocalStore.getLastUpdatedAt(cacheUserId) ?: 0L
-        val isExpired = lastUpdatedAt <= 0L || currentTimeMillis() - lastUpdatedAt > FEED_STACK_CACHE_TTL_MS
-        if (isExpired) {
-            feedStackSnapshotLocalStore.clearUser(cacheUserId)
-            feedRepository.clearSession()
-            return
-        }
+    private suspend fun restoreCachedFeedStackIfNeeded(): Boolean {
+        if (vmState.value.items.isNotEmpty()) return false
+        val cacheUserId = currentFeedStackCacheUserId() ?: return false
         val cachedSnapshotItems = feedStackSnapshotLocalStore.getSnapshot(cacheUserId)?.items.orEmpty()
         if (cachedSnapshotItems.isNotEmpty()) {
             val restoredItems = cachedSnapshotItems.mapIndexed { index, item ->
@@ -396,8 +395,11 @@ class SharedFeedStateHolder(
                     isLoadingNext = false,
                 )
             }
-            return
+            val lastUpdatedAt = feedStackSnapshotLocalStore.getLastUpdatedAt(cacheUserId) ?: 0L
+            val isStale = lastUpdatedAt <= 0L || currentTimeMillis() - lastUpdatedAt > FEED_STACK_CACHE_TTL_MS
+            return isStale
         }
+        return false
     }
 
     private fun persistCurrentFeedStack() {
@@ -500,14 +502,12 @@ class SharedFeedStateHolder(
 
         scope.launch {
             try {
-                restoreCachedFeedStackIfNeeded()
+                val wasStale = restoreCachedFeedStackIfNeeded()
                 val currentSize = vmState.value.items.size
-                if (currentSize >= TARGET_STACK_SIZE) {
-                    scope.launch { softRevalidateStack() }
-                    return@launch
-                }
                 if (currentSize > 0) {
-                    scope.launch { softRevalidateStack() }
+                    if (wasStale || currentSize < TARGET_STACK_SIZE) {
+                        scope.launch { softRevalidateStack(refreshStaleTail = wasStale) }
+                    }
                     return@launch
                 }
 
@@ -530,13 +530,9 @@ class SharedFeedStateHolder(
                             )
                         }
                 }
-                loadOneMore()
+                loadBatch(TARGET_STACK_SIZE)
                 if (vmState.value.items.isNotEmpty()) {
                     vmState.update { it.copy(isLoading = false, isLoadingNext = false) }
-                    fillRemainingStackInBackground(
-                        operation = TelemetryOperation.FeedInitialLoad,
-                        startedAtMs = startedAt,
-                    )
                     return@launch
                 }
 
@@ -553,27 +549,78 @@ class SharedFeedStateHolder(
         }
     }
 
-    private suspend fun softRevalidateStack() {
+    private suspend fun softRevalidateStack(refreshStaleTail: Boolean = false) {
         if (inNoMoreCooldown()) {
             syncNoMoreForNowFlag()
             return
         }
         val currentSize = vmState.value.items.size
-        if (currentSize >= TARGET_STACK_SIZE) return
+        if (!refreshStaleTail && currentSize >= TARGET_STACK_SIZE) return
         fillRemainingStackInBackground(
             operation = TelemetryOperation.FeedSoftRevalidate,
             startedAtMs = currentTimeMillis(),
+            refreshStaleTail = refreshStaleTail,
         )
     }
 
     private fun fillRemainingStackInBackground(
         operation: TelemetryOperation,
         startedAtMs: Long,
+        refreshStaleTail: Boolean = false,
     ) {
         backgroundStackFillJob?.cancel()
         backgroundStackFillJob = scope.launch {
+            if (refreshStaleTail && vmState.value.items.isNotEmpty()) {
+                val needed = (TARGET_STACK_SIZE - 1).coerceAtLeast(1)
+                when (val result = feedRepository.getNextPosts(needed)) {
+                    is GetDataResponse.Success -> {
+                        val freshPosts = result.data
+                        loadMutex.withLock {
+                            val currentItems = vmState.value.items
+                            val activeItem = currentItems.firstOrNull()
+                            if (activeItem != null && freshPosts.isNotEmpty()) {
+                                val newTail = mutableListOf<SharedFeedItem>()
+                                for (feedPost in freshPosts) {
+                                    val postId = feedPost.post.id
+                                    if (postId == activeItem.post.id || postId in excludedPostIds || postId in seenPostIds) {
+                                        continue
+                                    }
+                                    rememberSeenPost(postId)
+                                    newTail.add(
+                                        SharedFeedItem(
+                                            entryId = nextEntryId++,
+                                            post = feedPost.post,
+                                            recommendationReason = mapReason(feedPost.reason),
+                                        )
+                                    )
+                                    if (newTail.size >= TARGET_STACK_SIZE - 1) break
+                                }
+                                if (newTail.isNotEmpty()) {
+                                    vmState.update { current ->
+                                        val curActive = current.items.firstOrNull()
+                                        if (curActive != null) {
+                                            current.copy(
+                                                items = listOf(curActive) + newTail
+                                            )
+                                        } else {
+                                            current
+                                        }
+                                    }
+                                    persistCurrentFeedStack()
+                                }
+                            }
+                        }
+                    }
+                    is GetDataResponse.Error -> {
+                        // Offline or network error: retain existing cached items in tail
+                    }
+                }
+            }
+
             val requested = (TARGET_STACK_SIZE - vmState.value.items.size).coerceAtLeast(0)
-            repeat(requested) { loadOneMore() }
+            if (requested > 0) {
+                loadBatch(requested)
+            }
             logger.logLoadTiming(
                 tag = "SharedFeedStateHolder.loadData",
                 operation = operation,
@@ -583,7 +630,8 @@ class SharedFeedStateHolder(
         }
     }
 
-    private suspend fun loadOneMore() {
+    private suspend fun loadBatch(requested: Int) {
+        if (requested <= 0) return
         loadMutex.withLock {
             when {
                 !isFeedScreenActive -> {
@@ -600,10 +648,23 @@ class SharedFeedStateHolder(
 
             setLoadingNext(true)
             var attempts = 0
-            while (attempts < LOAD_MAX_ATTEMPTS_PER_CYCLE) {
+            while (attempts < LOAD_MAX_ATTEMPTS_PER_CYCLE && vmState.value.items.size < TARGET_STACK_SIZE) {
                 attempts++
-                when (val result = feedRepository.getNextPost()) {
-                    is GetDataResponse.Success -> if (tryAppendFeedItem(result.data)) return
+                val toFetch = (TARGET_STACK_SIZE - vmState.value.items.size).coerceAtLeast(1)
+                when (val result = feedRepository.getNextPosts(toFetch)) {
+                    is GetDataResponse.Success -> {
+                        var anyAppended = false
+                        for (feedPost in result.data) {
+                            if (tryAppendFeedItem(feedPost)) {
+                                anyAppended = true
+                            }
+                            if (vmState.value.items.size >= TARGET_STACK_SIZE) break
+                        }
+                        if (anyAppended && vmState.value.items.size >= TARGET_STACK_SIZE) {
+                            setLoadingNext(false)
+                            return
+                        }
+                    }
                     is GetDataResponse.Error -> {
                         if (handleInitialLoadError(result.error)) return
                         break
@@ -629,6 +690,10 @@ class SharedFeedStateHolder(
             }
             setLoadingNext(false)
         }
+    }
+
+    private suspend fun loadOneMore() {
+        loadBatch(1)
     }
 
     private fun tryAppendFeedItem(feedPost: FeedPost): Boolean {
@@ -688,10 +753,16 @@ class SharedFeedStateHolder(
         rememberSeenPost(swipedItem.post.id)
         val remainingItems = currentItems.drop(1)
         val undoState = LastUndoSwipe(swipedItem, isLiked)
-        vmState.update { it.copy(items = remainingItems, lastUndoSwipe = undoState) }
+        vmState.update {
+            it.copy(
+                items = remainingItems,
+                recommendationReason = remainingItems.firstOrNull()?.recommendationReason,
+                lastUndoSwipe = undoState,
+            )
+        }
         persistCurrentFeedStack()
         enqueueSwipeSync(swipedItem.post.id, isLiked)
-        scope.launch { loadOneMore() }
+        scope.launch { loadBatch((TARGET_STACK_SIZE - remainingItems.size).coerceAtLeast(1)) }
     }
 
     override fun undoLastSwipe() {
