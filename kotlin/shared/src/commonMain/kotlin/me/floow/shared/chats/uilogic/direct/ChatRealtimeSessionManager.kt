@@ -27,6 +27,8 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
+import me.floow.domain.lifecycle.AppLifecycleBridge
+import me.floow.domain.utils.computeExponentialBackoffWithJitter
 import me.floow.shared.chats.model.ChatMessageContent
 import me.floow.shared.chats.model.ChatMessageItemModel
 import me.floow.shared.chats.model.VideoUploadState
@@ -126,8 +128,12 @@ internal class ChatRealtimeSessionManager(
 					conversationId = session.conversationId,
 					message = error.message ?: "auth resolution failed",
 				)
-				delay(reconnectDelayMs)
-				reconnectDelayMs = minOf(reconnectDelayMs * 2, MAX_RECONNECT_DELAY_MS)
+				AppLifecycleBridge.delayWithForegroundWakeup(reconnectDelayMs)
+				reconnectDelayMs = computeExponentialBackoffWithJitter(
+					currentDelayMs = reconnectDelayMs,
+					minDelayMs = INITIAL_RECONNECT_DELAY_MS,
+					maxDelayMs = MAX_RECONNECT_DELAY_MS,
+				)
 				reconnectAttempt += 1
 				continue
 			}
@@ -218,8 +224,12 @@ internal class ChatRealtimeSessionManager(
 					message = error.message ?: "socket open failed",
 				)
 				_connectionState.value = info.toConnectionState()
-				delay(reconnectDelayMs)
-				reconnectDelayMs = minOf(reconnectDelayMs * 2, MAX_RECONNECT_DELAY_MS)
+				AppLifecycleBridge.delayWithForegroundWakeup(reconnectDelayMs)
+				reconnectDelayMs = computeExponentialBackoffWithJitter(
+					currentDelayMs = reconnectDelayMs,
+					minDelayMs = INITIAL_RECONNECT_DELAY_MS,
+					maxDelayMs = MAX_RECONNECT_DELAY_MS,
+				)
 				reconnectAttempt += 1
 				continue
 			}
@@ -234,8 +244,12 @@ internal class ChatRealtimeSessionManager(
 			}
 
 			if (!currentCoroutineContext().isActive) break
-			delay(reconnectDelayMs)
-			reconnectDelayMs = minOf(reconnectDelayMs * 2, MAX_RECONNECT_DELAY_MS)
+			AppLifecycleBridge.delayWithForegroundWakeup(reconnectDelayMs)
+			reconnectDelayMs = computeExponentialBackoffWithJitter(
+				currentDelayMs = reconnectDelayMs,
+				minDelayMs = INITIAL_RECONNECT_DELAY_MS,
+				maxDelayMs = MAX_RECONNECT_DELAY_MS,
+			)
 			reconnectAttempt += 1
 		}
 	}

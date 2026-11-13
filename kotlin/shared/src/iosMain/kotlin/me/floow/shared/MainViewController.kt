@@ -7,19 +7,49 @@ import coil3.disk.DiskCache
 import coil3.memory.MemoryCache
 import coil3.network.ktor3.KtorNetworkFetcherFactory
 import me.floow.app.FlowApp
+import me.floow.domain.lifecycle.AppLifecycleBridge
 import me.floow.shared.di.initKoin
 import okio.Path.Companion.toPath
 import platform.Foundation.NSCachesDirectory
+import platform.Foundation.NSNotificationCenter
+import platform.Foundation.NSOperationQueue
 import platform.Foundation.NSSearchPathForDirectoriesInDomains
 import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSUserDomainMask
+import platform.UIKit.UIApplicationDidBecomeActiveNotification
+import platform.UIKit.UIApplicationDidEnterBackgroundNotification
 import platform.UIKit.UIViewController
+
+private var isIosLifecycleObserverRegistered = false
+
+private fun registerIosLifecycleObservers() {
+    if (isIosLifecycleObserverRegistered) return
+    isIosLifecycleObserverRegistered = true
+
+    val center = NSNotificationCenter.defaultCenter
+    center.addObserverForName(
+        name = UIApplicationDidBecomeActiveNotification,
+        `object` = null,
+        queue = NSOperationQueue.mainQueue,
+    ) { _ ->
+        AppLifecycleBridge.onAppForeground()
+    }
+    center.addObserverForName(
+        name = UIApplicationDidEnterBackgroundNotification,
+        `object` = null,
+        queue = NSOperationQueue.mainQueue,
+    ) { _ ->
+        AppLifecycleBridge.onAppBackground()
+    }
+}
 
 fun MainViewController(): UIViewController {
     println("==> [Flow] MainViewController called")
     try {
         initKoin()
         println("==> [Flow] initKoin OK")
+        registerIosLifecycleObservers()
+        println("==> [Flow] registerIosLifecycleObservers OK")
         me.floow.shared.push.flushPendingIosPushToken()
         println("==> [Flow] flushPendingIosPushToken OK")
         SingletonImageLoader.setSafe { context ->

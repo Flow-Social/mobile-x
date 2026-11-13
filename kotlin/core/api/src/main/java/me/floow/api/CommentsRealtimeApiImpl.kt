@@ -28,8 +28,10 @@ import me.floow.domain.api.models.CommentItem
 import me.floow.domain.api.models.CommentReplyItem
 import me.floow.domain.api.models.CommentsRealtimeEvent
 import me.floow.domain.auth.AuthenticationManager
+import me.floow.domain.lifecycle.AppLifecycleBridge
 import me.floow.domain.network.NetworkMonitor
 import me.floow.domain.utils.Logger
+import me.floow.domain.utils.computeExponentialBackoffWithJitter
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.longOrNull
 
@@ -42,15 +44,8 @@ private const val COMMENTS_REALTIME_EVENT_RESYNC_REQUIRED = "resync_required"
 
 private const val DEFAULT_COMMENTS_REALTIME_REPLAY_LIMIT = 200
 private const val MAX_COMMENTS_REALTIME_REPLAY_LIMIT = 500
-private const val INITIAL_COMMENTS_REALTIME_RECONNECT_DELAY_MS = 5000L
-private const val MEDIUM_COMMENTS_REALTIME_RECONNECT_DELAY_MS = 10000L
+private const val INITIAL_COMMENTS_REALTIME_RECONNECT_DELAY_MS = 1000L
 private const val MAX_COMMENTS_REALTIME_RECONNECT_DELAY_MS = 30000L
-
-private fun nextCommentsReconnectDelay(currentDelayMs: Long): Long = when {
-	currentDelayMs < INITIAL_COMMENTS_REALTIME_RECONNECT_DELAY_MS -> INITIAL_COMMENTS_REALTIME_RECONNECT_DELAY_MS
-	currentDelayMs < MEDIUM_COMMENTS_REALTIME_RECONNECT_DELAY_MS -> MEDIUM_COMMENTS_REALTIME_RECONNECT_DELAY_MS
-	else -> MAX_COMMENTS_REALTIME_RECONNECT_DELAY_MS
-}
 
 class CommentsRealtimeApiImpl(
 	config: ApiConfig,
@@ -102,8 +97,12 @@ class CommentsRealtimeApiImpl(
 					logger.d("CommentsRealtimeApiImpl.subscribePostComments", "Network is offline. Waiting for connection...")
 					networkMonitor.isOnline.first { it }
 				}
-				delay(reconnectDelayMs)
-				reconnectDelayMs = nextCommentsReconnectDelay(reconnectDelayMs)
+				AppLifecycleBridge.delayWithForegroundWakeup(reconnectDelayMs)
+				reconnectDelayMs = computeExponentialBackoffWithJitter(
+					currentDelayMs = reconnectDelayMs,
+					minDelayMs = INITIAL_COMMENTS_REALTIME_RECONNECT_DELAY_MS,
+					maxDelayMs = MAX_COMMENTS_REALTIME_RECONNECT_DELAY_MS,
+				)
 				continue
 			}
 
@@ -135,9 +134,13 @@ class CommentsRealtimeApiImpl(
 			reconnectDelayMs = if (receivedAnyEvent) {
 				INITIAL_COMMENTS_REALTIME_RECONNECT_DELAY_MS
 			} else {
-				nextCommentsReconnectDelay(reconnectDelayMs)
+				computeExponentialBackoffWithJitter(
+					currentDelayMs = reconnectDelayMs,
+					minDelayMs = INITIAL_COMMENTS_REALTIME_RECONNECT_DELAY_MS,
+					maxDelayMs = MAX_COMMENTS_REALTIME_RECONNECT_DELAY_MS,
+				)
 			}
-			delay(reconnectDelayMs)
+			AppLifecycleBridge.delayWithForegroundWakeup(reconnectDelayMs)
 		}
 	}
 }

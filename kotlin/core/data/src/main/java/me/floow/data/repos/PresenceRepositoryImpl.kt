@@ -23,8 +23,10 @@ import me.floow.domain.api.models.PresenceUpdateResponse
 import me.floow.domain.auth.AuthenticationManager
 import me.floow.domain.data.repos.PresenceRepository
 import me.floow.domain.data.repos.PresenceSessionStore
+import me.floow.domain.lifecycle.AppLifecycleBridge
 import me.floow.domain.models.UserPresence
 import me.floow.domain.utils.Logger
+import me.floow.domain.utils.computeExponentialBackoffWithJitter
 
 private const val MAX_PRESENCE_TARGETS = 200
 private const val HEARTBEAT_INTERVAL_MS = 35_000L
@@ -50,6 +52,18 @@ class PresenceRepositoryImpl(
 	private var heartbeatJob: Job? = null
 
 	private var isForeground: Boolean = false
+
+	init {
+		scope.launch {
+			AppLifecycleBridge.isForeground.collectLatest { isAppForeground ->
+				if (isAppForeground) {
+					onAppForeground()
+				} else {
+					onAppBackground()
+				}
+			}
+		}
+	}
 
 	override val presences: StateFlow<Map<String, UserPresence>> = _presences
 
@@ -140,15 +154,23 @@ class PresenceRepositoryImpl(
 							continue
 						}
 						if (!authenticationManager.isSignedIn()) {
-							delay(backoffMs)
-							backoffMs = (backoffMs * 2).coerceAtMost(REALTIME_RECONNECT_MAX_MS)
+							AppLifecycleBridge.delayWithForegroundWakeup(backoffMs)
+							backoffMs = computeExponentialBackoffWithJitter(
+								currentDelayMs = backoffMs,
+								minDelayMs = REALTIME_RECONNECT_MIN_MS,
+								maxDelayMs = REALTIME_RECONNECT_MAX_MS,
+							)
 							continue
 						}
 
 						val session = presenceRealtimeApi.openSession()
 						if (session == null) {
-							delay(backoffMs)
-							backoffMs = (backoffMs * 2).coerceAtMost(REALTIME_RECONNECT_MAX_MS)
+							AppLifecycleBridge.delayWithForegroundWakeup(backoffMs)
+							backoffMs = computeExponentialBackoffWithJitter(
+								currentDelayMs = backoffMs,
+								minDelayMs = REALTIME_RECONNECT_MIN_MS,
+								maxDelayMs = REALTIME_RECONNECT_MAX_MS,
+							)
 							continue
 						}
 
@@ -174,8 +196,12 @@ class PresenceRepositoryImpl(
 						}
 						closeRealtimeSession()
 						if (!isForeground) break
-						delay(backoffMs)
-						backoffMs = (backoffMs * 2).coerceAtMost(REALTIME_RECONNECT_MAX_MS)
+						AppLifecycleBridge.delayWithForegroundWakeup(backoffMs)
+						backoffMs = computeExponentialBackoffWithJitter(
+							currentDelayMs = backoffMs,
+							minDelayMs = REALTIME_RECONNECT_MIN_MS,
+							maxDelayMs = REALTIME_RECONNECT_MAX_MS,
+						)
 					}
 				}
 			}

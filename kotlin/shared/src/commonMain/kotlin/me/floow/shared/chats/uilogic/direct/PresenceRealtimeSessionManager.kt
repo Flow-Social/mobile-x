@@ -31,6 +31,8 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
+import me.floow.domain.lifecycle.AppLifecycleBridge
+import me.floow.domain.utils.computeExponentialBackoffWithJitter
 import me.floow.shared.chats.model.ChatPresenceState
 import me.floow.shared.chats.model.ChatTypingState
 
@@ -50,6 +52,18 @@ internal class PresenceRealtimeSessionManager(
 	private var activeTargets: Set<String> = emptySet()
 	private var activeHandle: String? = null
 	private var loopJob: kotlinx.coroutines.Job? = null
+
+	init {
+		scope.launch {
+			AppLifecycleBridge.isForeground.collectLatest { isForeground ->
+				if (!isForeground) {
+					closeSession()
+				} else {
+					ensureRealtimeLoop()
+				}
+			}
+		}
+	}
 
 	override fun setTargets(owner: String, userIds: List<String>) {
 		val normalizedOwner = owner.trim()
@@ -140,8 +154,12 @@ internal class PresenceRealtimeSessionManager(
 					authMode = UNKNOWN_AUTH_MODE,
 					message = error.message ?: "auth resolution failed",
 				)
-				delay(reconnectDelayMs)
-				reconnectDelayMs = minOf(reconnectDelayMs * 2, MAX_RECONNECT_DELAY_MS)
+				AppLifecycleBridge.delayWithForegroundWakeup(reconnectDelayMs)
+				reconnectDelayMs = computeExponentialBackoffWithJitter(
+					currentDelayMs = reconnectDelayMs,
+					minDelayMs = INITIAL_RECONNECT_DELAY_MS,
+					maxDelayMs = MAX_RECONNECT_DELAY_MS,
+				)
 				reconnectAttempt += 1
 				continue
 			}
@@ -214,8 +232,12 @@ internal class PresenceRealtimeSessionManager(
 					authMode = auth.mode,
 					message = error.message ?: "socket open failed",
 				).toConnectionState()
-				delay(reconnectDelayMs)
-				reconnectDelayMs = minOf(reconnectDelayMs * 2, MAX_RECONNECT_DELAY_MS)
+				AppLifecycleBridge.delayWithForegroundWakeup(reconnectDelayMs)
+				reconnectDelayMs = computeExponentialBackoffWithJitter(
+					currentDelayMs = reconnectDelayMs,
+					minDelayMs = INITIAL_RECONNECT_DELAY_MS,
+					maxDelayMs = MAX_RECONNECT_DELAY_MS,
+				)
 				reconnectAttempt += 1
 				continue
 			}
@@ -232,8 +254,12 @@ internal class PresenceRealtimeSessionManager(
 			}
 
 			if (!currentCoroutineContext().isActive) break
-			delay(reconnectDelayMs)
-			reconnectDelayMs = minOf(reconnectDelayMs * 2, MAX_RECONNECT_DELAY_MS)
+			AppLifecycleBridge.delayWithForegroundWakeup(reconnectDelayMs)
+			reconnectDelayMs = computeExponentialBackoffWithJitter(
+				currentDelayMs = reconnectDelayMs,
+				minDelayMs = INITIAL_RECONNECT_DELAY_MS,
+				maxDelayMs = MAX_RECONNECT_DELAY_MS,
+			)
 			reconnectAttempt += 1
 		}
 	}

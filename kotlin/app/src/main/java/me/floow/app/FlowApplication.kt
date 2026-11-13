@@ -43,6 +43,14 @@ class FlowApplication : Application() {
 			}
 		}
 		val koin = GlobalContext.getKoinApplicationOrNull()?.koin
+		ProcessLifecycleOwner.get().lifecycle.addObserver(object : androidx.lifecycle.DefaultLifecycleObserver {
+			override fun onStart(owner: androidx.lifecycle.LifecycleOwner) {
+				me.floow.domain.lifecycle.AppLifecycleBridge.onAppForeground()
+			}
+			override fun onStop(owner: androidx.lifecycle.LifecycleOwner) {
+				me.floow.domain.lifecycle.AppLifecycleBridge.onAppBackground()
+			}
+		})
 		koin?.getOrNull<PresenceRepository>()?.let { presenceRepository: PresenceRepository ->
 			ProcessLifecycleOwner.get().lifecycle.addObserver(PresenceLifecycleObserver(presenceRepository))
 		}

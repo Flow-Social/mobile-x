@@ -30,8 +30,10 @@ import me.floow.domain.api.ChatsRealtimeApi
 import me.floow.domain.api.models.ChatsRealtimeEvent
 import me.floow.domain.api.models.PushAckRequest
 import me.floow.domain.auth.AuthenticationManager
+import me.floow.domain.lifecycle.AppLifecycleBridge
 import me.floow.domain.network.NetworkMonitor
 import me.floow.domain.utils.Logger
+import me.floow.domain.utils.computeExponentialBackoffWithJitter
 
 private const val REALTIME_EVENT_HELLO = "hello"
 private const val REALTIME_EVENT_MESSAGE_CREATED = "message_created"
@@ -45,15 +47,8 @@ private const val REALTIME_EVENT_RESYNC_REQUIRED = "resync_required"
 
 private const val DEFAULT_REALTIME_REPLAY_LIMIT = 200
 private const val MAX_REALTIME_REPLAY_LIMIT = 500
-private const val INITIAL_REALTIME_RECONNECT_DELAY_MS = 5000L
-private const val MEDIUM_REALTIME_RECONNECT_DELAY_MS = 10000L
+private const val INITIAL_REALTIME_RECONNECT_DELAY_MS = 1000L
 private const val MAX_REALTIME_RECONNECT_DELAY_MS = 30000L
-
-private fun nextChatsReconnectDelay(currentDelayMs: Long): Long = when {
-	currentDelayMs < INITIAL_REALTIME_RECONNECT_DELAY_MS -> INITIAL_REALTIME_RECONNECT_DELAY_MS
-	currentDelayMs < MEDIUM_REALTIME_RECONNECT_DELAY_MS -> MEDIUM_REALTIME_RECONNECT_DELAY_MS
-	else -> MAX_REALTIME_RECONNECT_DELAY_MS
-}
 
 class ChatsRealtimeApiImpl(
 	config: ApiConfig,
@@ -135,8 +130,12 @@ class ChatsRealtimeApiImpl(
 					logger.d(logScope, "Network is offline. Waiting for connection...")
 					networkMonitor.isOnline.first { it }
 				}
-				delay(reconnectDelayMs)
-				reconnectDelayMs = nextChatsReconnectDelay(reconnectDelayMs)
+				AppLifecycleBridge.delayWithForegroundWakeup(reconnectDelayMs)
+				reconnectDelayMs = computeExponentialBackoffWithJitter(
+					currentDelayMs = reconnectDelayMs,
+					minDelayMs = INITIAL_REALTIME_RECONNECT_DELAY_MS,
+					maxDelayMs = MAX_REALTIME_RECONNECT_DELAY_MS,
+				)
 				continue
 			}
 
@@ -174,9 +173,13 @@ class ChatsRealtimeApiImpl(
 			reconnectDelayMs = if (receivedAnyEvent) {
 				INITIAL_REALTIME_RECONNECT_DELAY_MS
 			} else {
-				nextChatsReconnectDelay(reconnectDelayMs)
+				computeExponentialBackoffWithJitter(
+					currentDelayMs = reconnectDelayMs,
+					minDelayMs = INITIAL_REALTIME_RECONNECT_DELAY_MS,
+					maxDelayMs = MAX_REALTIME_RECONNECT_DELAY_MS,
+				)
 			}
-			delay(reconnectDelayMs)
+			AppLifecycleBridge.delayWithForegroundWakeup(reconnectDelayMs)
 		}
 	}
 	override fun sendPushAck(request: PushAckRequest): Boolean {
