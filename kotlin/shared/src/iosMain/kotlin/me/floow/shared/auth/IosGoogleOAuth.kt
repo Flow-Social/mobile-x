@@ -57,7 +57,7 @@ class IosGoogleOAuth(
         expectSuccess = false
         install(ContentNegotiation) { json() }
     }
-    private val json = Json { ignoreUnknownKeys = true }
+    private val json = Json { ignoreUnknownKeys = true; coerceInputValues = true }
     private val signInMutex = Mutex()
     private var isSigningIn = false
 

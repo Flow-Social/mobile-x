@@ -9,6 +9,7 @@ import io.ktor.utils.io.readAvailable
 import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.autoreleasepool
 import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -153,10 +154,12 @@ class IosMediaDownloadManager(
                         while (!channel.isClosedForRead) {
                             val read = channel.readAvailable(buffer, 0, buffer.size)
                             if (read <= 0) break
-                            val chunkData = buffer.usePinned { pinned ->
-                                NSData.create(bytes = pinned.addressOf(0), length = read.toULong())
+                            autoreleasepool {
+                                val chunkData = buffer.usePinned { pinned ->
+                                    NSData.create(bytes = pinned.addressOf(0), length = read.toULong())
+                                }
+                                handle.writeData(chunkData)
                             }
-                            handle.writeData(chunkData)
                         }
                     }
                 } finally {
@@ -164,7 +167,10 @@ class IosMediaDownloadManager(
                 }
 
                 fileManager.removeItemAtPath(targetPath, error = null)
-                fileManager.moveItemAtPath(tempPath, toPath = targetPath, error = null)
+                val moved = fileManager.moveItemAtPath(tempPath, toPath = targetPath, error = null)
+                if (!moved || !fileManager.fileExistsAtPath(targetPath)) {
+                    error("Failed to move temporary file from $tempPath to $targetPath")
+                }
 
                 _states.update { it + (url to MediaDownloadState.Completed(targetPath)) }
             } catch (e: CancellationException) {

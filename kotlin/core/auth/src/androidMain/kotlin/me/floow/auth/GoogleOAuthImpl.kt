@@ -41,7 +41,7 @@ class GoogleOAuthImpl(
         expectSuccess = false
         install(ContentNegotiation) { json() }
     }
-    private val json = Json { ignoreUnknownKeys = true }
+    private val json = Json { ignoreUnknownKeys = true; coerceInputValues = true }
 
     private val prefs by lazy {
         context.getSharedPreferences("flow_google_oauth_pkce", Context.MODE_PRIVATE)
