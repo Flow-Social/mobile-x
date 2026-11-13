@@ -18,6 +18,7 @@ import me.floow.api.PushApiImpl
 import me.floow.api.PushTokensApiImpl
 import me.floow.api.UploadsApiImpl
 import me.floow.api.UsersApiImpl
+import me.floow.api.config.AppBuildConfig
 import me.floow.api.util.ApiConfig
 import me.floow.api.util.HttpClientProvider
 import me.floow.domain.api.AuthApi
@@ -57,7 +58,7 @@ val sharedApiModule = module {
     }
     single<ApiConfig> {
         ApiConfig(
-            apiUrl = me.floow.shared.config.AppConfig.BASE_URL,
+            apiUrl = AppBuildConfig.BASE_URL,
         )
     }
     factory<BumpApi> { BumpApiImpl(get(), get(), get(), get()) }

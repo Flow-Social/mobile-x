@@ -18,15 +18,20 @@ val localProps = Properties().apply {
     }
 }
 
-val serverUrl = localProps.getProperty("FLOW_API_BASE_URL")
+val serverUrl = (project.findProperty("API_BASE_URL") as? String)
+    ?: (project.findProperty("FLOW_API_BASE_URL") as? String)
+    ?: localProps.getProperty("API_BASE_URL")
+    ?: localProps.getProperty("FLOW_API_BASE_URL")
+    ?: localProps.getProperty("api.base.url")
     ?: localProps.getProperty("flow.api.base.url")
+    ?: System.getenv("API_BASE_URL")
     ?: System.getenv("FLOW_API_BASE_URL")
     ?: "https://31.77.9.57.nip.io/api/v1"
 
 buildkonfig {
     packageName = "me.floow.api.config"
-    objectName = "AppConfig"
-    exposeObjectWithName = "AppConfig"
+    objectName = "AppBuildConfig"
+    exposeObjectWithName = "AppBuildConfig"
     defaultConfigs {
         buildConfigField(FieldSpec.Type.STRING, "BASE_URL", serverUrl)
     }

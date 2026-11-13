@@ -5,4 +5,5 @@
 sdk.dir=/path/to/Android/sdk
 
 # Server API Base URL (defaults to https://31.77.9.57.nip.io/api/v1 if omitted)
+API_BASE_URL=https://31.77.9.57.nip.io/api/v1
 FLOW_API_BASE_URL=https://31.77.9.57.nip.io/api/v1
