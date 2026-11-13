@@ -1,0 +1,16 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <!-- Telegram video note: outer aperture circle ring -->
+  <path
+      android:strokeColor="#FFFFFFFF"
+      android:strokeWidth="1.7"
+      android:strokeLineCap="round"
+      android:pathData="M12,3.2A8.8,8.8 0 1,1 11.99,3.2"/>
+  <!-- Telegram video note: inner camera lens pupil / circle -->
+  <path
+      android:fillColor="#FFFFFFFF"
+      android:pathData="M12,8.4A3.6,3.6 0 1,1 11.99,8.4Z"/>
+</vector>

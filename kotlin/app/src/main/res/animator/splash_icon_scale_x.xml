@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<objectAnimator xmlns:android="http://schemas.android.com/apk/res/android"
+    android:duration="520"
+    android:propertyName="scaleX"
+    android:valueType="floatType">
+    <propertyValuesHolder android:propertyName="scaleX">
+        <keyframe
+            android:fraction="0"
+            android:value="0.72" />
+        <keyframe
+            android:fraction="0.2"
+            android:value="0.9" />
+        <keyframe
+            android:fraction="0.5"
+            android:value="1.04" />
+        <keyframe
+            android:fraction="0.76"
+            android:value="0.96" />
+        <keyframe
+            android:fraction="1"
+            android:value="0.98" />
+    </propertyValuesHolder>
+</objectAnimator>

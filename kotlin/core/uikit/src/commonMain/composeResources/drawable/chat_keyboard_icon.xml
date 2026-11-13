@@ -1,0 +1,25 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <!-- Telegram rounded keyboard frame -->
+  <path
+      android:strokeColor="#FFFFFFFF"
+      android:strokeWidth="1.5"
+      android:pathData="M5.6,4.8H18.4C20.2,4.8 21.6,6.2 21.6,8V16C21.6,17.8 20.2,19.2 18.4,19.2H5.6C3.8,19.2 2.4,17.8 2.4,16V8C2.4,6.2 3.8,4.8 5.6,4.8Z"/>
+  <!-- Top row: 5 keys -->
+  <path
+      android:fillColor="#FFFFFFFF"
+      android:pathData="M6.2,9.3A0.9,0.9 0 1,1 6.2,7.5A0.9,0.9 0 1,1 6.2,9.3ZM9.1,9.3A0.9,0.9 0 1,1 9.1,7.5A0.9,0.9 0 1,1 9.1,9.3ZM12,9.3A0.9,0.9 0 1,1 12,7.5A0.9,0.9 0 1,1 12,9.3ZM14.9,9.3A0.9,0.9 0 1,1 14.9,7.5A0.9,0.9 0 1,1 14.9,9.3ZM17.8,9.3A0.9,0.9 0 1,1 17.8,7.5A0.9,0.9 0 1,1 17.8,9.3Z"/>
+  <!-- Middle row: 5 keys -->
+  <path
+      android:fillColor="#FFFFFFFF"
+      android:pathData="M6.2,12.7A0.9,0.9 0 1,1 6.2,10.9A0.9,0.9 0 1,1 6.2,12.7ZM9.1,12.7A0.9,0.9 0 1,1 9.1,10.9A0.9,0.9 0 1,1 9.1,12.7ZM12,12.7A0.9,0.9 0 1,1 12,10.9A0.9,0.9 0 1,1 12,12.7ZM14.9,12.7A0.9,0.9 0 1,1 14.9,10.9A0.9,0.9 0 1,1 14.9,12.7ZM17.8,12.7A0.9,0.9 0 1,1 17.8,10.9A0.9,0.9 0 1,1 17.8,12.7Z"/>
+  <!-- Bottom row: centered spacebar -->
+  <path
+      android:strokeColor="#FFFFFFFF"
+      android:strokeWidth="1.6"
+      android:strokeLineCap="round"
+      android:pathData="M8.8,15.6H15.2"/>
+</vector>

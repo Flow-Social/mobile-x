@@ -2,9 +2,9 @@ name: Android CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "dev-alpha" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "dev-alpha" ]
   workflow_dispatch:
 
 jobs:
@@ -22,11 +22,12 @@ jobs:
         cache: gradle
 
     - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
+      run: chmod +x kotlin/gradlew
     - name: Build with Gradle
+      working-directory: kotlin
       run: ./gradlew build
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
         name: android-app
-        path: app/build/outputs/apk/*/*/*.apk
+        path: kotlin/app/build/outputs/apk/*/*/*.apk

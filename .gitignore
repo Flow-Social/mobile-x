@@ -1,9 +1,14 @@
 *.iml
 .gradle
+**/.gradle
 .kotlin
+**/.kotlin
 .idea
+**/local.properties
+local.properties
 /local.properties
 /secrets.properties
+**/secrets.properties
 /.idea/caches
 /.idea/libraries
 /.idea/modules.xml
@@ -16,17 +21,34 @@
 /captures
 .externalNativeBuild
 .cxx
-local.properties
+**/.cxx
+
+# Xcode / iOS
+DerivedData/
+**/DerivedData/
+derivedData/
+**/derivedData/
+*.xcuserstate
+xcuserdata/
+**/xcuserdata/
 
 # Local release artifacts / staging folders (never commit)
 /app/production/
+**/app/production/
 
 # Local Kotlin/JS package manager state
 /kotlin-js-store/
+**/kotlin-js-store/
 
 # Local scratch/state folders
 /.tmp/
+**/.tmp/
+/.codex/
+**/.codex/
+/.kiro/
+**/.kiro/
 /.neteragen/
+**/.neteragen/
 
 # Generated mock outputs (do not commit)
 /core/mock/bin/

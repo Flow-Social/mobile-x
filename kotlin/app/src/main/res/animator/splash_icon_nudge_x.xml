@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<set xmlns:android="http://schemas.android.com/apk/res/android">
+    <objectAnimator
+        android:duration="100"
+        android:interpolator="@android:interpolator/fast_out_linear_in"
+        android:propertyName="translationX"
+        android:valueFrom="0"
+        android:valueTo="-1.6"
+        android:valueType="floatType" />
+    <objectAnimator
+        android:duration="160"
+        android:interpolator="@android:interpolator/linear_out_slow_in"
+        android:propertyName="translationX"
+        android:valueFrom="-1.6"
+        android:valueTo="1.2"
+        android:valueType="floatType" />
+    <objectAnimator
+        android:duration="120"
+        android:interpolator="@android:interpolator/fast_out_slow_in"
+        android:propertyName="translationX"
+        android:valueFrom="1.2"
+        android:valueTo="0"
+        android:valueType="floatType" />
+</set>
