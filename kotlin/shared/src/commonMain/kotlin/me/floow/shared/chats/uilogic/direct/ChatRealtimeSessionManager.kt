@@ -46,6 +46,26 @@ internal class ChatRealtimeSessionManager(
 	private val sessionsMutex = Mutex()
 	private val sessions = linkedMapOf<Long, ConversationSession>()
 
+	init {
+		scope.launch {
+			AppLifecycleBridge.isForeground.collectLatest { isForeground ->
+				if (!isForeground) {
+					closeAllActiveSessions()
+				}
+			}
+		}
+	}
+
+	private suspend fun closeAllActiveSessions() {
+		sessionsMutex.withLock {
+			sessions.values.forEach { session ->
+				val handle = session.activeHandle
+				session.activeHandle = null
+				handle?.let(transport::close)
+			}
+		}
+	}
+
 	override fun observeConversation(conversationId: Long, afterSeq: Long): Flow<ChatRealtimeEvent> = callbackFlow {
 		if (conversationId <= 0L) {
 			close()
@@ -235,10 +255,18 @@ internal class ChatRealtimeSessionManager(
 			}
 
 			session.activeHandle = handle
+			val lifecycleWatcher = scope.launch {
+				AppLifecycleBridge.isForeground.collectLatest { isForeground ->
+					if (!isForeground) {
+						transport.close(handle)
+					}
+				}
+			}
 			try {
 				val closedInfo = closedSignal.await()
 				_connectionState.value = closedInfo.toConnectionState()
 			} finally {
+				lifecycleWatcher.cancel()
 				session.activeHandle = null
 				transport.close(handle)
 			}

@@ -246,10 +246,18 @@ internal class PresenceRealtimeSessionManager(
 				activeTargets = emptySet()
 			}
 
+			val lifecycleWatcher = scope.launch {
+				AppLifecycleBridge.isForeground.collectLatest { isForeground ->
+					if (!isForeground) {
+						closeSession()
+					}
+				}
+			}
 			try {
 				val closedInfo = closedSignal.await()
 				_connectionState.value = closedInfo.toConnectionState()
 			} finally {
+				lifecycleWatcher.cancel()
 				closeSession()
 			}
 

@@ -6,6 +6,8 @@ import coil3.SingletonImageLoader
 import coil3.disk.DiskCache
 import coil3.memory.MemoryCache
 import coil3.network.ktor3.KtorNetworkFetcherFactory
+import kotlin.concurrent.atomics.AtomicInt
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import me.floow.app.FlowApp
 import me.floow.domain.lifecycle.AppLifecycleBridge
 import me.floow.shared.di.initKoin
@@ -20,11 +22,12 @@ import platform.UIKit.UIApplicationDidBecomeActiveNotification
 import platform.UIKit.UIApplicationDidEnterBackgroundNotification
 import platform.UIKit.UIViewController
 
-private var isIosLifecycleObserverRegistered = false
+@OptIn(ExperimentalAtomicApi::class)
+private val isIosLifecycleObserverRegistered = AtomicInt(0)
 
+@OptIn(ExperimentalAtomicApi::class)
 private fun registerIosLifecycleObservers() {
-    if (isIosLifecycleObserverRegistered) return
-    isIosLifecycleObserverRegistered = true
+    if (!isIosLifecycleObserverRegistered.compareAndSet(0, 1)) return
 
     val center = NSNotificationCenter.defaultCenter
     center.addObserverForName(

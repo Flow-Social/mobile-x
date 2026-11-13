@@ -3,16 +3,21 @@ package me.floow.api
 import io.ktor.client.plugins.websocket.webSocketSession
 import io.ktor.http.URLProtocol
 import io.ktor.http.Url
+import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
 import io.ktor.websocket.WebSocketSession
+import io.ktor.websocket.close
 import io.ktor.websocket.readText
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import me.floow.api.chats.booleanOrNullFlexible
@@ -141,26 +146,43 @@ class ChatsRealtimeApiImpl(
 
 			sessionRef.value = session
 			var receivedAnyEvent = false
-			try {
-				for (frame in session.incoming) {
-					if (frame !is Frame.Text) continue
-					val event = parseRealtimeEvent(frame.readText()) ?: continue
-					if (event.seq > nextAfterSeq) {
-						nextAfterSeq = event.seq
+			coroutineScope {
+				val lifecycleWatcher = launch {
+					AppLifecycleBridge.isForeground.collectLatest { isForeground ->
+						if (!isForeground) {
+							runCatching {
+								session.close(
+									CloseReason(
+										CloseReason.Codes.NORMAL,
+										"App in background"
+									)
+								)
+							}
+						}
 					}
-					receivedAnyEvent = true
-					emit(event)
 				}
-			} catch (throwable: Throwable) {
-				logger.d(
-					logScope,
-					"WebSocket stream error: ${throwable.message}"
-				)
-			} finally {
-				if (sessionRef.value === session) {
-					sessionRef.value = null
+				try {
+					for (frame in session.incoming) {
+						if (frame !is Frame.Text) continue
+						val event = parseRealtimeEvent(frame.readText()) ?: continue
+						if (event.seq > nextAfterSeq) {
+							nextAfterSeq = event.seq
+						}
+						receivedAnyEvent = true
+						emit(event)
+					}
+				} catch (throwable: Throwable) {
+					logger.d(
+						logScope,
+						"WebSocket stream error: ${throwable.message}"
+					)
+				} finally {
+					lifecycleWatcher.cancel()
+					if (sessionRef.value === session) {
+						sessionRef.value = null
+					}
+					runCatching { session.outgoing.close() }
 				}
-				runCatching { session.outgoing.close() }
 			}
 
 			if (!currentCoroutineContext().isActive) {

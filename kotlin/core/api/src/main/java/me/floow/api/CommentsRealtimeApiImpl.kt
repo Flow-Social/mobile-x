@@ -3,14 +3,19 @@ package me.floow.api
 import io.ktor.client.plugins.websocket.webSocketSession
 import io.ktor.http.URLProtocol
 import io.ktor.http.Url
+import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
+import io.ktor.websocket.close
 import io.ktor.websocket.readText
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
@@ -107,21 +112,38 @@ class CommentsRealtimeApiImpl(
 			}
 
 			var receivedAnyEvent = false
-			try {
-				for (frame in session.incoming) {
-					if (frame !is Frame.Text) continue
-					val event = parseCommentsRealtimeEvent(frame.readText()) ?: continue
-					nextAfterSeq = maxOf(nextAfterSeq, event.seq, event.maxSeq)
-					receivedAnyEvent = true
-					emit(event)
+			coroutineScope {
+				val lifecycleWatcher = launch {
+					AppLifecycleBridge.isForeground.collectLatest { isForeground ->
+						if (!isForeground) {
+							runCatching {
+								session.close(
+									CloseReason(
+										CloseReason.Codes.NORMAL,
+										"App in background"
+									)
+								)
+							}
+						}
+					}
 				}
-			} catch (throwable: Throwable) {
-				logger.d(
-					"CommentsRealtimeApiImpl.subscribePostComments",
-					"WebSocket stream error: ${throwable.message}"
-				)
-			} finally {
-				runCatching { session.outgoing.close() }
+				try {
+					for (frame in session.incoming) {
+						if (frame !is Frame.Text) continue
+						val event = parseCommentsRealtimeEvent(frame.readText()) ?: continue
+						nextAfterSeq = maxOf(nextAfterSeq, event.seq, event.maxSeq)
+						receivedAnyEvent = true
+						emit(event)
+					}
+				} catch (throwable: Throwable) {
+					logger.d(
+						"CommentsRealtimeApiImpl.subscribePostComments",
+						"WebSocket stream error: ${throwable.message}"
+					)
+				} finally {
+					lifecycleWatcher.cancel()
+					runCatching { session.outgoing.close() }
+				}
 			}
 
 			if (!currentCoroutineContext().isActive) {
