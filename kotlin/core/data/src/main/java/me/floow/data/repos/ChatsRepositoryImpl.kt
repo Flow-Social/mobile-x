@@ -53,6 +53,18 @@ import me.floow.data.util.platformFileExistsAndNotEmpty
 import me.floow.domain.utils.Logger
 import me.floow.domain.utils.currentTimeMillis
 
+/**
+ * Legacy Android/shared repository implementation of [ChatsRepository].
+ *
+ * ATTENTION:
+ * Registered in `SharedDataModule.kt` (`:shared`) and `dataModule.kt` (`:app`), and tested by idempotency tests.
+ * This class orchestrates caching, outbox, auto-download, and REST/realtime synchronization in the transitional KMP graph.
+ * DO NOT delete or rename this class without updating DI registrations across all modules and migrating to common KMP repositories.
+ */
+@Deprecated(
+	message = "Transitional legacy ChatsRepository implementation. Registered in SharedDataModule and dataModule. Do not delete until full migration to unified KMP direct chat repository.",
+	level = DeprecationLevel.WARNING
+)
 class ChatsRepositoryImpl(
 	private val logger: Logger,
 	private val chatsApi: ChatsApi,

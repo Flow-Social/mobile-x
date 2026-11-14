@@ -14,7 +14,6 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
@@ -176,6 +175,19 @@ private const val MAX_CHAT_CONVERSATIONS_LIMIT = 100
 private const val MAX_CHAT_MESSAGES_LIMIT = 100
 private const val MAX_CHAT_PINS_LIMIT = 50
 
+/**
+ * Legacy Android/shared implementation of [ChatsApi].
+ *
+ * ATTENTION:
+ * Registered in `SharedApiModule.kt` (`:shared`) and `apiModule.kt` (`:app`).
+ * This class serves as the transitional implementation for chat network calls in the current KMP graph.
+ * DO NOT delete or rename this class without migrating all dependency injection definitions and callers
+ * to the unified common KMP HTTP networking layer.
+ */
+@Deprecated(
+	message = "Transitional legacy ChatsApi implementation. Registered in SharedApiModule and apiModule. Do not delete until full migration to unified KMP client.",
+	level = DeprecationLevel.WARNING
+)
 class ChatsApiImpl(
 	config: ApiConfig,
 	private val logger: Logger,

@@ -109,9 +109,9 @@ class UploadsApiImpl(
 		onProgress: ((Float) -> Unit)?,
 	): Boolean {
 		val parsedContentType = if (contentType.isBlank() || contentType.equals(ContentType.Application.OctetStream.toString(), ignoreCase = true)) {
-			resolveMimeFromPath(filePath)
+			resolveMimeFromPath(uploadUrl)
 		} else {
-			runCatching { ContentType.parse(contentType) }.getOrElse { resolveMimeFromPath(filePath) }
+			runCatching { ContentType.parse(contentType) }.getOrElse { resolveMimeFromPath(uploadUrl) }
 		}
 
 		val maxAttempts = 3
@@ -161,9 +161,9 @@ class UploadsApiImpl(
 			return false
 		}
 		val parsedContentType = if (contentType.isBlank() || contentType.equals(ContentType.Application.OctetStream.toString(), ignoreCase = true)) {
-			resolveMimeFromPath(filePath)
+			resolveMimeFromPath(uploadUrl)
 		} else {
-			runCatching { ContentType.parse(contentType) }.getOrElse { resolveMimeFromPath(filePath) }
+			runCatching { ContentType.parse(contentType) }.getOrElse { resolveMimeFromPath(uploadUrl) }
 		}
 
 		val totalBytes = fileReader.length
