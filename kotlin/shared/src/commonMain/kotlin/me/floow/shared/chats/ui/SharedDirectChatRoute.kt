@@ -827,20 +827,23 @@ fun SharedDirectChatRoute(
 		)
 	}
 
-	var activePlayingCircleKey by remember { mutableStateOf<String?>(null) }
+	val activeVideoCircle by stateHolder.mediaController.activeVideoCircle.collectAsState()
 
 	val effectiveVideoCircleContent: @Composable (VideoCircleOutMessage, Boolean, () -> Unit) -> Unit = videoCircleContent ?: { message, isSelectionMode, onLongClick ->
 		val clientMessageId = message.clientMessageId
 		val circleTask = clientMessageId?.let { outboxTasks[it] }
 		val isUploading = message.uploadStatus == VideoCircleUploadStatus.Uploading || message.uploadStatus == VideoCircleUploadStatus.Pending
 		val isFailed = message.uploadStatus == VideoCircleUploadStatus.Failed
-		val isCurrentActive = activePlayingCircleKey == message.uiKey
-		val isPlaying = isCurrentActive && !isUploading && !isFailed
+		val playbackUiState = stateHolder.mediaController.resolveVideoCircleUiState(
+			uiKey = message.uiKey,
+			isUploading = isUploading,
+			isFailed = isFailed,
+		)
 		val flightKey = activeFlightState?.messageUiKey
 		val isThisMessageInFlight = (flightKey == message.uiKey || (clientMessageId != null && flightKey == "cmid_$clientMessageId")) && !isFlightLanded
 		val flightBubbleAlpha = if (isThisMessageInFlight) 0f else 1f
 		val bubbleSize by animateDpAsState(
-			targetValue = if (isPlaying) 252.dp else 228.dp,
+			targetValue = if (playbackUiState.isExpanded) 252.dp else 228.dp,
 			animationSpec = tween(durationMillis = 180),
 			label = "video_circle_bubble_size",
 		)
@@ -853,14 +856,20 @@ fun SharedDirectChatRoute(
 		) {
 			NativeVideoCirclePlayer(
 				videoUrl = message.playableSource.orEmpty(),
-				thumbnailUrl = message.remoteThumbnailUrl ?: message.thumbnailPath,
-				isPlaying = isPlaying,
+				thumbnailUrl = message.thumbnailPath ?: message.remoteThumbnailUrl,
+				playbackUiState = playbackUiState,
 				onClick = {
 					if (isSelectionMode) {
 						onLongClick()
 					} else {
-						activePlayingCircleKey = if (isCurrentActive) null else message.uiKey
+						stateHolder.mediaController.toggleVideoCircle(message.uiKey, message.id)
 					}
+				},
+				onSeek = { nextProg ->
+					stateHolder.mediaController.updateVideoCircleProgress(nextProg)
+				},
+				onPlaybackEnded = {
+					stateHolder.mediaController.clearActiveVideoCircle()
 				},
 				modifier = Modifier.fillMaxSize(),
 			)

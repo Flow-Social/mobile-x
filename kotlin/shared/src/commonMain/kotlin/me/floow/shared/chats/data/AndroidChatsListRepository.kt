@@ -5,9 +5,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import me.floow.domain.auth.AuthenticationManager
@@ -37,6 +39,14 @@ class AndroidChatsListRepository(
 	private val activityStore: ConversationActivityStore = ConversationActivityStore(),
 	private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) : ChatsListRepository {
+	private val conversationsFlow: StateFlow<List<DirectChatConversation>?> =
+		chatsRepository.observeConversations()
+			.stateIn(
+				scope = scope,
+				started = SharingStarted.Eagerly,
+				initialValue = null,
+			)
+
 	private val chats = MutableStateFlow<List<ChatListItemModel>?>(null)
 	private val pagingState = MutableStateFlow(ChatsPagingState())
 	private var latestConversations: List<DirectChatConversation> = emptyList()
@@ -52,8 +62,15 @@ class AndroidChatsListRepository(
 	private var hasMore = false
 
 	init {
+		conversationsFlow.value?.let { initialConversations ->
+			latestConversations = initialConversations
+			syncPresenceTargets(initialConversations)
+			syncTypingSubscriptions(initialConversations)
+			publishChats()
+		}
 		scope.launch {
-			chatsRepository.observeConversations().collectLatest { conversations ->
+			conversationsFlow.collectLatest { conversations ->
+				conversations ?: return@collectLatest
 				latestConversations = conversations
 				syncPresenceTargets(conversations)
 				syncTypingSubscriptions(conversations)

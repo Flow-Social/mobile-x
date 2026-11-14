@@ -32,7 +32,10 @@ interface VideoCirclePlaybackDriver {
 class VideoCirclePlayerManager(
     context: Context,
     cacheProvider: VideoCircleCacheProvider,
+    private val audioFocus: VideoCircleAudioFocus? = null,
 ) : VideoCirclePlaybackDriver {
+
+    var onPlaybackEnded: ((String) -> Unit)? = null
 
     private val appContext = context.applicationContext
     private val mediaSourceFactory = DefaultMediaSourceFactory(cacheProvider.dataSourceFactory())
@@ -59,6 +62,9 @@ class VideoCirclePlayerManager(
 
         player.repeatMode = if (request.userActivated) Player.REPEAT_MODE_OFF else Player.REPEAT_MODE_ALL
         player.volume = if (request.muted) 0f else 1f
+        if (!request.muted) {
+            audioFocus?.request()
+        }
         setPlaybackRateIfAvailable(player, if (request.muted) MutedAutoplaySpeed else 1f)
         player.playWhenReady = true
 
@@ -104,6 +110,7 @@ class VideoCirclePlayerManager(
     }
 
     override fun pause() {
+        audioFocus?.abandon()
         activePlayer?.playWhenReady = false
         _state.update {
             it.copy(
@@ -114,6 +121,7 @@ class VideoCirclePlayerManager(
     }
 
     override fun clear() {
+        audioFocus?.abandon()
         activePlayer?.playWhenReady = false
         activePlayer?.stop()
         preloadPlayer?.stop()
@@ -123,6 +131,7 @@ class VideoCirclePlayerManager(
     }
 
     override fun release() {
+        audioFocus?.abandon()
         activePlayer?.release()
         preloadPlayer?.release()
         activePlayer = null
@@ -168,8 +177,13 @@ class VideoCirclePlayerManager(
                                     }
                                     Player.STATE_IDLE -> VideoCirclePlaybackStatus.Idle
                                     Player.STATE_ENDED -> {
+                                        audioFocus?.abandon()
+                                        val endedUiKey = current.activeUiKey
                                         seekTo(0)
                                         playWhenReady = false
+                                        if (endedUiKey != null) {
+                                            onPlaybackEnded?.invoke(endedUiKey)
+                                        }
                                         return@update VideoCirclePlaybackState()
                                     }
                                     else -> current.status
