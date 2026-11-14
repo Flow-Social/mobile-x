@@ -15,11 +15,11 @@
    - База данных: PostgreSQL (`flow_db`, пользователь `flow_user`)
    - Кеш: Redis `127.0.0.1:6379`
    - Хранилище медиа: Cloud.ru S3 (`bucket-96aa19`, регион `ru-central-1`)
-2. **Flow Admin Web (Next.js 14)**:
+2. **Flow Admin Web (Next.js 14, репозиторий `Backend/adminpanel/`)**:
    - PM2 сервис: `flow-admin`
    - Локальный порт: `127.0.0.1:3000`
    - Публичный порт: `https://31.77.9.57.nip.io:8081/`
-   - Директория: `/var/www/flow-admin-web/`
+   - Директория на сервере: `/var/www/flow-admin-web/`
 3. **Соседний проект девушки (`prostranstvo`)**:
    - PM2 сервис: `prostranstvo`
    - Локальный порт: `127.0.0.1:5173`

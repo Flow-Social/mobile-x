@@ -9,7 +9,7 @@
 | Компонент | Путь | Стек | Роль |
 |---|---|---|---|
 | **Android Client** | `Mobile/` | Kotlin, Jetpack Compose, KMP (`commonMain`), Koin DI, Room, Ktor, Coil 3 | Основное мобильное приложение соцсети. |
-| **Admin Web** | `Backend/admin-web/` | Next.js 14 (React 18), TypeScript, Tailwind CSS, PM2 (`flow-admin`, port 3000) | Панель модерации и управления контентом. |
+| **Admin Web** | `Backend/adminpanel/` | Next.js 14 (React 18), TypeScript, Tailwind CSS, PM2 (`flow-admin`, port 3000) | Панель модерации и управления контентом. |
 
 ---
 
@@ -177,7 +177,7 @@
 
 ---
 
-## 5. Web Admin (`Backend/admin-web/`)
+## 5. Web Admin (`Backend/adminpanel/`)
 
 - **Размещение**: На сервере `31.77.9.57` в `/var/www/flow-admin-web/`.
 - **Запуск**: Процесс PM2 `flow-admin` на внутреннем порту `127.0.0.1:3000`.

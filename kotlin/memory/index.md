@@ -6,7 +6,7 @@
 |---|---|---|
 | [`architecture.md`](./architecture.md) | Сетевая топология, сервер `31.77.9.57`, Nginx, порты, базы данных, взаимодействие сервисов. | Задачи по инфраструктуре, сетевым ошибкам, API-хостам, деплою, Nginx. |
 | [`backend.md`](./backend.md) | Go бэкенд (`Backend/backend-go`): структура роутов, БД `flow_db`, Google OAuth, Rescue sync, JWT. | Задачи по серверной логике, изменению API, авторизации, миграциям. |
-| [`frontend.md`](./frontend.md) | Android (`Mobile/`) и Web Admin (`Backend/admin-web/`): архитектура, KMP, Compose 120 FPS, медиа-пайплайн. | Задачи по UI, экранам приложения, админке, фичам на клиенте. |
+| [`frontend.md`](./frontend.md) | Android (`Mobile/`) и Web Admin (`Backend/adminpanel/`): архитектура, KMP, Compose 120 FPS, медиа-пайплайн. | Задачи по UI, экранам приложения, админке, фичам на клиенте. |
 | [`testing.md`](./testing.md) | Команды сборки (`build_app.sh`, `deploy_backend.sh`), логи (`adb logcat`, `journalctl`), проверка API. | Запуск тестов, билды, отладка, снятие логов с девайса или сервера. |
 | [`decisions.md`](./decisions.md) | ADR (Архитектурные решения): почему нативный systemd/PM2 вместо Docker, почему Rescue Sync, почему nip.io. | Когда хочется что-то кардинально переделать или понять исторические причины. |
 | [`gotchas.md`](./gotchas.md) | **Грабли и красные флаги**: соседний проект `prostranstvo`, перезапись Nginx, Room кеш, SSL let's encrypt. | **ЧИТАТЬ ВСЕГДА** перед любыми изменениями Nginx, БД, миграций или сервера! |

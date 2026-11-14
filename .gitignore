@@ -53,6 +53,11 @@ xcuserdata/
 # Generated mock outputs (do not commit)
 /core/mock/bin/
 
+# Credentials & secrets
+*CREDENTIALS*.txt
+CREDENTIALS*
+docs/CREDENTIALS*.txt
+
 # Local planning notes
 /fix_circle.md
 /videocircle.md
