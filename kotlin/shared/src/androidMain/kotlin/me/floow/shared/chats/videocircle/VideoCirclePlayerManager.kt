@@ -50,13 +50,18 @@ class VideoCirclePlayerManager(
     override val player: ExoPlayer? get() = activePlayer
 
     override fun play(request: VideoCirclePlaybackRequest) {
+        if (request.source.isBlank()) return
         val player = ensureActivePlayer()
         val sourceChanged = activePreparedSource != request.source
         if (sourceChanged) {
             player.setMediaItem(MediaItem.fromUri(request.source.toMediaUri()))
             activePreparedSource = request.source
-        }
-        if (sourceChanged || player.playbackState == Player.STATE_IDLE) {
+            player.seekTo(0L)
+            player.prepare()
+        } else if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
+            if (player.playbackState == Player.STATE_ENDED) {
+                player.seekTo(0L)
+            }
             player.prepare()
         }
 

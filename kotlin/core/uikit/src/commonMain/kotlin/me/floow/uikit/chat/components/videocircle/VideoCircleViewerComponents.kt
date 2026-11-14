@@ -253,128 +253,57 @@ fun Modifier.videoCircleSeekGesture(
     onTogglePlayback: () -> Unit,
     onLongPress: () -> Unit,
     onSeekProgress: (Float) -> Unit,
-): Modifier = pointerInput(isProgressVisible, isPaused, consumeTapUp) {
-    awaitEachGesture {
-        val down = awaitFirstDown(
-            requireUnconsumed = false,
-            pass = PointerEventPass.Initial,
-        )
+): Modifier {
+    if (!isProgressVisible) return this
 
-        if (!isProgressVisible) {
-            awaitVideoCircleTapOrLongPress(
-                down = down,
-                consumeTapUp = consumeTapUp,
-                onTap = onTogglePlayback,
-                onLongPress = onLongPress,
+    return pointerInput(isProgressVisible, isPaused, progress) {
+        awaitEachGesture {
+            val down = awaitFirstDown(
+                requireUnconsumed = false,
+                pass = PointerEventPass.Main,
             )
-            return@awaitEachGesture
-        }
 
-        val startedOnKnob = isSeekKnobTouch(
-            position = down.position,
-            size = size,
-            progress = progress,
-            density = this@pointerInput.density,
-            isPaused = isPaused,
-        )
-        val startedOnRing = !startedOnKnob && isSeekRingTouch(
-            position = down.position,
-            size = size,
-            density = this@pointerInput.density,
-            isPaused = isPaused,
-        )
-
-        if (!startedOnKnob && !startedOnRing) {
-            awaitVideoCircleTapOrLongPress(
-                down = down,
-                consumeTapUp = consumeTapUp,
-                onTap = onTogglePlayback,
-                onLongPress = onLongPress,
+            val startedOnKnob = isSeekKnobTouch(
+                position = down.position,
+                size = size,
+                progress = progress,
+                density = this@pointerInput.density,
+                isPaused = isPaused,
             )
-            return@awaitEachGesture
-        }
+            val startedOnRing = !startedOnKnob && isSeekRingTouch(
+                position = down.position,
+                size = size,
+                density = this@pointerInput.density,
+                isPaused = isPaused,
+            )
 
-        var seekStarted = false
-        down.consume()
-        onSeekingChange(true)
-        try {
-            if (startedOnRing) {
-                seekStarted = true
-                val nextProgress = progressFromTouch(down.position, size)
-                onSeekProgress(nextProgress)
+            if (!startedOnKnob && !startedOnRing) {
+                // Touch landed inside circle, not on seek ring/knob.
+                // Do not consume down so that standard parent clickable can trigger play/pause.
+                return@awaitEachGesture
             }
 
-            while (true) {
-                val event = awaitPointerEvent(pass = PointerEventPass.Initial)
-                val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                if (!change.pressed) break
-
-                val dragDistance = hypot(
-                    change.position.x - down.position.x,
-                    change.position.y - down.position.y,
-                )
-                if (startedOnKnob && !seekStarted && dragDistance > viewConfiguration.touchSlop) {
-                    seekStarted = true
-                }
-                if (startedOnKnob && seekStarted) {
-                    change.consume()
-                    val nextProgress = progressFromTouch(change.position, size)
+            // Strictly touching seek ring or knob -> consume down to lock gesture
+            down.consume()
+            onSeekingChange(true)
+            try {
+                if (startedOnRing) {
+                    val nextProgress = progressFromTouch(down.position, size)
                     onSeekProgress(nextProgress)
-                } else if (startedOnRing) {
+                }
+
+                while (true) {
+                    val event = awaitPointerEvent(pass = PointerEventPass.Main)
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                    if (!change.pressed) break
+
                     change.consume()
                     val nextProgress = progressFromTouch(change.position, size)
                     onSeekProgress(nextProgress)
                 }
-            }
-        } finally {
-            onSeekingChange(false)
-        }
-    }
-}
-
-private suspend fun AwaitPointerEventScope.awaitVideoCircleTapOrLongPress(
-    down: PointerInputChange,
-    consumeTapUp: Boolean = true,
-    onTap: () -> Unit,
-    onLongPress: () -> Unit,
-) {
-    var upChange: PointerInputChange? = null
-    val completedBeforeLongPress = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
-        while (true) {
-            val event = awaitPointerEvent(pass = PointerEventPass.Initial)
-            val change = event.changes.firstOrNull { it.id == down.id }
-                ?: return@withTimeoutOrNull false
-            if (!change.pressed) {
-                upChange = change
-                return@withTimeoutOrNull true
-            }
-
-            val dragDistance = hypot(
-                change.position.x - down.position.x,
-                change.position.y - down.position.y,
-            )
-            if (dragDistance > viewConfiguration.touchSlop) {
-                return@withTimeoutOrNull false
+            } finally {
+                onSeekingChange(false)
             }
         }
-    }
-
-    when (completedBeforeLongPress) {
-        null -> {
-            onLongPress()
-            while (true) {
-                val event = awaitPointerEvent(pass = PointerEventPass.Initial)
-                val change = event.changes.firstOrNull { it.id == down.id } ?: return
-                change.consume()
-                if (!change.pressed) return
-            }
-        }
-        true -> {
-            if (consumeTapUp) {
-                upChange?.consume()
-            }
-            onTap()
-        }
-        false -> Unit
     }
 }

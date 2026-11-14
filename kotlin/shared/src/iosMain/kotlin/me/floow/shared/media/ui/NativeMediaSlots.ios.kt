@@ -8,6 +8,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
@@ -198,7 +199,16 @@ actual fun NativeVideoCirclePlayer(
     Box(
         modifier = modifier
             .clip(CircleShape)
-            .background(Color.Black),
+            .background(Color.Black)
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onClick,
+                    )
+                } else Modifier
+            ),
         contentAlignment = Alignment.Center
     ) {
         if (!thumbnailUrl.isNullOrBlank()) {
@@ -282,34 +292,32 @@ actual fun NativeVideoCirclePlayer(
         )
 
         // Telegram-grade circular seek & tap gesture overlay
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .then(
-                    if (onClick != null) {
-                        Modifier.videoCircleSeekGesture(
-                            isProgressVisible = isProgressVisible,
-                            isPaused = isPaused,
-                            progress = progress.floatValue,
-                            onSeekingChange = {},
-                            consumeTapUp = true,
-                            onTogglePlayback = onClick,
-                            onLongPress = {},
-                            onSeekProgress = { nextProg ->
-                                activePlayer?.let { p ->
-                                    val currentItem = p.currentItem ?: return@let
-                                    val duration = runCatching { platform.CoreMedia.CMTimeGetSeconds(currentItem.duration) }.getOrDefault(0.0)
-                                    if (duration > 0.0) {
-                                        val targetSeconds = duration * nextProg.toDouble()
-                                        val targetTime = platform.CoreMedia.CMTimeMakeWithSeconds(targetSeconds, 1000)
-                                        p.seekToTime(targetTime)
-                                    }
+        if (isProgressVisible && onClick != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .videoCircleSeekGesture(
+                        isProgressVisible = isProgressVisible,
+                        isPaused = isPaused,
+                        progress = progress.floatValue,
+                        onSeekingChange = {},
+                        consumeTapUp = true,
+                        onTogglePlayback = onClick,
+                        onLongPress = {},
+                        onSeekProgress = { nextProg ->
+                            activePlayer?.let { p ->
+                                val currentItem = p.currentItem ?: return@let
+                                val duration = runCatching { platform.CoreMedia.CMTimeGetSeconds(currentItem.duration) }.getOrDefault(0.0)
+                                if (duration > 0.0) {
+                                    val targetSeconds = duration * nextProg.toDouble()
+                                    val targetTime = platform.CoreMedia.CMTimeMakeWithSeconds(targetSeconds, 1000)
+                                    p.seekToTime(targetTime)
                                 }
-                                onSeek?.invoke(nextProg)
-                            },
-                        )
-                    } else Modifier
-                )
-        )
+                            }
+                            onSeek?.invoke(nextProg)
+                        },
+                    )
+            )
+        }
     }
 }

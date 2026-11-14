@@ -11,6 +11,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
@@ -124,20 +126,12 @@ actual fun NativeVideoCirclePlayer(
         }
     }
 
+    var isFirstFrameRendered by remember(videoUrl) { mutableStateOf(false) }
+
     LaunchedEffect(playbackUiState, videoUrl) {
         when (playbackUiState) {
             VideoCirclePlaybackUiState.ActivePlaying -> {
-                if (managerState.activeSource != videoUrl) {
-                    manager.play(
-                        VideoCirclePlaybackRequest(
-                            uiKey = videoUrl,
-                            messageId = 0L,
-                            source = videoUrl,
-                            muted = false,
-                            userActivated = true,
-                        )
-                    )
-                } else if (managerState.status == VideoCirclePlaybackStatus.Paused) {
+                if (videoUrl.isNotBlank()) {
                     manager.play(
                         VideoCirclePlaybackRequest(
                             uiKey = videoUrl,
@@ -156,6 +150,7 @@ actual fun NativeVideoCirclePlayer(
             }
             VideoCirclePlaybackUiState.IdlePreview,
             VideoCirclePlaybackUiState.Uploading -> {
+                isFirstFrameRendered = false
                 if (managerState.activeSource == videoUrl && managerState.isUserActivated) {
                     manager.pause()
                 }
@@ -163,12 +158,11 @@ actual fun NativeVideoCirclePlayer(
         }
     }
 
-    val isCurrentActivePlayer = manager.player != null &&
+    val isCurrentActive = (playbackUiState == VideoCirclePlaybackUiState.ActivePlaying ||
+        playbackUiState == VideoCirclePlaybackUiState.ActivePaused) &&
+        videoUrl.isNotBlank() &&
         managerState.activeSource == videoUrl &&
-        !isSourceError &&
-        (playbackUiState == VideoCirclePlaybackUiState.ActivePlaying ||
-            playbackUiState == VideoCirclePlaybackUiState.ActivePaused ||
-            (!managerState.isUserActivated && managerState.activeSource == videoUrl))
+        !isSourceError
 
     val progress = remember { mutableFloatStateOf(0f) }
     var isSeeking by remember { mutableStateOf(false) }
@@ -199,9 +193,9 @@ actual fun NativeVideoCirclePlayer(
         pauseProgress
     }
 
-    LaunchedEffect(isCurrentActivePlayer, playbackUiState, isSeeking) {
+    LaunchedEffect(isCurrentActive, playbackUiState, isSeeking) {
         val currentPlayer = manager.player ?: return@LaunchedEffect
-        if (!isCurrentActivePlayer) return@LaunchedEffect
+        if (!isCurrentActive) return@LaunchedEffect
         while (true) {
             if (!isSeeking) {
                 val duration = currentPlayer.duration.takeIf { it > 0L } ?: 0L
@@ -225,22 +219,36 @@ actual fun NativeVideoCirclePlayer(
             withContext(Dispatchers.IO) {
                 runCatching {
                     val retriever = MediaMetadataRetriever()
-                    val cleanPath = when {
-                        videoUrl.startsWith("file://") -> videoUrl.removePrefix("file://")
-                        else -> videoUrl
-                    }
-                    if (cleanPath.startsWith("/")) {
-                        retriever.setDataSource(cleanPath)
-                    } else if (videoUrl.startsWith("http://") || videoUrl.startsWith("https://")) {
-                        retriever.setDataSource(videoUrl, emptyMap())
-                    }
-                    val bmp = retriever.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
-                    retriever.release()
-                    bmp?.asImageBitmap()?.let { imgBmp ->
-                        storeCachedThumbnail(videoUrl, imgBmp)
-                        withContext(Dispatchers.Main) {
-                            localThumbnailBitmap = imgBmp
+                    try {
+                        when {
+                            videoUrl.startsWith("content://") -> {
+                                retriever.setDataSource(context, android.net.Uri.parse(videoUrl))
+                            }
+                            videoUrl.startsWith("file://") -> {
+                                val path = android.net.Uri.parse(videoUrl).path ?: videoUrl.removePrefix("file://")
+                                retriever.setDataSource(path)
+                            }
+                            videoUrl.startsWith("/") -> {
+                                retriever.setDataSource(videoUrl)
+                            }
+                            videoUrl.startsWith("http://") || videoUrl.startsWith("https://") -> {
+                                retriever.setDataSource(videoUrl, HashMap<String, String>())
+                            }
+                            else -> {
+                                retriever.setDataSource(videoUrl)
+                            }
                         }
+                        val bmp = retriever.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                            ?: retriever.frameAtTime
+                        if (bmp != null) {
+                            val imgBmp = bmp.asImageBitmap()
+                            storeCachedThumbnail(videoUrl, imgBmp)
+                            withContext(Dispatchers.Main) {
+                                localThumbnailBitmap = imgBmp
+                            }
+                        }
+                    } finally {
+                        runCatching { retriever.release() }
                     }
                 }
             }
@@ -250,39 +258,52 @@ actual fun NativeVideoCirclePlayer(
     Box(
         modifier = modifier
             .clip(CircleShape)
-            .background(Color.Black),
+            .background(Color.Black)
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onClick,
+                    )
+                } else Modifier
+            ),
         contentAlignment = Alignment.Center,
     ) {
-        // Thumbnail placeholder (from remote URL or local path)
-        if (!thumbnailUrl.isNullOrBlank()) {
-            val isMicro = remember(thumbnailUrl) { thumbnailUrl.startsWith("data:image/") }
-            val thumbMod = if (isMicro) {
-                Modifier.fillMaxSize().blur(16.dp)
-            } else {
-                Modifier.fillMaxSize()
-            }
-            AsyncImage(
-                model = thumbnailUrl,
-                contentDescription = "Video Thumbnail",
-                contentScale = ContentScale.Crop,
-                modifier = thumbMod,
-            )
-        } else if (localThumbnailBitmap != null) {
-            Image(
-                bitmap = localThumbnailBitmap!!,
-                contentDescription = "Video Thumbnail",
-                contentScale = ContentScale.Crop,
+        // Hardware-accelerated ExoPlayer video playback via CircleVideoSurface (rendered underneath)
+        if (isCurrentActive && manager.player != null) {
+            CircleVideoSurface(
+                player = manager.player!!,
+                onSourceError = { isSourceError = true },
+                onRenderedFirstFrame = { isFirstFrameRendered = true },
                 modifier = Modifier.fillMaxSize(),
             )
         }
 
-        // Hardware-accelerated ExoPlayer video playback via CircleVideoSurface
-        if (isCurrentActivePlayer && manager.player != null) {
-            CircleVideoSurface(
-                player = manager.player!!,
-                onSourceError = { isSourceError = true },
-                modifier = Modifier.fillMaxSize(),
-            )
+        // Thumbnail placeholder (rendered on top of video surface until first frame is actually decoded and rendered)
+        val showThumbnail = !isCurrentActive || !isFirstFrameRendered
+        if (showThumbnail) {
+            if (!thumbnailUrl.isNullOrBlank()) {
+                val isMicro = remember(thumbnailUrl) { thumbnailUrl.startsWith("data:image/") }
+                val thumbMod = if (isMicro) {
+                    Modifier.fillMaxSize().blur(16.dp)
+                } else {
+                    Modifier.fillMaxSize()
+                }
+                AsyncImage(
+                    model = thumbnailUrl,
+                    contentDescription = "Video Thumbnail",
+                    contentScale = ContentScale.Crop,
+                    modifier = thumbMod,
+                )
+            } else if (localThumbnailBitmap != null) {
+                Image(
+                    bitmap = localThumbnailBitmap!!,
+                    contentDescription = "Video Thumbnail",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
 
         // Telegram-grade circular progress ring with pause overshoot knob
@@ -298,30 +319,28 @@ actual fun NativeVideoCirclePlayer(
 
         // Pulsing equalizer when playing
         VideoCirclePlayingEqualizer(
-            visible = isPlaying,
+            visible = isPlaying && isFirstFrameRendered,
         )
 
-        // Telegram-grade circular seek & tap gesture overlay
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .then(
-                    if (onClick != null) {
-                        Modifier.videoCircleSeekGesture(
-                            isProgressVisible = isProgressVisible,
-                            isPaused = isPaused,
-                            progress = progress.floatValue,
-                            onSeekingChange = { isSeeking = it },
-                            consumeTapUp = true,
-                            onTogglePlayback = onClick,
-                            onLongPress = {},
-                            onSeekProgress = { nextProg: Float ->
-                                manager.seekToProgress(nextProg)
-                                onSeek?.invoke(nextProg)
-                            },
-                        )
-                    } else Modifier
-                )
-        )
+        // Telegram-grade circular seek overlay (active only when progress is visible)
+        if (isProgressVisible && onClick != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .videoCircleSeekGesture(
+                        isProgressVisible = isProgressVisible,
+                        isPaused = isPaused,
+                        progress = progress.floatValue,
+                        onSeekingChange = { isSeeking = it },
+                        consumeTapUp = true,
+                        onTogglePlayback = onClick,
+                        onLongPress = {},
+                        onSeekProgress = { nextProg: Float ->
+                            manager.seekToProgress(nextProg)
+                            onSeek?.invoke(nextProg)
+                        },
+                    )
+            )
+        }
     }
 }

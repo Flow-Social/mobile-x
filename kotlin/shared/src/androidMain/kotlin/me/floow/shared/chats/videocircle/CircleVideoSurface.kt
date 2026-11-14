@@ -21,12 +21,17 @@ import androidx.media3.exoplayer.ExoPlayer
 fun CircleVideoSurface(
     player: ExoPlayer,
     onSourceError: () -> Unit = {},
+    onRenderedFirstFrame: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var textureViewRef by remember { mutableStateOf<TextureView?>(null) }
 
-    val listener = remember(player, onSourceError) {
+    val listener = remember(player, onSourceError, onRenderedFirstFrame) {
         object : Player.Listener {
+            override fun onRenderedFirstFrame() {
+                onRenderedFirstFrame()
+            }
+
             override fun onVideoSizeChanged(videoSize: VideoSize) {
                 val tv = textureViewRef ?: return
                 if (videoSize.width > 0 && videoSize.height > 0) {
@@ -40,7 +45,7 @@ fun CircleVideoSurface(
         }
     }
 
-    DisposableEffect(player) {
+    DisposableEffect(player, listener) {
         player.addListener(listener)
         onDispose {
             player.removeListener(listener)
@@ -72,14 +77,24 @@ fun CircleVideoSurface(
         },
         modifier = modifier,
         update = { tv ->
+            textureViewRef = tv
+            player.setVideoTextureView(tv)
             val size = player.videoSize
             if (size.width > 0 && size.height > 0) {
                 applyCenterCrop(tv, size)
             }
         },
-        onReset = {},
+        onReset = { tv ->
+            player.clearVideoTextureView(tv)
+            if (textureViewRef === tv) {
+                textureViewRef = null
+            }
+        },
         onRelease = { tv ->
             player.clearVideoTextureView(tv)
+            if (textureViewRef === tv) {
+                textureViewRef = null
+            }
         },
     )
 }
