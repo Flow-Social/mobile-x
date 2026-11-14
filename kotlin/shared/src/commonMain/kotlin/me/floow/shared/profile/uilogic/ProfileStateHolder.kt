@@ -24,18 +24,76 @@ class ProfileStateHolder(
     private companion object {
         const val POSTS_PAGE_SIZE = 20
         private const val REMOTE_REVALIDATE_TTL_MS = 60_000L
+        const val SELF_USER_ID = "me"
+        const val SELF_USER_ALIAS = "self"
     }
 
-    private val _state = MutableStateFlow(initialState)
+    private val isSelf = userId.isNullOrBlank() || userId == SELF_USER_ID || userId == SELF_USER_ALIAS
+
+    private val _state = MutableStateFlow(resolveInitialState(initialState))
     val state: StateFlow<ProfileScreenState> = _state.asStateFlow()
 
-    private var didLoad = initialState is ProfileScreenState.Success
+    private var didLoad = _state.value is ProfileScreenState.Success && !(_state.value as ProfileScreenState.Success).arePostsLoading
     private var isLoading = false
-    private var nextOffset = (initialState as? ProfileScreenState.Success)?.posts?.size ?: 0
+    private var nextOffset = (_state.value as? ProfileScreenState.Success)?.posts?.size ?: 0
     private var lastRemoteRefreshAtMs = 0L
 
+    private fun resolveInitialState(passedInitial: ProfileScreenState): ProfileScreenState {
+        if (passedInitial !is ProfileScreenState.Loading) {
+            return passedInitial
+        }
+        if (isSelf) {
+            val hotSelf = repository.observeSelfProfile().value
+            if (hotSelf != null) {
+                return hotSelf.toUiState(
+                    arePostsLoading = false,
+                    arePostsError = hotSelf.arePostsError,
+                    isLoadingMorePosts = false,
+                )
+            }
+        } else {
+            val seed = userId?.let { repository.getHeaderSeed(it) }
+            if (seed != null) {
+                return ProfileScreenState.Success(
+                    id = seed.userId,
+                    shortUsername = seed.username,
+                    avatarUri = seed.avatarUrl,
+                    avatarThumb = null,
+                    backgroundUri = null,
+                    backgroundThumb = null,
+                    displayName = seed.displayName,
+                    description = null,
+                    totalLikesReceived = 0,
+                    isSelf = false,
+                    isOnline = false,
+                    lastSeenAtMillis = null,
+                    posts = emptyList(),
+                    arePostsLoading = true,
+                    arePostsError = false,
+                    canLoadMorePosts = false,
+                    isLoadingMorePosts = false,
+                )
+            }
+        }
+        return passedInitial
+    }
+
     init {
-        if (userId.isNullOrBlank() || userId == "me" || userId == "self") {
+        if (isSelf) {
+            scope.launch {
+                repository.observeSelfProfile().collectLatest { payload ->
+                    payload ?: return@collectLatest
+                    val current = _state.value
+                    if (current !is ProfileScreenState.Success || current.isSelf) {
+                        didLoad = true
+                        _state.value = payload.toUiState(
+                            arePostsLoading = false,
+                            arePostsError = payload.arePostsError,
+                            isLoadingMorePosts = false,
+                        )
+                    }
+                }
+            }
             scope.launch {
                 repository.observeSelfPosts().collectLatest { posts ->
                     val current = _state.value as? ProfileScreenState.Success ?: return@collectLatest
@@ -61,6 +119,7 @@ class ProfileStateHolder(
                     }
             }
         }
+        loadIfNeeded()
     }
 
     fun loadIfNeeded() {
@@ -86,7 +145,7 @@ class ProfileStateHolder(
                     arePostsError = cachedInitial.arePostsError,
                     isLoadingMorePosts = false,
                 )
-            } else if (!didLoad) {
+            } else if (!didLoad && _state.value !is ProfileScreenState.Success) {
                 _state.value = ProfileScreenState.Loading
             }
 

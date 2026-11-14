@@ -1,9 +1,16 @@
 package me.floow.shared.profile.uilogic
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
+import me.floow.shared.chats.uilogic.ChatsListRepository
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import me.floow.domain.cache.PendingPostMutation
@@ -46,8 +53,78 @@ class AndroidProfileRepository(
     private val pendingPostsSyncScheduler: PendingPostsSyncScheduler,
     private val usersApi: me.floow.domain.api.UsersApi,
     private val mediaOutboxEngine: MediaOutboxEngine? = null,
+    private val chatsListRepository: ChatsListRepository? = null,
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) : ProfileRepository {
     private val json = Json { ignoreUnknownKeys = true; coerceInputValues = true; encodeDefaults = true }
+    private val headerSeeds = mutableMapOf<String, ProfileHeaderSeed>()
+
+    private val selfProfileState: StateFlow<ProfilePayload?> =
+        combine(
+            profileLocalStore.observeProfile(SELF_USER_ID),
+            observeSelfPosts(),
+        ) { cachedProfile, selfPosts ->
+            if (cachedProfile == null && selfPosts.isEmpty()) {
+                null
+            } else {
+                ProfilePayload(
+                    id = cachedProfile?.id ?: SELF_USER_ID,
+                    shortUsername = cachedProfile?.username?.value,
+                    avatarUrl = cachedProfile?.avatarUrl,
+                    avatarThumb = cachedProfile?.avatarThumb,
+                    backgroundUrl = cachedProfile?.backgroundUrl,
+                    backgroundThumb = cachedProfile?.backgroundThumb,
+                    displayName = cachedProfile?.name?.value,
+                    description = cachedProfile?.description?.value,
+                    totalLikesReceived = cachedProfile?.totalLikesReceived ?: 0,
+                    isSelf = true,
+                    isOnline = true,
+                    lastSeenAtMillis = null,
+                    posts = selfPosts.take(MAX_CACHED_POSTS),
+                    arePostsError = false,
+                    canLoadMorePosts = selfPosts.size >= POSTS_PAGE_SIZE,
+                )
+            }
+        }.stateIn(
+            scope = scope,
+            started = SharingStarted.Eagerly,
+            initialValue = null,
+        )
+
+    override fun observeSelfProfile(): StateFlow<ProfilePayload?> = selfProfileState
+
+    override fun putHeaderSeed(seed: ProfileHeaderSeed) {
+        val uid = seed.userId.trim()
+        if (uid.isEmpty()) return
+        headerSeeds[uid] = seed
+        seed.username?.trim()?.takeIf { it.isNotEmpty() }?.let { uname ->
+            headerSeeds[uname] = seed
+            usernameToIdCache.put(uname, uid)
+        }
+    }
+
+    override fun getHeaderSeed(userId: String): ProfileHeaderSeed? {
+        val normalized = userId.trim()
+        if (normalized.isEmpty() || normalized == SELF_USER_ID || normalized == SELF_USER_ALIAS) return null
+        headerSeeds[normalized]?.let { return it }
+        val resolvedId = usernameToIdCache.getUserId(normalized)
+        if (resolvedId != null) {
+            headerSeeds[resolvedId]?.let { return it }
+        }
+        chatsListRepository?.observeChats()?.value?.firstOrNull { chat ->
+            chat.peerUserId == normalized || (resolvedId != null && chat.peerUserId == resolvedId)
+        }?.let { chat ->
+            val seed = ProfileHeaderSeed(
+                userId = chat.peerUserId ?: normalized,
+                displayName = chat.title,
+                username = null,
+                avatarUrl = chat.avatarUrl,
+            )
+            headerSeeds[seed.userId] = seed
+            return seed
+        }
+        return null
+    }
 
     override fun observeSelfPosts(): Flow<List<ProfilePost>> {
         return combine(

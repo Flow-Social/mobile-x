@@ -3,6 +3,7 @@ package me.floow.shared.profile.uilogic
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import me.floow.domain.models.UserPresence
@@ -283,6 +284,89 @@ class ProfileStateHolderTest {
         val state = assertIs<ProfileScreenState.Success>(holder.state.value)
         assertEquals("Fresh bio 1", state.description)
         assertEquals(1, remoteLoads)
+        coroutineContext.cancelChildren()
+    }
+
+    @Test
+    fun `self profile state is initialized synchronously from hot snapshot`() = runTest {
+        val hotPayload = ProfilePayload(
+            id = "self-user-id",
+            shortUsername = "selfuser",
+            avatarUrl = "https://example.com/avatar.jpg",
+            backgroundUrl = null,
+            displayName = "Self User",
+            description = "My hot bio",
+            totalLikesReceived = 42,
+            isSelf = true,
+            isOnline = true,
+            lastSeenAtMillis = null,
+            posts = emptyList(),
+            arePostsError = false,
+            canLoadMorePosts = false,
+        )
+        val holder = ProfileStateHolder(
+            repository = object : ProfileRepository {
+                override fun observeSelfProfile() = MutableStateFlow<ProfilePayload?>(hotPayload)
+                override suspend fun getProfile(userId: String?): ProfilePayload = hotPayload
+                override suspend fun getMorePosts(userId: String?, offset: Int, limit: Int): List<ProfilePost> = emptyList()
+                override suspend fun deletePost(postId: String): Result<Unit> = Result.success(Unit)
+            },
+            userId = null,
+            scope = this,
+        )
+
+        // Immediately without advanceUntilIdle:
+        val immediateState = assertIs<ProfileScreenState.Success>(holder.state.value)
+        assertEquals("self-user-id", immediateState.id)
+        assertEquals("Self User", immediateState.displayName)
+        assertTrue(immediateState.isSelf)
+        assertFalse(immediateState.arePostsLoading)
+        coroutineContext.cancelChildren()
+    }
+
+    @Test
+    fun `foreign profile state is initialized synchronously from header seed`() = runTest {
+        val seed = ProfileHeaderSeed(
+            userId = "bob-id",
+            displayName = "Bob",
+            username = "bob123",
+            avatarUrl = "https://example.com/bob.jpg",
+        )
+        val holder = ProfileStateHolder(
+            repository = object : ProfileRepository {
+                override fun getHeaderSeed(userId: String): ProfileHeaderSeed? = if (userId == "bob-id") seed else null
+                override suspend fun getProfile(userId: String?): ProfilePayload {
+                    return ProfilePayload(
+                        id = "bob-id",
+                        shortUsername = "bob123",
+                        avatarUrl = "https://example.com/bob.jpg",
+                        backgroundUrl = null,
+                        displayName = "Bob",
+                        description = "Full bio",
+                        totalLikesReceived = 10,
+                        isSelf = false,
+                        isOnline = true,
+                        lastSeenAtMillis = null,
+                        posts = emptyList(),
+                        arePostsError = false,
+                        canLoadMorePosts = false,
+                    )
+                }
+                override suspend fun getMorePosts(userId: String?, offset: Int, limit: Int): List<ProfilePost> = emptyList()
+                override suspend fun deletePost(postId: String): Result<Unit> = Result.success(Unit)
+            },
+            userId = "bob-id",
+            scope = this,
+        )
+
+        // Immediately without waiting for network:
+        val immediateState = assertIs<ProfileScreenState.Success>(holder.state.value)
+        assertEquals("bob-id", immediateState.id)
+        assertEquals("Bob", immediateState.displayName)
+        assertEquals("bob123", immediateState.shortUsername)
+        assertEquals("https://example.com/bob.jpg", immediateState.avatarUri)
+        assertTrue(immediateState.arePostsLoading) // Header is rendered, posts section is loading
+        assertFalse(immediateState.isSelf)
         coroutineContext.cancelChildren()
     }
 }

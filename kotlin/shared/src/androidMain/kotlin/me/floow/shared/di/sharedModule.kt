@@ -47,6 +47,7 @@ val sharedModule = module {
 			pendingPostsSyncScheduler = get(),
 			usersApi = get(),
 			mediaOutboxEngine = getOrNull(),
+			chatsListRepository = getOrNull(),
 		)
 	}
 

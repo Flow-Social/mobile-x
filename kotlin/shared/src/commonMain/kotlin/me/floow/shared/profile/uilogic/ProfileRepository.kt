@@ -1,7 +1,16 @@
 package me.floow.shared.profile.uilogic
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.emptyFlow
+
+data class ProfileHeaderSeed(
+    val userId: String,
+    val displayName: String?,
+    val username: String?,
+    val avatarUrl: String?,
+)
 
 interface ProfileRepository {
     suspend fun getProfile(userId: String?): ProfilePayload
@@ -19,6 +28,12 @@ interface ProfileRepository {
     suspend fun retryPendingPost(postId: String): Result<Unit> = Result.failure(UnsupportedOperationException())
 
     fun observeSelfPosts(): Flow<List<ProfilePost>> = emptyFlow()
+
+    fun observeSelfProfile(): StateFlow<ProfilePayload?> = MutableStateFlow(null)
+
+    fun putHeaderSeed(seed: ProfileHeaderSeed) {}
+
+    fun getHeaderSeed(userId: String): ProfileHeaderSeed? = null
 }
 
 data class ProfilePayload(

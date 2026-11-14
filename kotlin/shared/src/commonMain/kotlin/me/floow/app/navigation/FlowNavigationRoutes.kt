@@ -74,7 +74,10 @@ sealed interface FlowSubscreen {
         val peerAvatarUrl: String? = null,
         val isSavedMessages: Boolean = false,
     ) : FlowSubscreen
-    data class Profile(val userId: String = "self") : FlowSubscreen
+    data class Profile(
+        val userId: String = "self",
+        val headerSeed: me.floow.shared.profile.uilogic.ProfileHeaderSeed? = null,
+    ) : FlowSubscreen
     data class Comments(val postId: String) : FlowSubscreen
     data class PostDetail(
         val postId: String,
