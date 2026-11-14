@@ -14,13 +14,26 @@ class ChatsListStateHolder(
 	private val repository: ChatsListRepository,
 	private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) {
-	private val _state = MutableStateFlow<ChatsScreenState>(ChatsScreenState.Loading)
-	val state: StateFlow<ChatsScreenState> = _state.asStateFlow()
-
-	private var hasLocalData = false
+	private val initialChats = repository.observeChats().value
+	private val initialPaging = repository.observePagingState().value
+	private var hasLocalData = initialChats != null
 	private var didNetworkRefresh = false
 	private var isLoading = false
 	private var isLoadingMore = false
+
+	private val _state = MutableStateFlow<ChatsScreenState>(
+		when {
+			initialChats == null -> ChatsScreenState.Loading
+			initialChats.isEmpty() -> ChatsScreenState.NoChats
+			else -> ChatsScreenState.HasData(
+				chats = initialChats,
+				isLoadingMore = initialPaging.isLoadingMore,
+				hasMore = initialPaging.hasMore,
+				loadMoreError = initialPaging.loadMoreError,
+			)
+		}
+	)
+	val state: StateFlow<ChatsScreenState> = _state.asStateFlow()
 
 	init {
 		scope.launch {
@@ -42,6 +55,7 @@ class ChatsListStateHolder(
 				}
 			}
 		}
+		loadIfNeeded()
 	}
 
 	fun loadIfNeeded() {
@@ -52,7 +66,7 @@ class ChatsListStateHolder(
 	fun load(force: Boolean = false) {
 		if (isLoading && !force) return
 		isLoading = true
-		if (!hasLocalData) {
+		if (!hasLocalData && _state.value !is ChatsScreenState.HasData && _state.value !is ChatsScreenState.NoChats) {
 			_state.value = ChatsScreenState.Loading
 		}
 		scope.launch {
@@ -72,7 +86,7 @@ class ChatsListStateHolder(
 					}
 				}
 				.onFailure {
-					if (!hasLocalData) {
+					if (!hasLocalData && _state.value !is ChatsScreenState.HasData && _state.value !is ChatsScreenState.NoChats) {
 						_state.value = ChatsScreenState.Error
 					}
 				}

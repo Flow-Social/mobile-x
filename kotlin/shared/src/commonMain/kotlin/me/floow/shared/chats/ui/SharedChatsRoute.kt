@@ -17,10 +17,6 @@ fun SharedChatsRoute(
 ) {
 	val state by stateHolder.state.collectAsState()
 
-	LaunchedEffect(stateHolder) {
-		stateHolder.loadIfNeeded()
-	}
-
 	SharedChatsScreen(
 		onSearchClick = onSearchClick,
 		state = state,
