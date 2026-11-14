@@ -1,5 +1,7 @@
 package me.floow.uikit.chat.states
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -347,7 +349,9 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 						modifier = Modifier.fillMaxWidth(),
 					) {
 						Row(
-							modifier = Modifier.fillMaxWidth(),
+							modifier = Modifier
+								.fillMaxWidth()
+								.animateContentSize(animationSpec = tween(180)),
 							horizontalArrangement = if (message.isOutgoing) {
 								Arrangement.End
 							} else {

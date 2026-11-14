@@ -204,10 +204,11 @@ fun isSeekRingTouch(
     position: Offset,
     size: IntSize,
     density: Float,
+    isPaused: Boolean = true,
 ): Boolean {
     if (size.width <= 0 || size.height <= 0) return false
     val center = Offset(size.width / 2f, size.height / 2f)
-    val radius = seekRingRadius(size, density)
+    val radius = seekRingRadius(size, density, isPaused)
     val centerDistance = hypot(position.x - center.x, position.y - center.y)
     val ringHitSlopPx = SeekRingHitSlop.value * density
     return kotlin.math.abs(centerDistance - radius) <= ringHitSlopPx
@@ -218,10 +219,11 @@ fun isSeekKnobTouch(
     size: IntSize,
     progress: Float,
     density: Float,
+    isPaused: Boolean = true,
 ): Boolean {
     if (size.width <= 0 || size.height <= 0) return false
     val center = Offset(size.width / 2f, size.height / 2f)
-    val radius = seekRingRadius(size, density)
+    val radius = seekRingRadius(size, density, isPaused)
     val knob = progressToRingOffset(
         progress = progress,
         center = center,
@@ -234,14 +236,16 @@ fun isSeekKnobTouch(
 fun seekRingRadius(
     size: IntSize,
     density: Float,
+    isPaused: Boolean = true,
 ): Float {
-    val pausedStrokeWidth = (5f * density) + 5f * density * 0.5f
-    val pausedInset = PauseExtraInsetDp * density
-    return ((minOf(size.width, size.height) - pausedStrokeWidth - pausedInset * 2f) / 2f)
-        .coerceAtLeast(1f)
+    val strokeWidth = (5f * density) + (if (isPaused) 5f * density * 0.5f else 0f)
+    val totalInset = (if (isPaused) PauseExtraInsetDp else PlayingInsetDp) * density
+    val diameter = minOf(size.width, size.height) - strokeWidth - totalInset * 2f
+    return (diameter / 2f).coerceAtLeast(1f)
 }
 
 fun Modifier.videoCircleSeekGesture(
+    isProgressVisible: Boolean,
     isPaused: Boolean,
     progress: Float,
     onSeekingChange: (Boolean) -> Unit,
@@ -249,14 +253,14 @@ fun Modifier.videoCircleSeekGesture(
     onTogglePlayback: () -> Unit,
     onLongPress: () -> Unit,
     onSeekProgress: (Float) -> Unit,
-): Modifier = pointerInput(isPaused, consumeTapUp) {
+): Modifier = pointerInput(isProgressVisible, isPaused, consumeTapUp) {
     awaitEachGesture {
         val down = awaitFirstDown(
             requireUnconsumed = false,
             pass = PointerEventPass.Initial,
         )
 
-        if (!isPaused) {
+        if (!isProgressVisible) {
             awaitVideoCircleTapOrLongPress(
                 down = down,
                 consumeTapUp = consumeTapUp,
@@ -271,11 +275,13 @@ fun Modifier.videoCircleSeekGesture(
             size = size,
             progress = progress,
             density = this@pointerInput.density,
+            isPaused = isPaused,
         )
         val startedOnRing = !startedOnKnob && isSeekRingTouch(
             position = down.position,
             size = size,
             density = this@pointerInput.density,
+            isPaused = isPaused,
         )
 
         if (!startedOnKnob && !startedOnRing) {
