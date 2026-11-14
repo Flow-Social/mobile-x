@@ -973,10 +973,15 @@ class ChatsRepositoryImpl(
 		val media = message.media
 		val localPath = media?.localPath?.trim()?.takeIf(String::isNotEmpty)
 		if (!message.clientMessageId.isNullOrBlank() && localPath != null) {
+			val effectiveMime = if (media.mimeType.isBlank() || media.mimeType.equals("application/octet-stream", ignoreCase = true)) {
+				resolveMimeFromPath(localPath)
+			} else {
+				media.mimeType
+			}
 			localStore.enqueueOutgoingMedia(
 				message = message,
 				localFilePath = localPath,
-				mediaMimeType = media.mimeType.ifBlank { "application/octet-stream" },
+				mediaMimeType = effectiveMime,
 				mediaSizeBytes = media.sizeBytes,
 				mediaDurationMs = media.durationMs,
 				mediaWidth = media.width,
@@ -1391,4 +1396,20 @@ private fun me.floow.domain.api.models.ChatUserItem.toDomain(): DirectChatPeer {
 		avatarUrl = avatar,
 		avatarThumb = avatarThumb
 	)
+}
+
+private fun resolveMimeFromPath(path: String?): String {
+	if (path.isNullOrBlank()) return "application/octet-stream"
+	val cleanPath = path.substringBefore('?').substringBefore('#')
+	val ext = cleanPath.substringAfterLast('.', "").lowercase()
+	return when (ext) {
+		"jpg", "jpeg" -> "image/jpeg"
+		"png" -> "image/png"
+		"webp" -> "image/webp"
+		"mp4" -> "video/mp4"
+		"m4a" -> "audio/mp4"
+		"aac" -> "audio/aac"
+		"ogg", "opus" -> "audio/ogg"
+		else -> "application/octet-stream"
+	}
 }

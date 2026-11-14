@@ -224,7 +224,7 @@ class MediaOutboxEngine(
             localStore.observeActiveMediaCommands().collect { commands ->
                 for (cmd in commands) {
                     val path = cmd.localFilePath ?: continue
-                    val mime = cmd.mediaMimeType ?: "application/octet-stream"
+                    val mime = resolveMimeType(path, cmd.mediaMimeType)
                     if (_tasks.value.containsKey(cmd.clientMessageId)) continue
 
                     enqueue(
@@ -253,7 +253,7 @@ class MediaOutboxEngine(
             val pendingCommands = runCatching { localStore.getActiveMediaCommands() }.getOrDefault(emptyList())
             for (cmd in pendingCommands) {
                 val path = cmd.localFilePath ?: continue
-                val mime = cmd.mediaMimeType ?: "application/octet-stream"
+                val mime = resolveMimeType(path, cmd.mediaMimeType)
                 if (_tasks.value.containsKey(cmd.clientMessageId)) continue
 
                 enqueue(
@@ -292,11 +292,12 @@ class MediaOutboxEngine(
         thumbnailUrl: String? = null,
         mediaKind: String? = null,
     ) {
+        val effectiveMime = resolveMimeType(filePath, mimeType)
         val task = MediaOutboxTask(
             clientMessageId = clientMessageId,
             conversationId = conversationId,
             filePath = filePath,
-            mimeType = mimeType,
+            mimeType = effectiveMime,
             sizeBytes = sizeBytes,
             durationMs = durationMs,
             width = width,
@@ -355,11 +356,12 @@ class MediaOutboxEngine(
             uploadStage = DirectChatUploadStage.UPLOADING,
         )
 
+        val effectiveMime = resolveMimeType(currentTask.filePath, currentTask.mimeType)
         val fileName = currentTask.filePath.substringAfterLast('/').ifBlank { "media_file" }
         val presignKind = currentTask.mediaKind ?: when {
-            currentTask.mimeType.startsWith("video") -> "chat_video_circle"
-            currentTask.mimeType.startsWith("audio") -> "chat_voice"
-            currentTask.mimeType.startsWith("image") -> "chat_image"
+            effectiveMime.startsWith("video") -> "chat_video_circle"
+            effectiveMime.startsWith("audio") -> "chat_voice"
+            effectiveMime.startsWith("image") -> "chat_image"
             else -> "chat_image"
         }
 
@@ -374,7 +376,7 @@ class MediaOutboxEngine(
             uploadsApi.createPresign(
                 CreateUploadPresignData(
                     fileName = fileName,
-                    contentType = currentTask.mimeType,
+                    contentType = effectiveMime,
                     sizeBytes = resolvedSizeBytes,
                     kind = presignKind,
                 )
@@ -394,7 +396,7 @@ class MediaOutboxEngine(
         val uploadSuccess = runCatching {
             uploadsApi.uploadFilePath(
                 uploadUrl = presign.uploadUrl,
-                contentType = currentTask.mimeType,
+                contentType = effectiveMime,
                 filePath = currentTask.filePath,
                 onProgress = { progressFraction ->
                     val normalizedProgress = 0.1f + progressFraction * 0.85f
@@ -957,6 +959,24 @@ class MediaOutboxEngine(
             nextRetryAt = nextRetryAt,
             updatedAt = now,
         )
+    }
+
+    private fun resolveMimeType(filePath: String, defaultMime: String? = null): String {
+        if (!defaultMime.isNullOrBlank() && !defaultMime.equals("application/octet-stream", ignoreCase = true)) {
+            return defaultMime
+        }
+        val cleanPath = filePath.substringBefore('?').substringBefore('#')
+        val ext = cleanPath.substringAfterLast('.', "").lowercase()
+        return when (ext) {
+            "jpg", "jpeg" -> "image/jpeg"
+            "png" -> "image/png"
+            "webp" -> "image/webp"
+            "mp4" -> "video/mp4"
+            "m4a" -> "audio/mp4"
+            "aac" -> "audio/aac"
+            "ogg", "opus" -> "audio/ogg"
+            else -> defaultMime?.takeIf(String::isNotBlank) ?: "application/octet-stream"
+        }
     }
 }
 

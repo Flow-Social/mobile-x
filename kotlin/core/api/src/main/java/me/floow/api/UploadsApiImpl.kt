@@ -108,8 +108,11 @@ class UploadsApiImpl(
 		bytes: ByteArray,
 		onProgress: ((Float) -> Unit)?,
 	): Boolean {
-		val parsedContentType = runCatching { ContentType.parse(contentType) }
-			.getOrDefault(ContentType.Application.OctetStream)
+		val parsedContentType = if (contentType.isBlank() || contentType.equals(ContentType.Application.OctetStream.toString(), ignoreCase = true)) {
+			resolveMimeFromPath(filePath)
+		} else {
+			runCatching { ContentType.parse(contentType) }.getOrElse { resolveMimeFromPath(filePath) }
+		}
 
 		val maxAttempts = 3
 		var currentDelayMs = 500L
@@ -157,8 +160,11 @@ class UploadsApiImpl(
 			logger.d("UploadsApiImpl", "uploadFilePath: file does not exist, empty, or unreadable: $filePath")
 			return false
 		}
-		val parsedContentType = runCatching { ContentType.parse(contentType) }
-			.getOrDefault(ContentType.Application.OctetStream)
+		val parsedContentType = if (contentType.isBlank() || contentType.equals(ContentType.Application.OctetStream.toString(), ignoreCase = true)) {
+			resolveMimeFromPath(filePath)
+		} else {
+			runCatching { ContentType.parse(contentType) }.getOrElse { resolveMimeFromPath(filePath) }
+		}
 
 		val totalBytes = fileReader.length
 		val maxAttempts = 3
@@ -229,5 +235,20 @@ class UploadsApiImpl(
 			}
 		}
 		return false
+	}
+
+	private fun resolveMimeFromPath(path: String): ContentType {
+		val cleanPath = path.substringBefore('?').substringBefore('#')
+		val ext = cleanPath.substringAfterLast('.', "").lowercase()
+		return when (ext) {
+			"jpg", "jpeg" -> ContentType.Image.JPEG
+			"png" -> ContentType.Image.PNG
+			"webp" -> ContentType("image", "webp")
+			"mp4" -> ContentType("video", "mp4")
+			"m4a" -> ContentType("audio", "mp4")
+			"aac" -> ContentType("audio", "aac")
+			"ogg", "opus" -> ContentType("audio", "ogg")
+			else -> ContentType.Application.OctetStream
+		}
 	}
 }

@@ -1289,10 +1289,15 @@ class DirectChatsLocalStoreImpl(
 		if (normalizedLocalPath == null && normalizedUrl == null) {
 			return null
 		}
+		val effectiveMimeType = if (normalizedMimeType == null || normalizedMimeType.equals("application/octet-stream", ignoreCase = true)) {
+			resolveMimeFromPath(normalizedLocalPath ?: normalizedUrl) ?: normalizedMimeType ?: "application/octet-stream"
+		} else {
+			normalizedMimeType
+		}
 		return DirectChatMessageMedia(
 			url = normalizedUrl.orEmpty(),
 			objectKey = normalizedObjectKey.orEmpty(),
-			mimeType = normalizedMimeType ?: "application/octet-stream",
+			mimeType = effectiveMimeType,
 			sizeBytes = normalizedSizeBytes ?: 0L,
 			durationMs = normalizedDurationMs ?: 0L,
 			localPath = normalizedLocalPath,
@@ -1303,6 +1308,22 @@ class DirectChatsLocalStoreImpl(
 			groupId = groupId,
 			position = position,
 		)
+	}
+
+	private fun resolveMimeFromPath(path: String?): String? {
+		if (path.isNullOrBlank()) return null
+		val cleanPath = path.substringBefore('?').substringBefore('#')
+		val ext = cleanPath.substringAfterLast('.', "").lowercase()
+		return when (ext) {
+			"jpg", "jpeg" -> "image/jpeg"
+			"png" -> "image/png"
+			"webp" -> "image/webp"
+			"mp4" -> "video/mp4"
+			"m4a" -> "audio/mp4"
+			"aac" -> "audio/aac"
+			"ogg", "opus" -> "audio/ogg"
+			else -> null
+		}
 	}
 
 	private fun now(): Long = currentTimeMillis()
