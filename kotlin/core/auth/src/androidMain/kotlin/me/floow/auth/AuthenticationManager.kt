@@ -2,13 +2,19 @@ package me.floow.auth
 
 import android.content.Context
 import android.content.SharedPreferences
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import me.floow.domain.api.AuthApi
 import me.floow.domain.api.models.AuthApiResult
+import me.floow.domain.auth.AuthTokenState
 import me.floow.domain.auth.AuthenticationManager
 import me.floow.domain.auth.GoogleOAuth
+import me.floow.domain.auth.TokenStorage
 import me.floow.domain.auth.models.AuthState
 import me.floow.domain.auth.models.AuthenticationResult
 import me.floow.domain.auth.models.GoogleOAuthResult
@@ -20,18 +26,19 @@ class AuthenticationManagerImpl(
 	private val logger: Logger,
 	private val googleOAuth: GoogleOAuth,
 	private val authApi: AuthApi,
+	private val tokenStorage: TokenStorage,
 ) : AuthenticationManager {
 	companion object {
-	private const val AUTH_SHARED_PREF = "flowme.auth"
-	private const val AUTH_TOKEN_PREF_KEY = "authToken"
-	private const val AUTH_USER_ID_PREF_KEY = "authUserId"
-	private const val PENDING_REG_TOKEN_PREF_KEY = "pendingRegistrationToken"
-	private const val PENDING_REG_NAME_PREF_KEY = "pendingRegistrationName"
-	private const val PENDING_REG_USERNAME_PREF_KEY = "pendingRegistrationUsername"
-	private const val PENDING_REG_DESCRIPTION_PREF_KEY = "pendingRegistrationDescription"
-	private const val RESCUE_PREFS = "flowme.rescue_sync"
-	private const val KEY_MIGRATION_COMPLETED = "is_migration_completed_v2"
+		private const val AUTH_SHARED_PREF = "flowme.auth"
+		private const val PENDING_REG_TOKEN_PREF_KEY = "pendingRegistrationToken"
+		private const val PENDING_REG_NAME_PREF_KEY = "pendingRegistrationName"
+		private const val PENDING_REG_USERNAME_PREF_KEY = "pendingRegistrationUsername"
+		private const val PENDING_REG_DESCRIPTION_PREF_KEY = "pendingRegistrationDescription"
+		private const val RESCUE_PREFS = "flowme.rescue_sync"
+		private const val KEY_MIGRATION_COMPLETED = "is_migration_completed_v2"
 	}
+
+	private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
 	private val _authenticationStateFlow: MutableStateFlow<AuthState> =
 		MutableStateFlow(AuthState.NoIdToken)
@@ -44,19 +51,8 @@ class AuthenticationManagerImpl(
 		)
 
 	init {
-		val savedToken = sharedPreferences.getString(AUTH_TOKEN_PREF_KEY, null)
 		val pendingToken = sharedPreferences.getString(PENDING_REG_TOKEN_PREF_KEY, null)
-
-		if (savedToken != null) {
-			_authenticationStateFlow.update {
-				AuthState.HasResult(
-					AuthenticationResult.Success(
-						token = savedToken,
-						isRegistration = false
-					)
-				)
-			}
-		} else if (pendingToken != null) {
+		if (pendingToken != null) {
 			_authenticationStateFlow.update {
 				AuthState.HasResult(
 					AuthenticationResult.Success(
@@ -64,6 +60,31 @@ class AuthenticationManagerImpl(
 						isRegistration = true
 					)
 				)
+			}
+		}
+
+		scope.launch {
+			tokenStorage.authState.collect { tokenState ->
+				when (tokenState) {
+					is AuthTokenState.Authenticated -> {
+						_authenticationStateFlow.update {
+							AuthState.HasResult(
+								AuthenticationResult.Success(
+									token = tokenState.tokens.accessToken,
+									isRegistration = false
+								)
+							)
+						}
+					}
+					is AuthTokenState.Unauthenticated -> {
+						if (!hasPendingRegistration()) {
+							_authenticationStateFlow.update { AuthState.NoIdToken }
+						}
+					}
+					AuthTokenState.Loading -> {
+						// Ожидаем загрузки токена
+					}
+				}
 			}
 		}
 	}
@@ -88,21 +109,29 @@ class AuthenticationManagerImpl(
 						"Success auth api result. isRegistration: ${authApiResult.isRegistration}"
 					)
 
-					_authenticationStateFlow.update {
-						AuthState.HasResult(
-							AuthenticationResult.Success(
-								token = authApiResult.token,
-								isRegistration = authApiResult.isRegistration
-							)
-						)
-					}
 					if (authApiResult.isRegistration) {
+						_authenticationStateFlow.update {
+							AuthState.HasResult(
+								AuthenticationResult.Success(
+									token = authApiResult.token,
+									isRegistration = true
+								)
+							)
+						}
 						writePendingRegistration(
 							token = authApiResult.token,
 							initialData = authApiResult.pendingInitialData
 						)
 					} else {
 						writeAuthToken(authApiResult.token, authApiResult.userId)
+						_authenticationStateFlow.update {
+							AuthState.HasResult(
+								AuthenticationResult.Success(
+									token = authApiResult.token,
+									isRegistration = false
+								)
+							)
+						}
 					}
 				} else {
 					logger.d(
@@ -146,12 +175,9 @@ class AuthenticationManagerImpl(
 	}
 
 	private suspend fun writeAuthToken(token: String, userId: String?) {
-		sharedPreferences.edit().apply {
-			putString(AUTH_TOKEN_PREF_KEY, token)
-			if (!userId.isNullOrBlank()) {
-				putString(AUTH_USER_ID_PREF_KEY, userId)
-			}
-			apply()
+		tokenStorage.saveTokens(token)
+		if (!userId.isNullOrBlank()) {
+			tokenStorage.saveUserId(userId)
 		}
 
 		clearPendingRegistration()
@@ -164,20 +190,23 @@ class AuthenticationManagerImpl(
 	}
 
 	override suspend fun getAuthTokenOrNull(): String? {
-		return sharedPreferences.getString(AUTH_TOKEN_PREF_KEY, null)
+		return tokenStorage.getAccessToken()
 	}
 
 	override fun getSelfUserIdOrNull(): String? {
-		return sharedPreferences.getString(AUTH_USER_ID_PREF_KEY, null)
+		return tokenStorage.getSyncUserIdOrNull()
 	}
 
 	override fun saveSelfUserId(userId: String) {
 		if (userId.isBlank()) return
-		sharedPreferences.edit().putString(AUTH_USER_ID_PREF_KEY, userId).apply()
+		scope.launch {
+			tokenStorage.saveUserId(userId)
+		}
 	}
 
 	override fun isSignedIn(): Boolean {
-		return sharedPreferences.getString(AUTH_TOKEN_PREF_KEY, null) != null
+		val state = tokenStorage.authState.value
+		return state is AuthTokenState.Authenticated || !tokenStorage.getSyncAccessTokenOrNull().isNullOrBlank()
 	}
 
 	override fun hasPendingRegistration(): Boolean {
@@ -222,8 +251,8 @@ class AuthenticationManagerImpl(
 	}
 
 	override suspend fun clearAuth() {
-        sharedPreferences.edit().remove(AUTH_TOKEN_PREF_KEY).remove(AUTH_USER_ID_PREF_KEY).apply()
+		tokenStorage.clearTokens()
 		clearPendingRegistration()
-        _authenticationStateFlow.update { AuthState.NoIdToken }
-    }
+		_authenticationStateFlow.update { AuthState.NoIdToken }
+	}
 }

@@ -1,5 +1,9 @@
 package me.floow.shared.auth
 
+import me.floow.domain.auth.AuthTokenState
+import me.floow.domain.auth.AuthTokens
+import me.floow.domain.auth.TokenStorage
+
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.alloc

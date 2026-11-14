@@ -1,5 +1,7 @@
 package me.floow.shared.auth
 
+import me.floow.domain.auth.AuthTokenState
+import me.floow.domain.auth.AuthTokens
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals

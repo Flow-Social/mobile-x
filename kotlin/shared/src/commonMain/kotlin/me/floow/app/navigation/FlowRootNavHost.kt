@@ -42,8 +42,8 @@ import me.floow.comments.SharedCommentsRoute
 import me.floow.comments.uilogic.CommentsStateHolder
 import androidx.compose.runtime.collectAsState
 import androidx.compose.material3.SnackbarHostState
-import me.floow.shared.auth.AuthTokenState
-import me.floow.shared.auth.TokenStorage
+import me.floow.domain.auth.AuthTokenState
+import me.floow.domain.auth.TokenStorage
 import me.floow.shared.login.uilogic.LoginState
 import me.floow.shared.login.uilogic.LoginViewModel
 import me.floow.shared.login.ui.login.LoginScreen
@@ -124,6 +124,13 @@ fun FlowRootNavHost(
                     popUpTo(0) { inclusive = true }
                 }
             }
+        } else if (authState is AuthTokenState.Authenticated) {
+            val currentRoute = navController.currentBackStackEntry?.destination?.route
+            if (currentRoute?.contains("LoginDestination") == true) {
+                navController.navigate(MainTabsDestination) {
+                    popUpTo(LoginDestination) { inclusive = true }
+                }
+            }
         }
     }
 
@@ -170,77 +177,137 @@ fun FlowRootNavHost(
     var hostedFullscreenViewer by remember { mutableStateOf<HostedFullscreenImageViewer?>(null) }
     val postCacheById = remember { mutableStateMapOf<String, Post>() }
 
-    Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
-        if (authState is AuthTokenState.Authenticated &&
-            currentRoute?.contains("LoginDestination") != true &&
-            currentRoute?.contains("CreateProfileDestination") != true
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        val p = overlayProgress
-                        var scale = if (overlayStack.size == 1) {
-                            0.95f + (0.05f * p)
-                        } else if (overlayStack.size > 1) {
-                            0.95f
-                        } else {
-                            1f
-                        }
-                        if (overlayStack.size == 1) {
-                            translationX = -size.width * 0.12f * (1f - p)
-                        } else if (overlayStack.size > 1) {
-                            translationX = -size.width * 0.12f
-                        }
-                        val vState = hostedFullscreenViewer?.state
-                        if (vState != null && vState.phase != ViewerPhase.Closed) {
-                            val densityVal = density.density
-                            val dismissThresholdPx = 140f * densityVal
-                            val dismissProgress = (kotlin.math.abs(vState.dismissOffsetY) / (dismissThresholdPx * 1.5f)).coerceIn(0f, 1f)
-                            val bgScale = calculateViewerBackgroundScale(
-                                phase = vState.phase,
-                                transitionProgress = vState.transitionProgress,
-                                dismissProgress = dismissProgress,
-                                closeSceneStartProgress = vState.closeSceneStartProgress,
-                                zoomScale = -0.05f,
-                            )
-                            scale *= bgScale
-                            val cornerRadiusDp = calculateViewerBackgroundCornerRadius(
-                                phase = vState.phase,
-                                transitionProgress = vState.transitionProgress,
-                                dismissProgress = dismissProgress,
-                                closeSceneStartProgress = vState.closeSceneStartProgress,
-                                maxCornerRadiusDp = 16f,
-                            )
-                            if (cornerRadiusDp > 0.5f) {
-                                clip = true
-                                shape = RoundedCornerShape(cornerRadiusDp.dp)
-                            }
-                        }
-                        val overlayP = overlayState.revealProgress.coerceIn(0f, 1f)
-                        if (overlayP > 0.001f) {
-                            scale *= (1f - (0.09f * overlayP))
-                            val maxTranslationY = with(density) { 30.dp.toPx() }
-                            translationY += maxTranslationY * overlayP
-                            if (overlayP > 0.01f) {
-                                clip = true
-                                shape = RoundedCornerShape(24.dp)
-                            }
-                        }
-                        scaleX = scale
-                        scaleY = scale
+    Box(modifier = modifier.fillMaxSize()) {
+        NavHost(
+            navController = navController,
+            startDestination = initialStartDestination,
+            enterTransition = { EnterTransition.None },
+            exitTransition = { ExitTransition.None },
+            popEnterTransition = { EnterTransition.None },
+            popExitTransition = { ExitTransition.None },
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    val p = overlayProgress
+                    var scale = if (overlayStack.size == 1) {
+                        0.95f + (0.05f * p)
+                    } else if (overlayStack.size > 1) {
+                        0.95f
+                    } else {
+                        1f
                     }
-                    .then(
-                        if (isSubscreenOpen) Modifier.pointerInput(Unit) {
-                            awaitPointerEventScope {
-                                while (true) {
-                                    val event = awaitPointerEvent()
-                                    event.changes.forEach { it.consume() }
+                    if (overlayStack.size == 1) {
+                        translationX = -size.width * 0.12f * (1f - p)
+                    } else if (overlayStack.size > 1) {
+                        translationX = -size.width * 0.12f
+                    }
+                    val vState = hostedFullscreenViewer?.state
+                    if (vState != null && vState.phase != ViewerPhase.Closed) {
+                        val densityVal = density.density
+                        val dismissThresholdPx = 140f * densityVal
+                        val dismissProgress = (kotlin.math.abs(vState.dismissOffsetY) / (dismissThresholdPx * 1.5f)).coerceIn(0f, 1f)
+                        val bgScale = calculateViewerBackgroundScale(
+                            phase = vState.phase,
+                            transitionProgress = vState.transitionProgress,
+                            dismissProgress = dismissProgress,
+                            closeSceneStartProgress = vState.closeSceneStartProgress,
+                            zoomScale = -0.05f,
+                        )
+                        scale *= bgScale
+                        val cornerRadiusDp = calculateViewerBackgroundCornerRadius(
+                            phase = vState.phase,
+                            transitionProgress = vState.transitionProgress,
+                            dismissProgress = dismissProgress,
+                            closeSceneStartProgress = vState.closeSceneStartProgress,
+                            maxCornerRadiusDp = 16f,
+                        )
+                        if (cornerRadiusDp > 0.5f) {
+                            clip = true
+                            shape = RoundedCornerShape(cornerRadiusDp.dp)
+                        }
+                    }
+                    val overlayP = overlayState.revealProgress.coerceIn(0f, 1f)
+                    if (overlayP > 0.001f) {
+                        scale *= (1f - (0.09f * overlayP))
+                        val maxTranslationY = with(density) { 30.dp.toPx() }
+                        translationY = maxTranslationY * overlayP
+                        if (overlayP > 0.01f) {
+                            clip = true
+                            shape = RoundedCornerShape(24.dp)
+                        }
+                    }
+                    scaleX = scale
+                    scaleY = scale
+                }
+                .then(
+                    if (isSubscreenOpen) Modifier.pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                event.changes.forEach { it.consume() }
+                            }
+                        }
+                    } else Modifier
+                ),
+        ) {
+            composable<LoginDestination> {
+                val loginViewModel = koinInject<LoginViewModel>()
+                val loginState by loginViewModel.state.collectAsState()
+
+                LaunchedEffect(loginState) {
+                    when (loginState) {
+                        is LoginState.Authenticated -> {
+                            navController.navigate(MainTabsDestination) {
+                                popUpTo(LoginDestination) { inclusive = true }
+                            }
+                        }
+                        is LoginState.PendingRegistration -> {
+                            navController.navigate(CreateProfileDestination) {
+                                popUpTo(LoginDestination) { inclusive = false }
+                            }
+                        }
+                        else -> Unit
+                    }
+                }
+
+                LoginScreen(
+                    isLoading = loginState is LoginState.Loading,
+                    onLoginClick = { loginViewModel.signInWithGoogle() },
+                )
+            }
+
+            composable<CreateProfileDestination> {
+                val createProfileStateHolder = koinInject<CreateProfileStateHolder>()
+                val createProfileState by createProfileStateHolder.state.collectAsState()
+                val snackbarHostState = remember { SnackbarHostState() }
+
+                LaunchedEffect(createProfileStateHolder) {
+                    createProfileStateHolder.events.collect { event ->
+                        when (event) {
+                            is CreateProfileStateHolder.Event.Completed -> {
+                                navController.navigate(MainTabsDestination) {
+                                    popUpTo(LoginDestination) { inclusive = true }
                                 }
                             }
-                        } else Modifier
-                    )
-            ) {
+                            is CreateProfileStateHolder.Event.ShowMessage -> {
+                                snackbarHostState.showSnackbar(event.message)
+                            }
+                            else -> Unit
+                        }
+                    }
+                }
+
+                CreateProfileScreen(
+                    state = createProfileState,
+                    snackbarHostState = snackbarHostState,
+                    onNameChange = createProfileStateHolder::updateName,
+                    onUsernameChange = createProfileStateHolder::updateUsername,
+                    onBiographyChange = createProfileStateHolder::updateBio,
+                    onDoneClick = createProfileStateHolder::createProfile,
+                )
+            }
+
+            composable<MainTabsDestination> {
                 MainTabsScreen(
                     onNavigateToPost = { postId ->
                         pushOverlay(
@@ -308,118 +375,6 @@ fun FlowRootNavHost(
                         pushOverlay(FlowSubscreen.Settings)
                     },
                 )
-            }
-        }
-
-        NavHost(
-            navController = navController,
-            startDestination = initialStartDestination,
-            enterTransition = { EnterTransition.None },
-            exitTransition = { ExitTransition.None },
-            popEnterTransition = { EnterTransition.None },
-            popExitTransition = { ExitTransition.None },
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    var scale = 1f
-                    val vState = hostedFullscreenViewer?.state
-                    if (vState != null && vState.phase != ViewerPhase.Closed) {
-                        val densityVal = density.density
-                        val dismissThresholdPx = 140f * densityVal
-                        val dismissProgress = (kotlin.math.abs(vState.dismissOffsetY) / (dismissThresholdPx * 1.5f)).coerceIn(0f, 1f)
-                        val bgScale = calculateViewerBackgroundScale(
-                            phase = vState.phase,
-                            transitionProgress = vState.transitionProgress,
-                            dismissProgress = dismissProgress,
-                            closeSceneStartProgress = vState.closeSceneStartProgress,
-                            zoomScale = -0.05f,
-                        )
-                        scale *= bgScale
-                        val cornerRadiusDp = calculateViewerBackgroundCornerRadius(
-                            phase = vState.phase,
-                            transitionProgress = vState.transitionProgress,
-                            dismissProgress = dismissProgress,
-                            closeSceneStartProgress = vState.closeSceneStartProgress,
-                            maxCornerRadiusDp = 16f,
-                        )
-                        if (cornerRadiusDp > 0.5f) {
-                            clip = true
-                            shape = RoundedCornerShape(cornerRadiusDp.dp)
-                        }
-                    }
-                    val p = overlayState.revealProgress.coerceIn(0f, 1f)
-                    if (p > 0.001f) {
-                        scale *= (1f - (0.09f * p))
-                        val maxTranslationY = with(density) { 30.dp.toPx() }
-                        translationY = maxTranslationY * p
-                        if (p > 0.01f) {
-                            clip = true
-                            shape = RoundedCornerShape(24.dp)
-                        }
-                    }
-                    scaleX = scale
-                    scaleY = scale
-                },
-        ) {
-            composable<LoginDestination> {
-                val loginViewModel = koinInject<LoginViewModel>()
-                val loginState by loginViewModel.state.collectAsState()
-
-                LaunchedEffect(loginState) {
-                    when (loginState) {
-                        is LoginState.Authenticated -> {
-                            navController.navigate(MainTabsDestination) {
-                                popUpTo(LoginDestination) { inclusive = true }
-                            }
-                        }
-                        is LoginState.PendingRegistration -> {
-                            navController.navigate(CreateProfileDestination) {
-                                popUpTo(LoginDestination) { inclusive = false }
-                            }
-                        }
-                        else -> Unit
-                    }
-                }
-
-                LoginScreen(
-                    isLoading = loginState is LoginState.Loading,
-                    onLoginClick = { loginViewModel.signInWithGoogle() },
-                )
-            }
-
-            composable<CreateProfileDestination> {
-                val createProfileStateHolder = koinInject<CreateProfileStateHolder>()
-                val createProfileState by createProfileStateHolder.state.collectAsState()
-                val snackbarHostState = remember { SnackbarHostState() }
-
-                LaunchedEffect(createProfileStateHolder) {
-                    createProfileStateHolder.events.collect { event ->
-                        when (event) {
-                            is CreateProfileStateHolder.Event.Completed -> {
-                                navController.navigate(MainTabsDestination) {
-                                    popUpTo(LoginDestination) { inclusive = true }
-                                }
-                            }
-                            is CreateProfileStateHolder.Event.ShowMessage -> {
-                                snackbarHostState.showSnackbar(event.message)
-                            }
-                            else -> Unit
-                        }
-                    }
-                }
-
-                CreateProfileScreen(
-                    state = createProfileState,
-                    snackbarHostState = snackbarHostState,
-                    onNameChange = createProfileStateHolder::updateName,
-                    onUsernameChange = createProfileStateHolder::updateUsername,
-                    onBiographyChange = createProfileStateHolder::updateBio,
-                    onDoneClick = createProfileStateHolder::createProfile,
-                )
-            }
-
-            composable<MainTabsDestination> {
-                Box(Modifier.fillMaxSize())
             }
         }
 
@@ -595,7 +550,13 @@ private fun SubscreenContent(
                 onShowMessage = {},
                 onHeaderClick = {
                     if (subscreen.peerUserId.isNotBlank()) {
-                        pushOverlay(FlowSubscreen.Profile(userId = subscreen.peerUserId))
+                        val seed = me.floow.shared.profile.uilogic.ProfileHeaderSeed(
+                            userId = subscreen.peerUserId,
+                            displayName = subscreen.peerDisplayName.takeIf { it.isNotBlank() },
+                            username = null,
+                            avatarUrl = subscreen.peerAvatarUrl,
+                        )
+                        pushOverlay(FlowSubscreen.Profile(userId = subscreen.peerUserId, headerSeed = seed))
                     }
                 },
                 modifier = Modifier.fillMaxSize(),
@@ -603,6 +564,10 @@ private fun SubscreenContent(
         }
 
         is FlowSubscreen.Profile -> {
+            val profileRepository = koinInject<me.floow.shared.profile.uilogic.ProfileRepository>()
+            subscreen.headerSeed?.let { seed ->
+                profileRepository.putHeaderSeed(seed)
+            }
             val profileStateHolder = koinInject<ProfileStateHolder> {
                 parametersOf(subscreen.userId.takeIf { it != "self" && it != "me" })
             }

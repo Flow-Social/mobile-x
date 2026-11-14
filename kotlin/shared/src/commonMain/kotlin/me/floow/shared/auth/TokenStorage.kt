@@ -3,31 +3,13 @@ package me.floow.shared.auth
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import me.floow.domain.auth.AuthTokenState
+import me.floow.domain.auth.AuthTokens
+import me.floow.domain.auth.TokenStorage
 
-data class AuthTokens(
-    val accessToken: String,
-    val refreshToken: String? = null,
-)
-
-sealed interface AuthTokenState {
-    data object Unauthenticated : AuthTokenState
-    data class Authenticated(val tokens: AuthTokens) : AuthTokenState
-}
-
-interface TokenStorage {
-    val authState: StateFlow<AuthTokenState>
-
-    suspend fun getAccessToken(): String?
-    suspend fun getRefreshToken(): String?
-    suspend fun saveTokens(accessToken: String, refreshToken: String? = null)
-    suspend fun clearTokens()
-
-    suspend fun getUserId(): String? = null
-    suspend fun saveUserId(userId: String) {}
-
-    fun getSyncUserIdOrNull(): String? = null
-    fun getSyncAccessTokenOrNull(): String? = null
-}
+typealias AuthTokens = AuthTokens
+typealias AuthTokenState = AuthTokenState
+typealias TokenStorage = TokenStorage
 
 class InMemoryTokenStorage(
     initialTokens: AuthTokens? = null,

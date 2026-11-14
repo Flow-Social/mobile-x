@@ -5,16 +5,23 @@ import android.content.SharedPreferences
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import me.floow.domain.auth.AuthTokenState
+import me.floow.domain.auth.AuthTokens
+import me.floow.domain.auth.TokenStorage
+import org.koin.mp.KoinPlatformTools
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
-
-import org.koin.mp.KoinPlatformTools
 
 object AndroidTokenContext {
     private var appContext: Context? = null
@@ -55,16 +62,15 @@ class AndroidKeystoreTokenStorage(
         private const val GCM_TAG_LENGTH = 128
     }
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-    private val _authState = MutableStateFlow<AuthTokenState>(AuthTokenState.Unauthenticated)
+    private val _authState = MutableStateFlow<AuthTokenState>(AuthTokenState.Loading)
     override val authState: StateFlow<AuthTokenState> = _authState.asStateFlow()
 
     init {
-        var initialAccess = readDecrypted(KEY_ACCESS_TOKEN, KEY_IV_ACCESS)
-        val initialRefresh = readDecrypted(KEY_REFRESH_TOKEN, KEY_IV_REFRESH)
-        if (initialAccess == null) {
-            // Check legacy unencrypted shared preferences for existing auth token
+        scope.launch {
+            // Одноразовая миграция из legacy flowme.auth с удалением старого ключа
             val legacyPrefs = context.getSharedPreferences(LEGACY_AUTH_PREFS, Context.MODE_PRIVATE)
             val legacyToken = legacyPrefs.getString(LEGACY_AUTH_TOKEN_KEY, null)
             if (!legacyToken.isNullOrBlank()) {
@@ -74,42 +80,48 @@ class AndroidKeystoreTokenStorage(
                         .putString(KEY_ACCESS_TOKEN, encAccess)
                         .putString(KEY_IV_ACCESS, ivAccess)
                         .apply()
-                    initialAccess = legacyToken
+                    legacyPrefs.edit().remove(LEGACY_AUTH_TOKEN_KEY).apply()
                 } catch (_: Exception) {
                 }
             }
-        }
 
-        var userId = prefs.getString(KEY_USER_ID, null)
-        if (userId.isNullOrBlank() && !initialAccess.isNullOrBlank()) {
-            userId = JwtPayloadParser.extractUserId(initialAccess)
-            if (!userId.isNullOrBlank()) {
-                prefs.edit().putString(KEY_USER_ID, userId).apply()
+            val initialAccess = readDecrypted(KEY_ACCESS_TOKEN, KEY_IV_ACCESS)
+            val initialRefresh = readDecrypted(KEY_REFRESH_TOKEN, KEY_IV_REFRESH)
+
+            var userId = prefs.getString(KEY_USER_ID, null)
+            if (userId.isNullOrBlank() && !initialAccess.isNullOrBlank()) {
+                userId = JwtPayloadParser.extractUserId(initialAccess)
+                if (!userId.isNullOrBlank()) {
+                    prefs.edit().putString(KEY_USER_ID, userId).apply()
+                }
             }
-        }
 
-        if (initialAccess != null) {
-            _authState.value = AuthTokenState.Authenticated(
-                AuthTokens(accessToken = initialAccess, refreshToken = initialRefresh)
-            )
-        } else {
-            _authState.value = AuthTokenState.Unauthenticated
+            _authState.value = if (initialAccess != null) {
+                AuthTokenState.Authenticated(
+                    AuthTokens(accessToken = initialAccess, refreshToken = initialRefresh)
+                )
+            } else {
+                AuthTokenState.Unauthenticated
+            }
         }
     }
 
-    override suspend fun getAccessToken(): String? {
-        return readDecrypted(KEY_ACCESS_TOKEN, KEY_IV_ACCESS)
+    override suspend fun getAccessToken(): String? = withContext(Dispatchers.IO) {
+        (authState.value as? AuthTokenState.Authenticated)?.tokens?.accessToken
+            ?: readDecrypted(KEY_ACCESS_TOKEN, KEY_IV_ACCESS)
     }
 
     override fun getSyncAccessTokenOrNull(): String? {
-        return readDecrypted(KEY_ACCESS_TOKEN, KEY_IV_ACCESS)
+        return (authState.value as? AuthTokenState.Authenticated)?.tokens?.accessToken
+            ?: readDecrypted(KEY_ACCESS_TOKEN, KEY_IV_ACCESS)
     }
 
-    override suspend fun getRefreshToken(): String? {
-        return readDecrypted(KEY_REFRESH_TOKEN, KEY_IV_REFRESH)
+    override suspend fun getRefreshToken(): String? = withContext(Dispatchers.IO) {
+        (authState.value as? AuthTokenState.Authenticated)?.tokens?.refreshToken
+            ?: readDecrypted(KEY_REFRESH_TOKEN, KEY_IV_REFRESH)
     }
 
-    override suspend fun saveTokens(accessToken: String, refreshToken: String?) {
+    override suspend fun saveTokens(accessToken: String, refreshToken: String?) = withContext(Dispatchers.IO) {
         val (encAccess, ivAccess) = encrypt(accessToken)
         val refreshEncPair = refreshToken?.let { encrypt(it) }
         val extractedUserId = JwtPayloadParser.extractUserId(accessToken)
@@ -134,14 +146,14 @@ class AndroidKeystoreTokenStorage(
             AuthTokens(accessToken = accessToken, refreshToken = refreshToken)
         )
 
-        // Also sync legacy unencrypted prefs for backward compatibility
+        // Удаляем legacy токен если он ещё где-то остался
         context.getSharedPreferences(LEGACY_AUTH_PREFS, Context.MODE_PRIVATE)
             .edit()
-            .putString(LEGACY_AUTH_TOKEN_KEY, accessToken)
+            .remove(LEGACY_AUTH_TOKEN_KEY)
             .apply()
     }
 
-    override suspend fun clearTokens() {
+    override suspend fun clearTokens() = withContext(Dispatchers.IO) {
         prefs.edit().apply {
             remove(KEY_ACCESS_TOKEN)
             remove(KEY_IV_ACCESS)
@@ -157,16 +169,8 @@ class AndroidKeystoreTokenStorage(
         _authState.value = AuthTokenState.Unauthenticated
     }
 
-    override suspend fun getUserId(): String? {
-        val saved = prefs.getString(KEY_USER_ID, null)
-        if (!saved.isNullOrBlank()) return saved
-        val access = getAccessToken()
-        val extracted = access?.let { JwtPayloadParser.extractUserId(it) }
-        if (!extracted.isNullOrBlank()) {
-            prefs.edit().putString(KEY_USER_ID, extracted).apply()
-            return extracted
-        }
-        return null
+    override suspend fun getUserId(): String? = withContext(Dispatchers.IO) {
+        getSyncUserIdOrNull()
     }
 
     override fun getSyncUserIdOrNull(): String? {
@@ -181,7 +185,7 @@ class AndroidKeystoreTokenStorage(
         return null
     }
 
-    override suspend fun saveUserId(userId: String) {
+    override suspend fun saveUserId(userId: String) = withContext(Dispatchers.IO) {
         if (userId.isNotBlank()) {
             prefs.edit().putString(KEY_USER_ID, userId).apply()
         } else {
@@ -195,7 +199,6 @@ class AndroidKeystoreTokenStorage(
         return try {
             decrypt(enc, iv)
         } catch (_: Exception) {
-            // Corrupted or invalidated key -> clear and treat as unauthenticated
             prefs.edit().remove(keyData).remove(keyIv).apply()
             null
         }

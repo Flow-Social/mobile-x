@@ -135,6 +135,9 @@ extensions.configure<com.android.build.api.dsl.ApplicationExtension>("android") 
 }
 
 androidComponents {
+    beforeVariants(selector().withFlavor("data" to "mock")) { variantBuilder ->
+        variantBuilder.enable = false
+    }
     beforeVariants(
         selector()
             .withBuildType("fastDebug")

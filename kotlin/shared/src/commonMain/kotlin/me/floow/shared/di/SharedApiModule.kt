@@ -37,20 +37,22 @@ import me.floow.domain.api.PresenceRealtimeApi
 import me.floow.domain.api.ProfileApi
 import me.floow.domain.api.PushApi
 import me.floow.domain.api.PushTokensApi
+import me.floow.domain.auth.AuthTokenState
+import me.floow.domain.auth.TokenStorage
 import me.floow.domain.api.UploadsApi
 import me.floow.domain.api.UsersApi
 import org.koin.dsl.module
 
 val sharedApiModule = module {
     single<HttpClientProvider> {
-        val tokenStorage = getOrNull<me.floow.shared.auth.TokenStorage>()
+        val tokenStorage = getOrNull<TokenStorage>()
         HttpClientProvider {
             refreshToken = {
                 // Returns false if refresh token is not supported/fails
                 false
             }
             onRefreshFailed = {
-                if (tokenStorage?.authState?.value is me.floow.shared.auth.AuthTokenState.Authenticated) {
+                if (tokenStorage?.authState?.value is AuthTokenState.Authenticated) {
                     tokenStorage.clearTokens()
                 }
             }
