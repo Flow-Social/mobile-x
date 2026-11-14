@@ -79,15 +79,18 @@ class FlowApplication : Application() {
 			.build()
 
 		SingletonImageLoader.setSafe { imageLoader }
-		PushNotificationChannels.ensureCreated(this)
-		PushServiceController.start(this)
-		PushTokenSyncScheduler.ensurePeriodic(this)
-		PushTokenSyncScheduler.enqueueNow(this)
-		NotificationsReadSyncScheduler.ensurePeriodic(this, channel = "replies")
-		DirectMessagesReadSyncScheduler.ensurePeriodic(this)
-		val authManager = koin?.getOrNull<AuthenticationManager>()
-		if (authManager?.isSignedIn() == true) {
-			koin.getOrNull<DirectMessagesOutgoingRetryScheduler>()?.enqueue()
+
+		CoroutineScope(Dispatchers.Default).launch {
+			PushNotificationChannels.ensureCreated(this@FlowApplication)
+			PushServiceController.start(this@FlowApplication)
+			PushTokenSyncScheduler.ensurePeriodic(this@FlowApplication)
+			PushTokenSyncScheduler.enqueueNow(this@FlowApplication)
+			NotificationsReadSyncScheduler.ensurePeriodic(this@FlowApplication, channel = "replies")
+			DirectMessagesReadSyncScheduler.ensurePeriodic(this@FlowApplication)
+			val authManager = koin?.getOrNull<AuthenticationManager>()
+			if (authManager?.isSignedIn() == true) {
+				koin.getOrNull<DirectMessagesOutgoingRetryScheduler>()?.enqueue()
+			}
 		}
 
 		CoroutineScope(Dispatchers.IO).launch {

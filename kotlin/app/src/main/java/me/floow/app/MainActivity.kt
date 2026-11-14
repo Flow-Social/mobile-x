@@ -4,34 +4,27 @@ import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
-import android.util.TypedValue
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import me.floow.app.settings.ThemeMode
-import me.floow.app.settings.ThemePreferenceManager
-import androidx.compose.ui.Modifier
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
-import me.floow.app.deeplink.DeepLinkDispatcher
-import me.floow.app.launch.LaunchBootstrapState
-import me.floow.app.launch.LaunchBootstrapper
 import kotlinx.coroutines.launch
-import me.floow.app.FlowApp
+import me.floow.app.deeplink.DeepLinkDispatcher
+import me.floow.app.launch.shouldDispatchInitialIntent
+import me.floow.app.settings.ThemeMode
+import me.floow.app.settings.ThemePreferenceManager
+import me.floow.domain.auth.AuthTokenState
 import me.floow.domain.auth.AuthenticationManager
+import me.floow.domain.auth.TokenStorage
 import me.floow.domain.deeplink.DeepLinkUrls
-import me.floow.uikit.theme.FlowTheme
 import org.koin.android.ext.android.getKoin
 import java.util.Locale
 
 class MainActivity : ComponentActivity() {
-	private var launchBootstrapState: LaunchBootstrapState by mutableStateOf(LaunchBootstrapState.Loading)
 
 	override fun onCreate(savedInstanceState: Bundle?) {
 		val splashScreen = installSplashScreen()
@@ -39,28 +32,15 @@ class MainActivity : ComponentActivity() {
 		super.onCreate(savedInstanceState)
 
 		val authenticationManager: AuthenticationManager = getKoin().get()
+		val tokenStorage: TokenStorage = getKoin().get()
 		val syncCoordinator: me.floow.app.notifications.DirectChatsSyncCoordinator = getKoin().get()
 		syncCoordinator.start()
+		getKoin().getOrNull<me.floow.shared.chats.uilogic.ChatsListRepository>()
+		getKoin().getOrNull<me.floow.shared.profile.uilogic.ProfileRepository>()
 		handleGoogleOAuthIntent(intent, authenticationManager)
-		val launchBootstrapper = LaunchBootstrapper()
 
 		splashScreen.setKeepOnScreenCondition {
-			launchBootstrapState is LaunchBootstrapState.Loading
-		}
-		splashScreen.setOnExitAnimationListener { splashProvider ->
-			val translationY = TypedValue.applyDimension(
-				TypedValue.COMPLEX_UNIT_DIP,
-				-6f,
-				resources.displayMetrics
-			)
-			splashProvider.view.animate()
-				.alpha(0f)
-				.scaleX(0.78f)
-				.scaleY(0.78f)
-				.translationY(translationY)
-				.setDuration(180L)
-				.withEndAction { splashProvider.remove() }
-				.start()
+			tokenStorage.authState.value is AuthTokenState.Loading
 		}
 
 		enableEdgeToEdge()
@@ -77,12 +57,8 @@ class MainActivity : ComponentActivity() {
 			FlowApp(darkTheme = isDark)
 		}
 
-		lifecycleScope.launch {
-			val shouldDispatch = launchBootstrapper.shouldDispatchInitialIntent(intent)
-			launchBootstrapState = LaunchBootstrapState.Ready
-			if (shouldDispatch) {
-				pushDeepLinkIntent(intent)
-			}
+		if (shouldDispatchInitialIntent(intent)) {
+			pushDeepLinkIntent(intent)
 		}
 	}
 
