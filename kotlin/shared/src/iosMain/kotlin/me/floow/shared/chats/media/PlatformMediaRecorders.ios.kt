@@ -32,11 +32,13 @@ import platform.AVFAudio.AVEncoderBitRateKey
 import platform.AVFAudio.AVFormatIDKey
 import platform.AVFAudio.AVNumberOfChannelsKey
 import platform.AVFAudio.AVSampleRateKey
+import platform.AVFoundation.AVAssetImageGenerator
 import platform.AVFoundation.AVAssetWriter
 import platform.AVFoundation.AVAssetWriterInput
 import platform.AVFoundation.AVAssetWriterStatusCompleted
 import platform.AVFoundation.AVAssetWriterStatusFailed
 import platform.AVFoundation.AVAssetWriterStatusWriting
+import platform.AVFoundation.AVURLAsset
 import platform.AVFoundation.AVCaptureAudioDataOutput
 import platform.AVFoundation.AVCaptureAudioDataOutputSampleBufferDelegateProtocol
 import platform.AVFoundation.AVCaptureConnection
@@ -74,10 +76,14 @@ import platform.CoreAudioTypes.kAudioFormatMPEG4AAC
 import platform.CoreMedia.CMSampleBufferGetPresentationTimeStamp
 import platform.CoreMedia.CMSampleBufferRef
 import platform.CoreMedia.CMTimeGetSeconds
+import platform.CoreMedia.CMTimeMake
 import platform.Foundation.NSError
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSURL
+import platform.Foundation.writeToFile
+import platform.UIKit.UIImage
+import platform.UIKit.UIImageJPEGRepresentation
 import platform.UIKit.UIView
 import platform.darwin.NSObject
 import platform.darwin.dispatch_async
@@ -497,18 +503,36 @@ class IosVideoRecorder(
         writer.finishWritingWithCompletionHandler {
             val duration = (currentTimeMillis() - startTime).coerceAtLeast(500L)
             if (writer.status == AVAssetWriterStatusCompleted) {
+                val thumbPath = generateIosVideoThumbnail(path)
                 val clip = RecordedClip(
                     path = path,
                     durationMs = duration,
                     width = spec.targetSidePx,
                     height = spec.targetSidePx,
-                    thumbnailPath = null,
+                    thumbnailPath = thumbPath,
                 )
                 callback?.invoke(clip)
             } else {
                 callback?.invoke(null)
             }
         }
+    }
+
+    private fun generateIosVideoThumbnail(videoPath: String): String? {
+        return runCatching {
+            val url = NSURL.fileURLWithPath(videoPath)
+            val asset = AVURLAsset(uRL = url, options = null)
+            val generator = AVAssetImageGenerator(asset = asset).apply {
+                appliesPreferredTrackTransform = true
+            }
+            val time = CMTimeMake(value = 0, timescale = 1)
+            val cgImage = generator.copyCGImageAtTime(time, actualTime = null, error = null) ?: return null
+            val uiImage = UIImage.imageWithCGImage(cgImage)
+            val data = UIImageJPEGRepresentation(uiImage, 0.8) ?: return null
+            val thumbPath = videoPath.removeSuffix(".mp4") + "_thumb.jpg"
+            data.writeToFile(thumbPath, atomically = true)
+            thumbPath
+        }.getOrNull()
     }
 
     override fun cancelRecording() {

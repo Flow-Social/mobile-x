@@ -2,6 +2,7 @@ package me.floow.shared.media.ui
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import me.floow.uikit.chat.model.VideoCirclePlaybackUiState
 
 /**
  * Native camera preview slot for video circle recording.
@@ -16,13 +17,15 @@ expect fun NativeCameraRecordingPreview(
 
 /**
  * Native video circle player slot for chat bubbles.
- * Renders hardware-accelerated looping video in a 1:1 circular aspect ratio.
+ * Renders hardware-accelerated video in a 1:1 circular aspect ratio.
  */
 @Composable
 expect fun NativeVideoCirclePlayer(
     videoUrl: String,
     thumbnailUrl: String? = null,
-    isPlaying: Boolean = true,
+    playbackUiState: VideoCirclePlaybackUiState = VideoCirclePlaybackUiState.IdlePreview,
     onClick: (() -> Unit)? = null,
+    onSeek: ((Float) -> Unit)? = null,
+    onPlaybackEnded: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 )

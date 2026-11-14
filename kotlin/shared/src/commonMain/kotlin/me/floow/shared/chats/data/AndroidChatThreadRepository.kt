@@ -824,7 +824,8 @@ internal fun DirectChatMessage.toItemModel(selfUserId: String?): ChatMessageItem
 			localPath = messageMedia?.localPath,
 			remoteUrl = messageMedia?.url,
 			durationMs = messageMedia?.durationMs ?: 0L,
-			remoteThumbnailUrl = messageMedia?.thumbnailUrl,
+			thumbnailPath = messageMedia?.thumbnailUrl?.takeIf { !it.startsWith("http://") && !it.startsWith("https://") },
+			remoteThumbnailUrl = messageMedia?.thumbnailUrl?.takeIf { it.startsWith("http://") || it.startsWith("https://") },
 			width = messageMedia?.width ?: 0,
 			height = messageMedia?.height ?: 0,
 			uploadState = if (deliveryState == ChatDeliveryState.FAILED) VideoUploadState.Failed
@@ -902,7 +903,7 @@ private fun buildOutgoingLocalMessage(
 			sizeBytes = 0L,
 			durationMs = content.durationMs,
 			localPath = content.localPath,
-			thumbnailUrl = content.remoteThumbnailUrl,
+			thumbnailUrl = content.thumbnailPath ?: content.remoteThumbnailUrl,
 			width = content.width.takeIf { it > 0 },
 			height = content.height.takeIf { it > 0 },
 		)

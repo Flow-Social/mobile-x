@@ -30,6 +30,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.interop.UIKitView
 import coil3.compose.AsyncImage
+import me.floow.uikit.chat.components.videocircle.videoCircleSeekGesture
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.readValue
 import kotlinx.cinterop.useContents
@@ -144,22 +145,22 @@ private val ActiveCircleSize = 252.dp
 actual fun NativeVideoCirclePlayer(
     videoUrl: String,
     thumbnailUrl: String?,
-    isPlaying: Boolean,
+    playbackUiState: me.floow.uikit.chat.model.VideoCirclePlaybackUiState,
     onClick: (() -> Unit)?,
+    onSeek: ((Float) -> Unit)?,
+    onPlaybackEnded: (() -> Unit)?,
     modifier: Modifier
 ) {
-    val circleSize by androidx.compose.animation.core.animateDpAsState(
-        targetValue = if (isPlaying) ActiveCircleSize else InactiveCircleSize,
-        animationSpec = tween(180),
-        label = "video_circle_size_ios",
-    )
-
     val progress = androidx.compose.runtime.remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
     var activePlayer by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<AVPlayer?>(null) }
 
+    val isPlaying = playbackUiState.isPlaying
+    val isPaused = playbackUiState.isPaused
+    val isProgressVisible = playbackUiState.isProgressVisible
+
     val pauseProgress by androidx.compose.animation.core.animateFloatAsState(
-        targetValue = if (!isPlaying) 1f else 0f,
-        animationSpec = if (!isPlaying) {
+        targetValue = if (isPaused) 1f else 0f,
+        animationSpec = if (isPaused) {
             tween(
                 durationMillis = me.floow.uikit.chat.components.videocircle.VideoCircleMotion.PauseProgressInDurationMs,
                 easing = me.floow.uikit.chat.components.videocircle.VideoCircleMotion.PauseProgressInEasing
@@ -172,7 +173,7 @@ actual fun NativeVideoCirclePlayer(
         },
         label = "pause_progress_ios",
     )
-    val overshootPauseProgress = if (!isPlaying) {
+    val overshootPauseProgress = if (isPaused) {
         me.floow.uikit.chat.components.videocircle.overshootInterpolation(pauseProgress)
     } else {
         pauseProgress
@@ -196,10 +197,8 @@ actual fun NativeVideoCirclePlayer(
 
     Box(
         modifier = modifier
-            .size(circleSize)
             .clip(CircleShape)
-            .background(Color.Black)
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+            .background(Color.Black),
         contentAlignment = Alignment.Center
     ) {
         if (!thumbnailUrl.isNullOrBlank()) {
@@ -217,7 +216,7 @@ actual fun NativeVideoCirclePlayer(
             )
         }
 
-        if (isPlaying && videoUrl.isNotBlank()) {
+        if ((isPlaying || isPaused) && videoUrl.isNotBlank()) {
             UIKitView(
                 factory = {
                     val container = IosVideoCircleContainerView()
@@ -268,9 +267,9 @@ actual fun NativeVideoCirclePlayer(
 
         // Telegram-grade circular progress ring
         me.floow.uikit.chat.components.videocircle.VideoCircleProgressOverlay(
-            visible = true,
+            visible = isProgressVisible,
             isPlaying = isPlaying,
-            isPaused = !isPlaying,
+            isPaused = isPaused,
             pauseProgress = pauseProgress,
             overshootPauseProgress = overshootPauseProgress,
             progress = progress.floatValue,
@@ -280,6 +279,37 @@ actual fun NativeVideoCirclePlayer(
         // Pulsing equalizer when playing
         me.floow.uikit.chat.components.videocircle.VideoCirclePlayingEqualizer(
             visible = isPlaying,
+        )
+
+        // Telegram-grade circular seek & tap gesture overlay
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(
+                    if (onClick != null) {
+                        Modifier.videoCircleSeekGesture(
+                            isProgressVisible = isProgressVisible,
+                            isPaused = isPaused,
+                            progress = progress.floatValue,
+                            onSeekingChange = {},
+                            consumeTapUp = true,
+                            onTogglePlayback = onClick,
+                            onLongPress = {},
+                            onSeekProgress = { nextProg ->
+                                activePlayer?.let { p ->
+                                    val currentItem = p.currentItem ?: return@let
+                                    val duration = runCatching { platform.CoreMedia.CMTimeGetSeconds(currentItem.duration) }.getOrDefault(0.0)
+                                    if (duration > 0.0) {
+                                        val targetSeconds = duration * nextProg.toDouble()
+                                        val targetTime = platform.CoreMedia.CMTimeMakeWithSeconds(targetSeconds, 1000)
+                                        p.seekToTime(targetTime)
+                                    }
+                                }
+                                onSeek?.invoke(nextProg)
+                            },
+                        )
+                    } else Modifier
+                )
         )
     }
 }
