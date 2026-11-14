@@ -41,6 +41,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.util.UnstableApi
 import coil3.compose.AsyncImage
+import me.floow.uikit.components.media.ProgressiveImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.floow.shared.chats.videocircle.CircleVideoSurface
@@ -284,17 +285,12 @@ actual fun NativeVideoCirclePlayer(
         val showThumbnail = !isCurrentActive || !isFirstFrameRendered
         if (showThumbnail) {
             if (!thumbnailUrl.isNullOrBlank()) {
-                val isMicro = remember(thumbnailUrl) { thumbnailUrl.startsWith("data:image/") }
-                val thumbMod = if (isMicro) {
-                    Modifier.fillMaxSize().blur(16.dp)
-                } else {
-                    Modifier.fillMaxSize()
-                }
-                AsyncImage(
-                    model = thumbnailUrl,
+                ProgressiveImage(
+                    thumbUrl = thumbnailUrl,
+                    targetUrl = null,
                     contentDescription = "Video Thumbnail",
                     contentScale = ContentScale.Crop,
-                    modifier = thumbMod,
+                    modifier = Modifier.fillMaxSize(),
                 )
             } else if (localThumbnailBitmap != null) {
                 Image(

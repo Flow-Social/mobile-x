@@ -18,6 +18,7 @@ data class DirectChatInitialRequest(
 	val peerUserId: String,
 	val peerDisplayName: String,
 	val peerAvatarUrl: String? = null,
+	val peerAvatarThumb: String? = null,
 	val conversationId: Long? = null,
 	val anchorMessageId: Long? = null,
 	val openMode: ChatOpenMode = ChatOpenMode.FROM_LAST_SEEN,

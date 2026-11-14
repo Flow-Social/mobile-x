@@ -8,5 +8,6 @@ data class UserPreview(
 	val name: ProfileName?,
 	val username: ProfileUsername?,
 	val avatarUrl: String?,
+	val avatarThumb: String? = null,
 )
 

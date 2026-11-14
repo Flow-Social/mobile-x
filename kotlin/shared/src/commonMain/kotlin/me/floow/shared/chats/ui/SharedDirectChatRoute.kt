@@ -1360,6 +1360,7 @@ private fun DirectChatInitialRequest.toInitialHeader(): ChatThreadHeaderModel {
 		peerUserId = if (isSavedMessages) "" else peerUserId,
 		title = if (isSavedMessages) "" else peerDisplayName,
 		avatarUrl = peerAvatarUrl,
+		avatarThumb = peerAvatarThumb,
 		subtitle = null,
 		isSavedMessages = isSavedMessages,
 	).withSavedMessagesSemantics()

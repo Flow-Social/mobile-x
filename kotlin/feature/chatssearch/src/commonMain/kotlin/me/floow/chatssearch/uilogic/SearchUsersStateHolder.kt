@@ -156,6 +156,7 @@ class SearchUsersStateHolder(
 								name = name,
 								username = username,
 								avatarUrl = user.avatarUrl,
+								avatarThumb = user.avatarThumb,
 								isOnline = false,
 							)
 						}

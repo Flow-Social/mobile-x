@@ -39,6 +39,7 @@ fun UserGlobalSearchResult(
 		NetworkAvatar(
 			name = userSearchResult.name.value,
 			avatarModel = userSearchResult.avatarUrl,
+			avatarThumb = userSearchResult.avatarThumb,
 			contentDescription = null,
 			size = 50.dp,
 			modifier = Modifier

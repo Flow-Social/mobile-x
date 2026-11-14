@@ -51,6 +51,7 @@ fun NetworkAvatar(
     name: String,
     avatarModel: Any?,
     modifier: Modifier = Modifier,
+    avatarThumb: String? = null,
     size: Dp = 36.dp,
     backgroundColor: Color = Color.LightGray,
     textColor: Color = Color.Black,
@@ -64,6 +65,7 @@ fun NetworkAvatar(
         is String -> avatarModel.trim().takeIf { it.isNotEmpty() }
         else -> avatarModel
     }
+    val cleanThumb = avatarThumb?.trim()?.takeIf { it.isNotEmpty() }
 
     Box(
         modifier = modifier
@@ -82,11 +84,11 @@ fun NetworkAvatar(
             modifier = Modifier.fillMaxSize()
         )
 
-        if (normalizedModel != null) {
-            if (normalizedModel is String) {
+        if (normalizedModel != null || cleanThumb != null) {
+            if (normalizedModel is String || normalizedModel == null) {
                 ProgressiveImage(
-                    thumbUrl = null,
-                    targetUrl = normalizedModel,
+                    thumbUrl = cleanThumb,
+                    targetUrl = normalizedModel as? String,
                     contentDescription = contentDescription,
                     contentScale = contentScale,
                     placeholderColor = Color.Transparent,

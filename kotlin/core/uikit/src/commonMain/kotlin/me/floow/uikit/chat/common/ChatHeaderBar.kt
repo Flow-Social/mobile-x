@@ -38,6 +38,7 @@ fun ChatHeaderBar(
 	title: String,
 	subtitle: String?,
 	avatarUrl: String?,
+	avatarThumb: String? = null,
 	isSavedMessages: Boolean,
 	onBackClick: () -> Unit,
 	onHeaderClick: (() -> Unit)? = null,
@@ -107,6 +108,7 @@ fun ChatHeaderBar(
 						NetworkAvatar(
 							name = title,
 							avatarModel = avatarUrl,
+							avatarThumb = avatarThumb,
 							size = 42.dp,
 							shape = CircleShape,
 						)

@@ -31,6 +31,7 @@ class UsersRepositoryImpl(
 						name = item.name.takeIf(String::isNotBlank)?.let(ProfileName::createRaw),
 						username = item.username.takeIf(String::isNotBlank)?.let(ProfileUsername::createRaw),
 						avatarUrl = item.avatarUrl,
+						avatarThumb = item.avatarThumb,
 					)
 				}
 

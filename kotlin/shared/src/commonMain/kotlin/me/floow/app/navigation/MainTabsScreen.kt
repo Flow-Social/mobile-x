@@ -43,7 +43,7 @@ fun MainTabsScreen(
     onNavigateToPost: (postId: String) -> Unit = {},
     onNavigateToPostWithModel: ((PostScreenModel) -> Unit)? = null,
     onNavigateToCreatePost: () -> Unit = {},
-    onNavigateToChat: (conversationId: Long, peerUserId: String, peerDisplayName: String, peerAvatarUrl: String?, isSavedMessages: Boolean) -> Unit = { _, _, _, _, _ -> },
+    onNavigateToChat: (conversationId: Long, peerUserId: String, peerDisplayName: String, peerAvatarUrl: String?, peerAvatarThumb: String?, isSavedMessages: Boolean) -> Unit = { _, _, _, _, _, _ -> },
     onNavigateToProfile: (userId: String) -> Unit = {},
     onNavigateToComments: (postId: String) -> Unit = {},
     onNavigateToCommentsWithPost: ((Post) -> Unit)? = null,
@@ -155,6 +155,7 @@ fun MainTabsScreen(
                                     chat.peerUserId ?: chat.id,
                                     chat.title,
                                     chat.avatarUrl,
+                                    chat.avatarThumb,
                                     isSaved,
                                 )
                             }
@@ -192,7 +193,7 @@ fun MainTabsScreen(
                             }
                         },
                         onMessageButtonClick = { target ->
-                            onNavigateToChat(0L, target.userId, target.displayName, target.avatarUrl, false)
+                            onNavigateToChat(0L, target.userId, target.displayName, target.avatarUrl, null, false)
                         },
                         onShareProfileClick = { slug ->
                             val url = "https://floow.me/$slug"

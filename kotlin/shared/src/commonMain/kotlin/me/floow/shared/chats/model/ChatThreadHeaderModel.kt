@@ -5,6 +5,7 @@ data class ChatThreadHeaderModel(
 	val selfUserId: String? = null,
 	val title: String,
 	val avatarUrl: String? = null,
+	val avatarThumb: String? = null,
 	val subtitle: String? = null,
 	val isSavedMessages: Boolean = false,
 )

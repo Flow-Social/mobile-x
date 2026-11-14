@@ -8,6 +8,7 @@ data class UserSearchResult(
 	val name: ProfileName,
 	val username: ProfileUsername,
 	val avatarUrl: String?,
+	val avatarThumb: String? = null,
 	val isOnline: Boolean
 )
 

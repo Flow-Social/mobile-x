@@ -12,13 +12,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import coil3.SingletonImageLoader
 import coil3.compose.AsyncImage
+import coil3.compose.LocalPlatformContext
+import coil3.memory.MemoryCache
+import me.floow.uikit.util.MicroThumbDecoder
+import me.floow.uikit.util.MicroThumbMediaType
 
 internal expect val useDirectAsyncImageFallback: Boolean
 
@@ -193,12 +198,29 @@ fun ProgressiveImage(
     val resolvedTarget = targets.target
     val resolvedThumb = targets.thumb
 
+    val platformContext = LocalPlatformContext.current
+    val imageLoader = remember(platformContext) { SingletonImageLoader.get(platformContext) }
+    val isTargetInMemory = remember(resolvedTarget, imageLoader) {
+        if (resolvedTarget.isNullOrBlank()) false
+        else {
+            imageLoader.memoryCache?.get(MemoryCache.Key(resolvedTarget)) != null
+        }
+    }
+
     val isMicroThumb = remember(resolvedThumb) {
         resolvedThumb?.startsWith("data:image/") == true
     }
 
-    // Если thumb отсутствует или совпадает с target, целевая картинка должна быть видна сразу (alpha=1f) без ожидания под черным фоном
-    val shouldShowImmediately = resolvedThumb.isNullOrBlank() || resolvedThumb == resolvedTarget
+    val microThumbBitmap = remember(resolvedThumb) {
+        if (isMicroThumb) {
+            MicroThumbDecoder.decode(resolvedThumb)
+        } else {
+            null
+        }
+    }
+
+    // Если target уже в памяти Coil, thumb отсутствует или совпадает с target, целевая картинка видна сразу (alpha=1f)
+    val shouldShowImmediately = isTargetInMemory || resolvedThumb.isNullOrBlank() || resolvedThumb == resolvedTarget
     var isTargetLoaded by remember(resolvedTarget) { mutableStateOf(shouldShowImmediately) }
     var retainedPainter by remember { mutableStateOf<Painter?>(null) }
     var latestRenderedPainter by remember { mutableStateOf<Painter?>(null) }
@@ -242,27 +264,29 @@ fun ProgressiveImage(
             )
         }
 
-        // Слой 2: Thumb (микро-превью или обычный thumb, размытый по стилю Telegram)
+        // Слой 2: Thumb (микро-превью синхронно декодируется в кадр 0, обычный thumb через AsyncImage)
         if (targetAlpha < 1f && !resolvedThumb.isNullOrBlank() && resolvedThumb != resolvedTarget) {
-            val thumbModifier = if (isMicroThumb) {
-                Modifier
-                    .fillMaxSize()
-                    .blur(16.dp)
+            if (microThumbBitmap != null) {
+                androidx.compose.foundation.Image(
+                    bitmap = microThumbBitmap,
+                    contentDescription = contentDescription,
+                    contentScale = contentScale,
+                    modifier = Modifier.fillMaxSize()
+                )
             } else {
-                Modifier.fillMaxSize()
-            }
-            AsyncImage(
-                model = resolvedThumb,
-                contentDescription = contentDescription,
-                contentScale = contentScale,
-                modifier = thumbModifier,
-                onSuccess = { state ->
-                    if (!isTargetLoaded) {
-                        latestRenderedPainter = state.painter
-                        onPainterChanged?.invoke(state.painter)
+                AsyncImage(
+                    model = resolvedThumb,
+                    contentDescription = contentDescription,
+                    contentScale = contentScale,
+                    modifier = Modifier.fillMaxSize(),
+                    onSuccess = { state ->
+                        if (!isTargetLoaded) {
+                            latestRenderedPainter = state.painter
+                            onPainterChanged?.invoke(state.painter)
+                        }
                     }
-                }
-            )
+                )
+            }
         }
 
         // Слой 3: Target (проявляется поверх thumb / retained)
