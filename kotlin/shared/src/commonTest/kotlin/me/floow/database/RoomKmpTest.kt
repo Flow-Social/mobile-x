@@ -26,8 +26,10 @@ class RoomKmpTest {
             name = "Bogdan Test",
             username = "bogdan_test",
             description = "KMP Room working",
-            avatarUrl = null,
-            backgroundUrl = null,
+            avatarUrl = "https://cdn.example.com/avatar.jpg",
+            avatarThumb = "data:image/jpeg;base64,thumb123",
+            backgroundUrl = "https://cdn.example.com/bg.jpg",
+            backgroundThumb = "data:image/jpeg;base64,bgthumb123",
             backgroundUpdatedAt = null,
             totalLikesReceived = 99,
             updatedAt = 123456789L
@@ -39,6 +41,8 @@ class RoomKmpTest {
         assertNotNull(loaded)
         assertEquals("test-user-kmp", loaded.userId)
         assertEquals("Bogdan Test", loaded.name)
+        assertEquals("data:image/jpeg;base64,thumb123", loaded.avatarThumb)
+        assertEquals("data:image/jpeg;base64,bgthumb123", loaded.backgroundThumb)
         assertEquals(99, loaded.totalLikesReceived)
 
         db.close()

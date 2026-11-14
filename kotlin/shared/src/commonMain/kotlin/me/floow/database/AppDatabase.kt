@@ -38,7 +38,7 @@ import me.floow.database.dbo.RepliesInboxNotificationEntity
         DirectChatReadStateEntity::class,
         PendingPostMutationEntity::class
     ],
-    version = 35,
+    version = 36,
     exportSchema = true
 )
 @ConstructedBy(AppDatabaseConstructor::class)

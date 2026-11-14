@@ -17,6 +17,8 @@ data class PostEntity(
     val authorName: String?,
     val authorUsername: String?,
     val authorAvatarUrl: String?,
+    @ColumnInfo(name = "author_avatar_thumb")
+    val authorAvatarThumb: String? = null,
     @ColumnInfo(name = "image_urls")
     val imageUrls: List<String>,
     @ColumnInfo(name = "image_variants")

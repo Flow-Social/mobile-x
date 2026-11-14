@@ -29,7 +29,14 @@ class ProfileLocalStoreImpl(
     }
 
     override suspend fun upsertProfile(userId: String, profile: PublicProfile, updatedAt: Long) {
-        profileDao.upsert(profile.toEntity(userId, updatedAt))
+        val existing = profileDao.getProfile(userId)
+        val merged = profile.copy(
+            avatarThumb = profile.avatarThumb ?: existing?.avatarThumb,
+            backgroundThumb = profile.backgroundThumb ?: existing?.backgroundThumb,
+            avatarUrl = profile.avatarUrl ?: existing?.avatarUrl,
+            backgroundUrl = profile.backgroundUrl ?: existing?.backgroundUrl
+        )
+        profileDao.upsert(merged.toEntity(userId, updatedAt))
     }
 
     override suspend fun clearUser(userId: String) {
@@ -44,7 +51,9 @@ private fun ProfileEntity.toDomain(): PublicProfile {
         name = name?.let { ProfileName.createRaw(it) },
         username = username?.let { ProfileUsername.createRaw(it) },
         avatarUrl = avatarUrl,
+        avatarThumb = avatarThumb,
         backgroundUrl = backgroundUrl,
+        backgroundThumb = backgroundThumb,
         backgroundUpdatedAt = backgroundUpdatedAt,
         description = description?.let { ProfileDescription.createRaw(it) },
         totalLikesReceived = totalLikesReceived
@@ -58,7 +67,9 @@ private fun PublicProfile.toEntity(userId: String, updatedAt: Long): ProfileEnti
         username = username?.value,
         description = description?.value,
         avatarUrl = avatarUrl,
+        avatarThumb = avatarThumb,
         backgroundUrl = backgroundUrl,
+        backgroundThumb = backgroundThumb,
         backgroundUpdatedAt = backgroundUpdatedAt,
         totalLikesReceived = totalLikesReceived,
         updatedAt = updatedAt

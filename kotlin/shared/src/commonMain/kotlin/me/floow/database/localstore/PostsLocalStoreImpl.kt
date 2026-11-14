@@ -34,8 +34,16 @@ class PostsLocalStoreImpl(
     }
 
 	override suspend fun replacePosts(userId: String, posts: List<Post>, updatedAt: Long) {
-		val entities = posts.map { it.toEntity(userId, updatedAt) }
 		val existing = postsDao.getPosts(userId)
+		val existingById = existing.associateBy { it.postId }
+		val entities = posts.map { post ->
+			val prev = existingById[post.id]
+			val mergedAuthor = post.author.copy(
+				avatarThumb = post.author.avatarThumb ?: prev?.authorAvatarThumb,
+				avatarUrl = post.author.avatarUrl ?: prev?.authorAvatarUrl
+			)
+			post.copy(author = mergedAuthor).toEntity(userId, updatedAt)
+		}
 		if (hasSameSnapshot(existing, entities)) {
 			return
 		}
@@ -43,7 +51,14 @@ class PostsLocalStoreImpl(
 	}
 
     override suspend fun upsertPost(userId: String, post: Post, updatedAt: Long) {
-        postsDao.insert(post.toEntity(userId, updatedAt))
+        val existing = postsDao.getPost(userId, post.id)
+        val merged = post.copy(
+            author = post.author.copy(
+                avatarThumb = post.author.avatarThumb ?: existing?.authorAvatarThumb,
+                avatarUrl = post.author.avatarUrl ?: existing?.authorAvatarUrl
+            )
+        )
+        postsDao.insert(merged.toEntity(userId, updatedAt))
     }
 
     override suspend fun deletePost(userId: String, postId: String) {
@@ -73,6 +88,7 @@ private fun PostEntity.sameContent(other: PostEntity): Boolean {
 		authorName == other.authorName &&
 		authorUsername == other.authorUsername &&
 		authorAvatarUrl == other.authorAvatarUrl &&
+		authorAvatarThumb == other.authorAvatarThumb &&
 		imageUrls == other.imageUrls &&
 		imageVariants == other.imageVariants &&
 		commentersPreview == other.commentersPreview &&
@@ -91,7 +107,8 @@ private fun PostEntity.toDomain(): Post {
             id = authorId,
             name = authorName?.let { ProfileName.createRaw(it) },
             username = authorUsername?.let { ProfileUsername.createRaw(it) },
-            avatarUrl = authorAvatarUrl
+            avatarUrl = authorAvatarUrl,
+            avatarThumb = authorAvatarThumb
         ),
 		content = PostContent(
 			imageUrls = imageUrls,
@@ -114,6 +131,7 @@ private fun Post.toEntity(userId: String, updatedAt: Long): PostEntity {
         authorName = author.name?.value,
         authorUsername = author.username?.value,
         authorAvatarUrl = author.avatarUrl,
+        authorAvatarThumb = author.avatarThumb,
         imageUrls = content.imageUrls,
         imageVariants = content.imageVariants,
         commentersPreview = commentersPreview,

@@ -1108,6 +1108,14 @@ object DatabaseMigrations {
             connection.execSQL("DROP TABLE IF EXISTS TestDbo")
         }
     }
+    val MIGRATION_35_36 = object : Migration(35, 36) {
+        override fun migrate(connection: SQLiteConnection) {
+            connection.execSQL("ALTER TABLE direct_chat_conversations ADD COLUMN peer_avatar_thumb TEXT")
+            connection.execSQL("ALTER TABLE profiles ADD COLUMN avatar_thumb TEXT")
+            connection.execSQL("ALTER TABLE profiles ADD COLUMN background_thumb TEXT")
+            connection.execSQL("ALTER TABLE posts ADD COLUMN author_avatar_thumb TEXT")
+        }
+    }
 
     val ALL_MIGRATIONS = arrayOf(
         MIGRATION_1_2,
@@ -1144,5 +1152,6 @@ object DatabaseMigrations {
         MIGRATION_32_33,
         MIGRATION_33_34,
         MIGRATION_34_35,
+        MIGRATION_35_36,
     )
 }

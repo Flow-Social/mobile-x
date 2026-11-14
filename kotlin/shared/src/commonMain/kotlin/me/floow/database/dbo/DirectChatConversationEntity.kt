@@ -19,6 +19,8 @@ data class DirectChatConversationEntity(
 	val peerName: String?,
 	@ColumnInfo(name = "peer_avatar_url")
 	val peerAvatarUrl: String?,
+	@ColumnInfo(name = "peer_avatar_thumb")
+	val peerAvatarThumb: String? = null,
 	@ColumnInfo(name = "last_message_id")
 	val lastMessageId: Long?,
 	@ColumnInfo(name = "last_message_sender_id")

@@ -100,8 +100,12 @@ class DirectChatsLocalStoreImpl(
 		val shouldPreserveLocalPreview = existingLastCreatedAt > incomingLastCreatedAt &&
 			!existing.lastMessageClientMessageId.isNullOrBlank() &&
 			existing.lastMessageDeliveryStatus != me.floow.domain.models.MessageDeliveryStatus.SENT.name
+		val resolvedPeerAvatarThumb = incoming.peerAvatarThumb ?: existing.peerAvatarThumb
+		val resolvedPeerAvatarUrl = incoming.peerAvatarUrl ?: existing.peerAvatarUrl
 		val merged = if (shouldPreserveLocalPreview) {
 			incoming.copy(
+				peerAvatarUrl = resolvedPeerAvatarUrl,
+				peerAvatarThumb = resolvedPeerAvatarThumb,
 				lastMessageId = existing.lastMessageId,
 				lastMessageSenderId = existing.lastMessageSenderId,
 				lastMessageSenderUsername = existing.lastMessageSenderUsername,
@@ -116,7 +120,7 @@ class DirectChatsLocalStoreImpl(
 				lastMessageMediaDurationMs = existing.lastMessageMediaDurationMs,
 				lastMessageMediaWidth = existing.lastMessageMediaWidth,
 				lastMessageMediaHeight = existing.lastMessageMediaHeight,
-				lastMessageMediaThumbnailUrl = existing.lastMessageMediaThumbnailUrl,
+				lastMessageMediaThumbnailUrl = existing.lastMessageMediaThumbnailUrl ?: incoming.lastMessageMediaThumbnailUrl,
 				lastMessageClientMessageId = existing.lastMessageClientMessageId,
 				lastMessageDeliveryStatus = existing.lastMessageDeliveryStatus,
 				lastMessageCreatedAt = existing.lastMessageCreatedAt,
@@ -127,6 +131,9 @@ class DirectChatsLocalStoreImpl(
 			)
 		} else {
 			incoming.copy(
+				peerAvatarUrl = resolvedPeerAvatarUrl,
+				peerAvatarThumb = resolvedPeerAvatarThumb,
+				lastMessageMediaThumbnailUrl = incoming.lastMessageMediaThumbnailUrl ?: existing.lastMessageMediaThumbnailUrl,
 				isPinned = existing.isPinned || incoming.isPinned,
 				pinnedAt = existing.pinnedAt ?: incoming.pinnedAt,
 				updatedAt = maxOf(incoming.updatedAt, existing.updatedAt),
@@ -1070,6 +1077,7 @@ class DirectChatsLocalStoreImpl(
 			peerUsername = peer.username,
 			peerName = peer.name,
 			peerAvatarUrl = peer.avatarUrl,
+			peerAvatarThumb = peer.avatarThumb,
 			lastMessageId = last?.id,
 			lastMessageSenderId = last?.sender?.id,
 			lastMessageSenderUsername = last?.sender?.username,
@@ -1146,7 +1154,8 @@ class DirectChatsLocalStoreImpl(
 				id = peerId,
 				username = peerUsername,
 				name = peerName,
-				avatarUrl = peerAvatarUrl
+				avatarUrl = peerAvatarUrl,
+				avatarThumb = peerAvatarThumb
 			),
 			lastMessage = message,
 			unreadCount = unreadCount.coerceAtLeast(0),

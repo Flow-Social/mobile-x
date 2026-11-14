@@ -1,5 +1,6 @@
 package me.floow.database.dbo
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -11,7 +12,11 @@ data class ProfileEntity(
     val username: String?,
     val description: String?,
     val avatarUrl: String?,
+    @ColumnInfo(name = "avatar_thumb")
+    val avatarThumb: String? = null,
     val backgroundUrl: String?,
+    @ColumnInfo(name = "background_thumb")
+    val backgroundThumb: String? = null,
     val backgroundUpdatedAt: Long?,
     val totalLikesReceived: Int,
     val updatedAt: Long
