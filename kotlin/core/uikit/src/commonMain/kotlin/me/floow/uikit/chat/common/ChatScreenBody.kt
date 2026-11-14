@@ -30,12 +30,14 @@ import me.floow.uikit.chat.input.ChatInputController
 import me.floow.uikit.chat.input.ChatInputMode
 import me.floow.uikit.chat.model.ChatDraftImage
 import me.floow.uikit.chat.model.VideoRecordingState
+import me.floow.uikit.components.media.FlowImageSource
 
 @Composable
 fun ChatScreenBody(
 	title: String?,
 	subtitle: String?,
-	avatarUrl: String?,
+	avatarSource: FlowImageSource = FlowImageSource.Empty,
+	avatarUrl: String? = null,
 	avatarThumb: String? = null,
 	isSavedMessages: Boolean,
 	onBackClick: () -> Unit,
@@ -159,11 +161,11 @@ fun ChatScreenBody(
 						modifier = Modifier.fillMaxWidth(),
 					)
 				} else if (title != null) {
+					val effectiveAvatarSource = if (!avatarSource.isEmpty) avatarSource else FlowImageSource.of(avatarUrl, avatarThumb)
 					ChatHeaderBar(
 						title = title,
 						subtitle = subtitle,
-						avatarUrl = avatarUrl,
-						avatarThumb = avatarThumb,
+						avatarSource = effectiveAvatarSource,
 						isSavedMessages = isSavedMessages,
 						onBackClick = onBackClick,
 						onHeaderClick = onHeaderClick,

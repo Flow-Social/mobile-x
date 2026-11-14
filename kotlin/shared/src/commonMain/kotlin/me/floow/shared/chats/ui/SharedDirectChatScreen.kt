@@ -328,8 +328,7 @@ internal fun SharedDirectChatScreen(
 	ChatScreenBody(
 		title = header.title,
 		subtitle = header.subtitle,
-		avatarUrl = header.avatarUrl,
-		avatarThumb = header.avatarThumb,
+		avatarSource = header.avatarSource,
 		isSavedMessages = header.isSavedMessages,
 		onBackClick = onBackClick,
 		onHeaderClick = onHeaderClick,

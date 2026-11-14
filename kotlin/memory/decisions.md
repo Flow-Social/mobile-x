@@ -138,3 +138,11 @@
   2. *Единый парсер ссылок `PostTextLinkify.kt`*: логика парсинга ссылок на посты (`https://floow.me/{user}/{id}`) и упоминаний (`@{user}`) объединена в `PostTextLinkify.kt`, используемом в `SharedFeedScreen` и `PostScreen`.
   3. *Удаление мертвого кода*: удалены `SharedFeedDebugComponents.kt`, `SharedFeedMediaContract.kt`, неиспользуемый `feedCache` в `FeedApiImpl`, адаптер `SharedFeedPlatformUxAdapter` и неиспользуемые методы управления рекомендациями в `SharedFeedModels`.
   4. *Инвариант*: жесты вертикальных свайпов (`onSwipeUp`, `onSwipeDown`, индикаторы и `SharedSwipeDirection.Up`) сохранены в неприкосновенности.
+
+## ADR-019: Единая модель медиа FlowImageSource и оптимизация CPU микропревью (14 ноября 2026)
+- **Контекст**: Размножение спаренных параметров `url` и `microThumb` по компонентам UI, расхождение политик мержа превьюшек в Room, передача `avatarThumb` через роутер и накладные расходы StackBlur.
+- **Решение**:
+  1. *Единая модель медиа*: `@Immutable data class FlowImageSource(val url: String?, val microThumb: String? = null)` в `:core:uikit`. Все UI компоненты принимают её как первичный параметр.
+  2. *Единая политика мержа*: чистая функция `resolveMergedThumb` объединяет правила обновления и сохранения локальных кэшей для постов, аватарок и медиа.
+  3. *Синхронное чтение из кэша (0 ms)*: `avatarThumb` исключен из аргументов навигации; `DirectChatsLocalStore.getCachedConversationSync` мгновенно отдает данные чата при монтировании экрана.
+  4. *Оптимизация StackBlur & MicroThumbDecoder*: удален `coerceIn` из внутренних циклов фильтра, добавлен принудительный даунскейл до 24x24 перед блюром на Android/iOS, и сужен скоуп блокировки LRU-кэша.

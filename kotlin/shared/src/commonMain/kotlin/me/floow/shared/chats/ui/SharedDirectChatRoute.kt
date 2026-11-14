@@ -34,6 +34,8 @@ import me.floow.shared.chats.uilogic.direct.DeleteMessageResult
 import me.floow.shared.chats.uilogic.direct.DirectChatInitialRequest
 import me.floow.shared.chats.uilogic.direct.DirectChatScreenState
 import me.floow.shared.chats.uilogic.direct.DirectChatStateHolder
+import me.floow.domain.cache.DirectChatsLocalStore
+import org.koin.compose.koinInject
 import me.floow.uikit.chat.input.ChatInputController
 import me.floow.uikit.chat.model.ChatContextMenuAction
 import me.floow.uikit.chat.model.ChatSelectionState
@@ -177,6 +179,13 @@ fun SharedDirectChatRoute(
 	var selectedMessageIds by remember(stateHolder) { mutableStateOf<Set<Long>>(emptySet()) }
 	var pendingDeleteMessageId by remember(stateHolder) { mutableStateOf<Long?>(null) }
 	var isDeleteSelectionConfirmationVisible by remember(stateHolder) { mutableStateOf(false) }
+
+	val directChatsLocalStore: DirectChatsLocalStore = koinInject()
+	val cachedConversation = remember(initialRequest.conversationId, initialRequest.peerUserId) {
+		initialRequest.conversationId?.let { directChatsLocalStore.getCachedConversationSync(it) }
+			?: directChatsLocalStore.getCachedConversationByPeerIdSync(initialRequest.peerUserId)
+	}
+	val initialAvatarThumb = cachedConversation?.peer?.avatarThumb
 
 	val chatDraftKey = remember(initialRequest) {
 		initialRequest.conversationId?.toString()?.takeIf { it != "0" }
@@ -1030,7 +1039,7 @@ fun SharedDirectChatRoute(
 
 	SharedDirectChatScreen(
 		state = state,
-		initialHeader = initialRequest.toInitialHeader(),
+		initialHeader = initialRequest.toInitialHeader(initialAvatarThumb),
 		selectionState = selectionState,
 		contextMenuActions = contextMenuActions,
 		resolveContextMenuActions = { messageId ->
@@ -1355,12 +1364,12 @@ fun SharedDirectChatRoute(
 	}
 }
 
-private fun DirectChatInitialRequest.toInitialHeader(): ChatThreadHeaderModel {
+private fun DirectChatInitialRequest.toInitialHeader(avatarThumb: String? = null): ChatThreadHeaderModel {
 	return ChatThreadHeaderModel(
 		peerUserId = if (isSavedMessages) "" else peerUserId,
 		title = if (isSavedMessages) "" else peerDisplayName,
 		avatarUrl = peerAvatarUrl,
-		avatarThumb = peerAvatarThumb,
+		avatarThumb = avatarThumb,
 		subtitle = null,
 		isSavedMessages = isSavedMessages,
 	).withSavedMessagesSemantics()

@@ -78,9 +78,9 @@ object StackBlur {
             stackpointer = radius
 
             for (xIdx in 0 until w) {
-                r[yi] = dv[rsum.coerceIn(0, dvLimit)]
-                g[yi] = dv[gsum.coerceIn(0, dvLimit)]
-                b[yi] = dv[bsum.coerceIn(0, dvLimit)]
+                r[yi] = dv[rsum]
+                g[yi] = dv[gsum]
+                b[yi] = dv[bsum]
 
                 rsum -= routsum
                 gsum -= goutsum
@@ -164,7 +164,7 @@ object StackBlur {
             stackpointer = radius
             for (yIdx in 0 until h) {
                 val a = pix[yi] and -0x1000000
-                pix[yi] = a or (dv[rsum.coerceIn(0, dvLimit)] shl 16) or (dv[gsum.coerceIn(0, dvLimit)] shl 8) or dv[bsum.coerceIn(0, dvLimit)]
+                pix[yi] = a or (dv[rsum] shl 16) or (dv[gsum] shl 8) or dv[bsum]
 
                 rsum -= routsum
                 gsum -= goutsum

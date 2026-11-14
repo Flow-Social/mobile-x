@@ -17,6 +17,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import me.floow.uikit.components.media.FlowImageSource
 import me.floow.uikit.components.media.ProgressiveImage
 import me.floow.uikit.theme.LocalTypography
 
@@ -44,6 +45,34 @@ fun InitialAvatar(
             color = textColor
         )
     }
+}
+
+@Composable
+fun NetworkAvatar(
+    name: String,
+    imageSource: FlowImageSource,
+    modifier: Modifier = Modifier,
+    size: Dp = 36.dp,
+    backgroundColor: Color = Color.LightGray,
+    textColor: Color = Color.Black,
+    textStyle: TextStyle? = null,
+    shape: Shape = CircleShape,
+    contentScale: ContentScale = ContentScale.Crop,
+    contentDescription: String? = null
+) {
+    NetworkAvatar(
+        name = name,
+        avatarModel = imageSource.url,
+        modifier = modifier,
+        avatarThumb = imageSource.microThumb,
+        size = size,
+        backgroundColor = backgroundColor,
+        textColor = textColor,
+        textStyle = textStyle,
+        shape = shape,
+        contentScale = contentScale,
+        contentDescription = contentDescription
+    )
 }
 
 @Composable

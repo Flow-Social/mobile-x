@@ -30,11 +30,21 @@ class ProfileLocalStoreImpl(
 
     override suspend fun upsertProfile(userId: String, profile: PublicProfile, updatedAt: Long) {
         val existing = profileDao.getProfile(userId)
+        val resolvedAvatarThumb = resolveMergedThumb(
+            newUrl = profile.avatarUrl,
+            newThumb = profile.avatarThumb,
+            cachedUrl = existing?.avatarUrl,
+            cachedThumb = existing?.avatarThumb,
+        )
+        val resolvedBackgroundThumb = resolveMergedThumb(
+            newUrl = profile.backgroundUrl,
+            newThumb = profile.backgroundThumb,
+            cachedUrl = existing?.backgroundUrl,
+            cachedThumb = existing?.backgroundThumb,
+        )
         val merged = profile.copy(
-            avatarThumb = profile.avatarThumb ?: existing?.avatarThumb,
-            backgroundThumb = profile.backgroundThumb ?: existing?.backgroundThumb,
-            avatarUrl = profile.avatarUrl ?: existing?.avatarUrl,
-            backgroundUrl = profile.backgroundUrl ?: existing?.backgroundUrl
+            avatarThumb = resolvedAvatarThumb,
+            backgroundThumb = resolvedBackgroundThumb,
         )
         profileDao.upsert(merged.toEntity(userId, updatedAt))
     }

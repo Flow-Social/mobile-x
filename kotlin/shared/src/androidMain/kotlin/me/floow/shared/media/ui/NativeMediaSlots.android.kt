@@ -41,6 +41,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.util.UnstableApi
 import coil3.compose.AsyncImage
+import me.floow.uikit.components.media.FlowImageSource
 import me.floow.uikit.components.media.ProgressiveImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -286,8 +287,7 @@ actual fun NativeVideoCirclePlayer(
         if (showThumbnail) {
             if (!thumbnailUrl.isNullOrBlank()) {
                 ProgressiveImage(
-                    thumbUrl = thumbnailUrl,
-                    targetUrl = null,
+                    source = FlowImageSource.of(url = null, microThumb = thumbnailUrl),
                     contentDescription = "Video Thumbnail",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),

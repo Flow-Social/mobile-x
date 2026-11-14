@@ -31,6 +31,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.interop.UIKitView
 import coil3.compose.AsyncImage
+import me.floow.uikit.components.media.FlowImageSource
 import me.floow.uikit.components.media.ProgressiveImage
 import me.floow.uikit.chat.components.videocircle.videoCircleSeekGesture
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -214,8 +215,7 @@ actual fun NativeVideoCirclePlayer(
     ) {
         if (!thumbnailUrl.isNullOrBlank()) {
             ProgressiveImage(
-                thumbUrl = thumbnailUrl,
-                targetUrl = null,
+                source = FlowImageSource.of(url = null, microThumb = thumbnailUrl),
                 contentDescription = "Video Thumbnail",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),

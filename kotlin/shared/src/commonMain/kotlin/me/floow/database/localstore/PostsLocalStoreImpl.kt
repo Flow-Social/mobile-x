@@ -38,9 +38,15 @@ class PostsLocalStoreImpl(
 		val existingById = existing.associateBy { it.postId }
 		val entities = posts.map { post ->
 			val prev = existingById[post.id]
+			val resolvedAuthorAvatarThumb = resolveMergedThumb(
+				newUrl = post.author.avatarUrl,
+				newThumb = post.author.avatarThumb,
+				cachedUrl = prev?.authorAvatarUrl,
+				cachedThumb = prev?.authorAvatarThumb,
+			)
 			val mergedAuthor = post.author.copy(
-				avatarThumb = post.author.avatarThumb ?: prev?.authorAvatarThumb,
-				avatarUrl = post.author.avatarUrl ?: prev?.authorAvatarUrl
+				avatarThumb = resolvedAuthorAvatarThumb,
+				avatarUrl = post.author.avatarUrl,
 			)
 			post.copy(author = mergedAuthor).toEntity(userId, updatedAt)
 		}
@@ -52,10 +58,16 @@ class PostsLocalStoreImpl(
 
     override suspend fun upsertPost(userId: String, post: Post, updatedAt: Long) {
         val existing = postsDao.getPost(userId, post.id)
+        val resolvedAuthorAvatarThumb = resolveMergedThumb(
+            newUrl = post.author.avatarUrl,
+            newThumb = post.author.avatarThumb,
+            cachedUrl = existing?.authorAvatarUrl,
+            cachedThumb = existing?.authorAvatarThumb,
+        )
         val merged = post.copy(
             author = post.author.copy(
-                avatarThumb = post.author.avatarThumb ?: existing?.authorAvatarThumb,
-                avatarUrl = post.author.avatarUrl ?: existing?.authorAvatarUrl
+                avatarThumb = resolvedAuthorAvatarThumb,
+                avatarUrl = post.author.avatarUrl,
             )
         )
         postsDao.insert(merged.toEntity(userId, updatedAt))

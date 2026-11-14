@@ -31,14 +31,14 @@ import flow.core.uikit.generated.resources.Res
 import flow.core.uikit.generated.resources.dropdown_icon
 import flow.core.uikit.generated.resources.nav_back_icon
 import me.floow.uikit.components.avatar.NetworkAvatar
+import me.floow.uikit.components.media.FlowImageSource
 import org.jetbrains.compose.resources.painterResource
 
 @Composable
 fun ChatHeaderBar(
 	title: String,
 	subtitle: String?,
-	avatarUrl: String?,
-	avatarThumb: String? = null,
+	avatarSource: FlowImageSource,
 	isSavedMessages: Boolean,
 	onBackClick: () -> Unit,
 	onHeaderClick: (() -> Unit)? = null,
@@ -107,8 +107,7 @@ fun ChatHeaderBar(
 					} else {
 						NetworkAvatar(
 							name = title,
-							avatarModel = avatarUrl,
-							avatarThumb = avatarThumb,
+							imageSource = avatarSource,
 							size = 42.dp,
 							shape = CircleShape,
 						)
@@ -162,3 +161,29 @@ fun ChatHeaderBar(
 		HorizontalDivider(color = dividerColor ?: MaterialTheme.colorScheme.outlineVariant)
 	}
 }
+
+@Composable
+fun ChatHeaderBar(
+	title: String,
+	subtitle: String?,
+	avatarUrl: String?,
+	avatarThumb: String? = null,
+	isSavedMessages: Boolean,
+	onBackClick: () -> Unit,
+	onHeaderClick: (() -> Unit)? = null,
+	onTrailingClick: (() -> Unit)? = null,
+	avatarPainter: Painter? = null,
+	dividerColor: Color? = null,
+	modifier: Modifier = Modifier,
+) = ChatHeaderBar(
+	title = title,
+	subtitle = subtitle,
+	avatarSource = FlowImageSource.of(avatarUrl, avatarThumb),
+	isSavedMessages = isSavedMessages,
+	onBackClick = onBackClick,
+	onHeaderClick = onHeaderClick,
+	onTrailingClick = onTrailingClick,
+	avatarPainter = avatarPainter,
+	dividerColor = dividerColor,
+	modifier = modifier,
+)

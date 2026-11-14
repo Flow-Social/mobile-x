@@ -23,12 +23,29 @@ actual fun decodeAndBlurMicroThumb(bytes: ByteArray, blurRadius: Int): ImageBitm
         if (nsData.length.toInt() == 0) return null
 
         val skiaImage = Image.makeFromEncoded(bytes) ?: return null
-        val w = skiaImage.width
-        val h = skiaImage.height
-        if (w <= 0 || h <= 0) return null
+        val rawW = skiaImage.width
+        val rawH = skiaImage.height
+        if (rawW <= 0 || rawH <= 0) return null
 
         if (blurRadius <= 0) {
             return skiaImage.toComposeImageBitmap()
+        }
+
+        val (activeImage, w, h) = if (maxOf(rawW, rawH) > 24) {
+            val scale = 24f / maxOf(rawW, rawH)
+            val targetW = (rawW * scale).toInt().coerceAtLeast(1)
+            val targetH = (rawH * scale).toInt().coerceAtLeast(1)
+            val surface = org.jetbrains.skia.Surface.makeRasterN32Premul(targetW, targetH)
+            val canvas = surface.canvas
+            val dstRect = org.jetbrains.skia.Rect.makeWH(targetW.toFloat(), targetH.toFloat())
+            val paint = org.jetbrains.skia.Paint().apply {
+                isAntiAlias = true
+            }
+            canvas.drawImageRect(skiaImage, dstRect, paint)
+            val scaledImage = surface.makeImageSnapshot()
+            Triple(scaledImage, targetW, targetH)
+        } else {
+            Triple(skiaImage, rawW, rawH)
         }
 
         val imageInfo = ImageInfo(
@@ -40,12 +57,12 @@ actual fun decodeAndBlurMicroThumb(bytes: ByteArray, blurRadius: Int): ImageBitm
 
         val bitmap = org.jetbrains.skia.Bitmap()
         bitmap.allocN32Pixels(w, h)
-        if (!skiaImage.readPixels(bitmap)) {
-            return skiaImage.toComposeImageBitmap()
+        if (!activeImage.readPixels(bitmap)) {
+            return activeImage.toComposeImageBitmap()
         }
 
         val pixels = IntArray(w * h)
-        val byteBuffer = bitmap.readPixels(imageInfo) ?: return skiaImage.toComposeImageBitmap()
+        val byteBuffer = bitmap.readPixels(imageInfo) ?: return activeImage.toComposeImageBitmap()
         for (i in 0 until (w * h)) {
             val offset = i * 4
             val r = byteBuffer[offset].toInt() and 0xFF

@@ -27,9 +27,23 @@ class DirectChatsLocalStoreImpl(
 	private val database: AppDatabase,
 	private val dao: DirectChatsDao
 ) : DirectChatsLocalStore {
+	@kotlin.concurrent.Volatile
+	private var cachedConversationsMap: Map<Long, DirectChatConversation> = emptyMap()
+
+	override fun getCachedConversationSync(conversationId: Long): DirectChatConversation? {
+		return cachedConversationsMap[conversationId]
+	}
+
+	override fun getCachedConversationByPeerIdSync(peerUserId: String): DirectChatConversation? {
+		if (peerUserId.isBlank()) return null
+		return cachedConversationsMap.values.firstOrNull { it.peer.id == peerUserId }
+	}
+
 	override fun observeConversations(): Flow<List<DirectChatConversation>> {
 		return dao.observeConversations().map { entities ->
-			entities.map { entity -> entity.toDomain() }
+			val list = entities.map { entity -> entity.toDomain() }
+			cachedConversationsMap = list.associateBy { it.id }
+			list
 		}
 	}
 
@@ -49,12 +63,15 @@ class DirectChatsLocalStoreImpl(
 	}
 
 	override suspend fun getConversations(limit: Int, offset: Int): List<DirectChatConversation> {
-		return dao.getConversations(limit = limit, offset = offset)
+		val list = dao.getConversations(limit = limit, offset = offset)
 			.map { entity -> entity.toDomain() }
+		cachedConversationsMap = cachedConversationsMap + list.associateBy { it.id }
+		return list
 	}
 
 	override suspend fun upsertConversations(items: List<DirectChatConversation>) {
 		if (items.isEmpty()) return
+		cachedConversationsMap = cachedConversationsMap + items.associateBy { it.id }
 		database.withTransaction {
 			items.forEach { item -> upsertMergedConversation(item.toEntity()) }
 			val readStates = items.map { item -> toMergedReadStateEntity(item) }
@@ -63,6 +80,7 @@ class DirectChatsLocalStoreImpl(
 	}
 
 	override suspend fun upsertConversation(item: DirectChatConversation) {
+		cachedConversationsMap = cachedConversationsMap + (item.id to item)
 		database.withTransaction {
 			upsertMergedConversation(item.toEntity())
 			dao.upsertReadState(toMergedReadStateEntity(item))
@@ -100,11 +118,15 @@ class DirectChatsLocalStoreImpl(
 		val shouldPreserveLocalPreview = existingLastCreatedAt > incomingLastCreatedAt &&
 			!existing.lastMessageClientMessageId.isNullOrBlank() &&
 			existing.lastMessageDeliveryStatus != me.floow.domain.models.MessageDeliveryStatus.SENT.name
-		val resolvedPeerAvatarThumb = incoming.peerAvatarThumb ?: existing.peerAvatarThumb
-		val resolvedPeerAvatarUrl = incoming.peerAvatarUrl ?: existing.peerAvatarUrl
+		val resolvedPeerAvatarThumb = resolveMergedThumb(
+			newUrl = incoming.peerAvatarUrl,
+			newThumb = incoming.peerAvatarThumb,
+			cachedUrl = existing.peerAvatarUrl,
+			cachedThumb = existing.peerAvatarThumb,
+		)
 		val merged = if (shouldPreserveLocalPreview) {
 			incoming.copy(
-				peerAvatarUrl = resolvedPeerAvatarUrl,
+				peerAvatarUrl = incoming.peerAvatarUrl,
 				peerAvatarThumb = resolvedPeerAvatarThumb,
 				lastMessageId = existing.lastMessageId,
 				lastMessageSenderId = existing.lastMessageSenderId,
@@ -131,7 +153,7 @@ class DirectChatsLocalStoreImpl(
 			)
 		} else {
 			incoming.copy(
-				peerAvatarUrl = resolvedPeerAvatarUrl,
+				peerAvatarUrl = incoming.peerAvatarUrl,
 				peerAvatarThumb = resolvedPeerAvatarThumb,
 				lastMessageMediaThumbnailUrl = incoming.lastMessageMediaThumbnailUrl ?: existing.lastMessageMediaThumbnailUrl,
 				isPinned = existing.isPinned || incoming.isPinned,
@@ -143,7 +165,11 @@ class DirectChatsLocalStoreImpl(
 	}
 
 	override suspend fun getConversationById(conversationId: Long): DirectChatConversation? {
-		return dao.getConversationById(conversationId)?.toDomain()
+		val item = dao.getConversationById(conversationId)?.toDomain()
+		if (item != null) {
+			cachedConversationsMap = cachedConversationsMap + (item.id to item)
+		}
+		return item
 	}
 
 	override suspend fun setConversationPinned(

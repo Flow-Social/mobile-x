@@ -741,6 +741,7 @@ private fun DirectChatConversation.toHeader(
 				?: request.peerDisplayName
 		},
 		avatarUrl = peer.avatarUrl,
+		avatarThumb = peer.avatarThumb,
 		subtitle = null,
 		isSavedMessages = request.isSavedMessages,
 	)

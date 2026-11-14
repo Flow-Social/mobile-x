@@ -24,6 +24,10 @@ interface DirectChatsLocalStore {
 
 	suspend fun getConversationById(conversationId: Long): DirectChatConversation?
 
+	fun getCachedConversationSync(conversationId: Long): DirectChatConversation? = null
+
+	fun getCachedConversationByPeerIdSync(peerUserId: String): DirectChatConversation? = null
+
 	suspend fun setConversationPinned(
 		conversationId: Long,
 		isPinned: Boolean,

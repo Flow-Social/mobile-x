@@ -1,7 +1,9 @@
 package me.floow.uikit.components.media
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ProgressiveImageModelTest {
@@ -55,5 +57,21 @@ class ProgressiveImageModelTest {
         )
         assertNull(resolved.thumb)
         assertEquals("https://cdn.example.com/target.jpg", resolved.target)
+    }
+
+    @Test
+    fun `FlowImageSource of normalizes blanks and identifies empty correctly`() {
+        val emptySource = FlowImageSource.of(null, null)
+        assertEquals(FlowImageSource.Empty, emptySource)
+        assertTrue(emptySource.isEmpty)
+
+        val blankSource = FlowImageSource.of("   ", "   ")
+        assertEquals(FlowImageSource.Empty, blankSource)
+        assertTrue(blankSource.isEmpty)
+
+        val validSource = FlowImageSource.of(" https://cdn.example.com/pic.jpg ", " data:image/jpeg;base64,abc ")
+        assertEquals("https://cdn.example.com/pic.jpg", validSource.url)
+        assertEquals("data:image/jpeg;base64,abc", validSource.microThumb)
+        assertFalse(validSource.isEmpty)
     }
 }

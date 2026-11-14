@@ -91,10 +91,6 @@ object MicroThumbDecoder {
                 }
             }
             lruCache[source] = bitmap
-
-            val hitRate = if (metrics.requests > 0) (metrics.hits * 100 / metrics.requests) else 0
-            val avgDurationUs = if (metrics.decodeCount > 0) metrics.totalDecodeDurationUs / metrics.decodeCount else 0
-            println("[MicroThumbDecoder] $mediaType: decoded in ${durationUs}µs (avg ${avgDurationUs}µs), hit rate: $hitRate% (${metrics.hits}/${metrics.requests})")
         }
 
         return bitmap

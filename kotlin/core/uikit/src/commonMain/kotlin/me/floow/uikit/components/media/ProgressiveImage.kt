@@ -167,6 +167,28 @@ class ProgressiveImageCoordinator(
 
 @Composable
 fun ProgressiveImage(
+    source: FlowImageSource,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.Crop,
+    placeholderColor: Color = Color(0xFF1A1A1A),
+    onPainterChanged: ((Painter?) -> Unit)? = null,
+    onError: (() -> Unit)? = null
+) {
+    ProgressiveImage(
+        thumbUrl = source.microThumb,
+        targetUrl = source.url,
+        contentDescription = contentDescription,
+        modifier = modifier,
+        contentScale = contentScale,
+        placeholderColor = placeholderColor,
+        onPainterChanged = onPainterChanged,
+        onError = onError
+    )
+}
+
+@Composable
+fun ProgressiveImage(
     thumbUrl: String?,
     targetUrl: String?,
     contentDescription: String?,

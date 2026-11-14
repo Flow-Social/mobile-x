@@ -324,14 +324,13 @@ fun FlowRootNavHost(
                     onNavigateToCreatePost = {
                         overlayState.show(FlowOverlay.CreatePost)
                     },
-                    onNavigateToChat = { convId, peerId, name, avatar, thumb, isSaved ->
+                    onNavigateToChat = { convId, peerId, name, avatar, isSaved ->
                         pushOverlay(
                             FlowSubscreen.DirectChat(
                                 conversationId = convId,
                                 peerUserId = peerId,
                                 peerDisplayName = name,
                                 peerAvatarUrl = avatar,
-                                peerAvatarThumb = thumb,
                                 isSavedMessages = isSaved,
                             )
                         )
@@ -544,7 +543,6 @@ private fun SubscreenContent(
                     peerUserId = subscreen.peerUserId,
                     peerDisplayName = subscreen.peerDisplayName.ifBlank { if (isSaved) "Избранное" else "Чат" },
                     peerAvatarUrl = subscreen.peerAvatarUrl,
-                    peerAvatarThumb = subscreen.peerAvatarThumb,
                     isSavedMessages = isSaved,
                     allowCreateFromPeerUserId = subscreen.conversationId <= 0L && subscreen.peerUserId.isNotBlank() && !isSaved,
                 ),
