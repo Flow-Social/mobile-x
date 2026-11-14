@@ -2,6 +2,8 @@ package me.floow.shared.chats.media
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import me.floow.shared.chats.camera.VideoCirclePreset
+import me.floow.shared.chats.camera.VideoCircleSpec
 import me.floow.shared.chats.uilogic.direct.RecordedVoiceClip
 import me.floow.shared.chats.uilogic.direct.VideoRecorderBridge
 
@@ -16,7 +18,9 @@ interface PlatformVoiceRecorderBridge {
 }
 
 @Composable
-expect fun rememberPlatformVideoRecorder(): VideoRecorderBridge?
+expect fun rememberPlatformVideoRecorder(
+    spec: VideoCircleSpec = VideoCirclePreset.Standard,
+): VideoRecorderBridge?
 
 @Composable
 expect fun rememberPlatformVoiceRecorder(): PlatformVoiceRecorderBridge?

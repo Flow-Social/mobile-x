@@ -19,6 +19,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import me.floow.domain.utils.currentTimeMillis
+import me.floow.shared.chats.camera.VideoCirclePreset
+import me.floow.shared.chats.camera.VideoCircleSpec
 import me.floow.shared.chats.uilogic.direct.RecordedClip
 import me.floow.shared.chats.uilogic.direct.RecordedVoiceClip
 import me.floow.shared.chats.uilogic.direct.VideoRecorderBridge
@@ -26,9 +28,18 @@ import platform.AVFAudio.AVAudioRecorder
 import platform.AVFAudio.AVAudioSession
 import platform.AVFAudio.AVAudioSessionCategoryOptionDefaultToSpeaker
 import platform.AVFAudio.AVAudioSessionCategoryPlayAndRecord
+import platform.AVFAudio.AVEncoderBitRateKey
 import platform.AVFAudio.AVFormatIDKey
 import platform.AVFAudio.AVNumberOfChannelsKey
 import platform.AVFAudio.AVSampleRateKey
+import platform.AVFoundation.AVAssetWriter
+import platform.AVFoundation.AVAssetWriterInput
+import platform.AVFoundation.AVAssetWriterStatusCompleted
+import platform.AVFoundation.AVAssetWriterStatusFailed
+import platform.AVFoundation.AVAssetWriterStatusWriting
+import platform.AVFoundation.AVCaptureAudioDataOutput
+import platform.AVFoundation.AVCaptureAudioDataOutputSampleBufferDelegateProtocol
+import platform.AVFoundation.AVCaptureConnection
 import platform.AVFoundation.AVCaptureDevice
 import platform.AVFoundation.AVCaptureDeviceDiscoverySession
 import platform.AVFoundation.AVCaptureDeviceDiscoverySession.Companion.discoverySessionWithDeviceTypes
@@ -36,22 +47,41 @@ import platform.AVFoundation.AVCaptureDeviceInput
 import platform.AVFoundation.AVCaptureDevicePositionBack
 import platform.AVFoundation.AVCaptureDevicePositionFront
 import platform.AVFoundation.AVCaptureDeviceTypeBuiltInWideAngleCamera
-import platform.AVFoundation.AVCaptureFileOutput
-import platform.AVFoundation.AVCaptureFileOutputRecordingDelegateProtocol
-import platform.AVFoundation.AVCaptureMovieFileOutput
+import platform.AVFoundation.AVCaptureOutput
 import platform.AVFoundation.AVCaptureSession
-import platform.AVFoundation.AVCaptureSessionPresetHigh
+import platform.AVFoundation.AVCaptureSessionPreset640x480
+import platform.AVFoundation.AVCaptureVideoDataOutput
+import platform.AVFoundation.AVCaptureVideoDataOutputSampleBufferDelegateProtocol
+import platform.AVFoundation.AVCaptureVideoOrientationPortrait
 import platform.AVFoundation.AVCaptureVideoPreviewLayer
+import platform.AVFoundation.AVFileTypeMPEG4
 import platform.AVFoundation.AVLayerVideoGravityResizeAspectFill
 import platform.AVFoundation.AVMediaTypeAudio
 import platform.AVFoundation.AVMediaTypeVideo
+import platform.AVFoundation.AVVideoAverageBitRateKey
+import platform.AVFoundation.AVVideoCodecKey
+import platform.AVFoundation.AVVideoCodecTypeH264
+import platform.AVFoundation.AVVideoCompressionPropertiesKey
+import platform.AVFoundation.AVVideoExpectedSourceFrameRateKey
+import platform.AVFoundation.AVVideoHeightKey
+import platform.AVFoundation.AVVideoMaxKeyFrameIntervalKey
+import platform.AVFoundation.AVVideoProfileLevelH264MainAutoLevel
+import platform.AVFoundation.AVVideoProfileLevelKey
+import platform.AVFoundation.AVVideoScalingModeKey
+import platform.AVFoundation.AVVideoScalingModeResizeAspectFill
+import platform.AVFoundation.AVVideoWidthKey
 import platform.CoreAudioTypes.kAudioFormatMPEG4AAC
+import platform.CoreMedia.CMSampleBufferGetPresentationTimeStamp
+import platform.CoreMedia.CMSampleBufferRef
+import platform.CoreMedia.CMTimeGetSeconds
 import platform.Foundation.NSError
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSURL
 import platform.UIKit.UIView
 import platform.darwin.NSObject
+import platform.darwin.dispatch_async
+import platform.darwin.dispatch_queue_create
 
 @OptIn(ExperimentalForeignApi::class)
 class IosVoiceRecorder(
@@ -181,22 +211,33 @@ private fun normalizeWaveformTo48Bars(raw: List<Int>): List<Int> {
 }
 
 @OptIn(ExperimentalForeignApi::class)
-class IosVideoRecorder : VideoRecorderBridge {
+class IosVideoRecorder(
+    override val spec: VideoCircleSpec = VideoCirclePreset.Standard,
+) : VideoRecorderBridge {
     private val scope = CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.Default)
 
     val captureSession = AVCaptureSession().apply {
-        sessionPreset = AVCaptureSessionPresetHigh
+        sessionPreset = AVCaptureSessionPreset640x480
     }
 
     private var currentCameraPosition = AVCaptureDevicePositionFront
     private var videoInput: AVCaptureDeviceInput? = null
     private var audioInput: AVCaptureDeviceInput? = null
-    private var movieOutput: AVCaptureMovieFileOutput? = null
-    private var recordingDelegate: RecordingDelegate? = null
+    private var videoOutput: AVCaptureVideoDataOutput? = null
+    private var audioOutput: AVCaptureAudioDataOutput? = null
+    private val recordingQueue = dispatch_queue_create("me.floow.videocircle.recording", null)
+    private var sampleBufferDelegate: VideoCircleSampleDelegate? = null
 
     private var activeRecordingPath: String? = null
     private var recordingStartTimeMs: Long = 0L
     private var onCompleteCallback: ((RecordedClip?) -> Unit)? = null
+
+    private var isRecording = false
+    private var hasStartedSession = false
+    private var firstFrameTimeSeconds: Double? = null
+    private var assetWriter: AVAssetWriter? = null
+    private var assetWriterVideoInput: AVAssetWriterInput? = null
+    private var assetWriterAudioInput: AVAssetWriterInput? = null
 
     override val currentRecordingFilePath: String? get() = activeRecordingPath
 
@@ -244,13 +285,42 @@ class IosVideoRecorder : VideoRecorderBridge {
             }
         }
 
-        val output = AVCaptureMovieFileOutput()
-        if (captureSession.canAddOutput(output)) {
-            captureSession.addOutput(output)
-            movieOutput = output
+        val delegate = VideoCircleSampleDelegate { output, buffer ->
+            handleSampleBuffer(output, buffer)
+        }
+        sampleBufferDelegate = delegate
+
+        val vOutput = AVCaptureVideoDataOutput().apply {
+            alwaysDiscardsLateVideoFrames = true
+            setSampleBufferDelegate(delegate, recordingQueue)
+        }
+        if (captureSession.canAddOutput(vOutput)) {
+            captureSession.addOutput(vOutput)
+            videoOutput = vOutput
         }
 
+        val aOutput = AVCaptureAudioDataOutput().apply {
+            setSampleBufferDelegate(delegate, recordingQueue)
+        }
+        if (captureSession.canAddOutput(aOutput)) {
+            captureSession.addOutput(aOutput)
+            audioOutput = aOutput
+        }
+
+        configureVideoConnection()
+
         captureSession.commitConfiguration()
+    }
+
+    private fun configureVideoConnection() {
+        val output = videoOutput ?: return
+        val connection = output.connectionWithMediaType(AVMediaTypeVideo) ?: return
+        if (connection.isVideoOrientationSupported()) {
+            connection.videoOrientation = AVCaptureVideoOrientationPortrait
+        }
+        if (connection.isVideoMirroringSupported()) {
+            connection.videoMirrored = (currentCameraPosition == AVCaptureDevicePositionFront)
+        }
     }
 
     private fun findCamera(position: platform.AVFoundation.AVCaptureDevicePosition): AVCaptureDevice? {
@@ -269,53 +339,208 @@ class IosVideoRecorder : VideoRecorderBridge {
         if (!isSessionConfigured) {
             setupSession()
         }
-        if (!captureSession.isRunning()) {
-            captureSession.startRunning()
-        }
-        val output = movieOutput ?: run {
-            onComplete(null)
-            return
+        scope.launch(Dispatchers.Default) {
+            if (!captureSession.isRunning()) {
+                captureSession.startRunning()
+            }
         }
 
         val fileName = "video_circle_${currentTimeMillis()}.mp4"
         val filePath = NSTemporaryDirectory() + fileName
-        activeRecordingPath = filePath
-        recordingStartTimeMs = currentTimeMillis()
-        onCompleteCallback = onComplete
+        val fileUrl = NSURL.fileURLWithPath(filePath)
 
-        val delegate = RecordingDelegate { url, error ->
-            val duration = (currentTimeMillis() - recordingStartTimeMs).coerceAtLeast(500L)
-            if (error != null || url == null) {
-                onCompleteCallback?.invoke(null)
-            } else {
-                onCompleteCallback?.invoke(
-                    RecordedClip(
-                        path = filePath,
-                        durationMs = duration,
-                        width = 720,
-                        height = 720,
-                        thumbnailPath = null,
-                    )
-                )
-            }
-            onCompleteCallback = null
-            activeRecordingPath = null
+        NSFileManager.defaultManager.removeItemAtPath(filePath, null)
+
+        val writer = AVAssetWriter.assetWriterWithURL(fileUrl, AVFileTypeMPEG4, null) ?: run {
+            onComplete(null)
+            return
         }
-        recordingDelegate = delegate
-        output.startRecordingToOutputFileURL(NSURL.fileURLWithPath(filePath), delegate)
+        writer.shouldOptimizeForNetworkUse = true
+
+        val compressionProperties: Map<Any?, Any?> = mapOf(
+            AVVideoAverageBitRateKey to spec.videoBitrateBps,
+            AVVideoExpectedSourceFrameRateKey to spec.frameRate,
+            AVVideoMaxKeyFrameIntervalKey to (spec.frameRate * spec.iFrameIntervalSeconds),
+            AVVideoProfileLevelKey to AVVideoProfileLevelH264MainAutoLevel,
+        )
+
+        val videoSettings: Map<Any?, Any?> = mapOf(
+            AVVideoCodecKey to AVVideoCodecTypeH264,
+            AVVideoWidthKey to spec.targetSidePx,
+            AVVideoHeightKey to spec.targetSidePx,
+            AVVideoScalingModeKey to AVVideoScalingModeResizeAspectFill,
+            AVVideoCompressionPropertiesKey to compressionProperties,
+        )
+
+        val vInput = AVAssetWriterInput.assetWriterInputWithMediaType(AVMediaTypeVideo, videoSettings).apply {
+            expectsMediaDataInRealTime = true
+        }
+
+        val audioSettings: Map<Any?, Any?> = mapOf(
+            AVFormatIDKey to kAudioFormatMPEG4AAC,
+            AVSampleRateKey to spec.audioSampleRateHz.toDouble(),
+            AVNumberOfChannelsKey to spec.audioChannels,
+            AVEncoderBitRateKey to spec.audioBitrateBps,
+        )
+
+        val aInput = AVAssetWriterInput.assetWriterInputWithMediaType(AVMediaTypeAudio, audioSettings).apply {
+            expectsMediaDataInRealTime = true
+        }
+
+        if (!writer.canAddInput(vInput) || !writer.canAddInput(aInput)) {
+            onComplete(null)
+            return
+        }
+
+        writer.addInput(vInput)
+        writer.addInput(aInput)
+
+        activeRecordingPath = filePath
+        onCompleteCallback = onComplete
+        recordingStartTimeMs = currentTimeMillis()
+
+        dispatch_async(recordingQueue) {
+            assetWriter = writer
+            assetWriterVideoInput = vInput
+            assetWriterAudioInput = aInput
+            hasStartedSession = false
+            firstFrameTimeSeconds = null
+            isRecording = true
+        }
+    }
+
+    private fun handleSampleBuffer(output: AVCaptureOutput, sampleBuffer: CMSampleBufferRef) {
+        if (!isRecording) return
+        val writer = assetWriter ?: return
+        val vInput = assetWriterVideoInput ?: return
+        val aInput = assetWriterAudioInput ?: return
+
+        val isVideo = (output == videoOutput)
+
+        if (!hasStartedSession) {
+            if (!isVideo) {
+                // Аудиосэмпл до первого видеосэмпла — отбрасываем для защиты от черного экрана
+                return
+            }
+            val timestamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+            if (!writer.startWriting()) {
+                return
+            }
+            writer.startSessionAtSourceTime(timestamp)
+            hasStartedSession = true
+            firstFrameTimeSeconds = CMTimeGetSeconds(timestamp)
+        }
+
+        if (writer.status != AVAssetWriterStatusWriting) {
+            return
+        }
+
+        // Аппаратный автостоп по таймстемпу кадров (60 секунд)
+        val timestamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+        val firstTime = firstFrameTimeSeconds
+        if (firstTime != null && (CMTimeGetSeconds(timestamp) - firstTime) >= spec.maxDurationSeconds) {
+            internalStopRecording()
+            return
+        }
+
+        if (isVideo) {
+            if (vInput.isReadyForMoreMediaData()) {
+                vInput.appendSampleBuffer(sampleBuffer)
+            }
+        } else {
+            if (aInput.isReadyForMoreMediaData()) {
+                aInput.appendSampleBuffer(sampleBuffer)
+            }
+        }
     }
 
     override fun stopRecording() {
-        movieOutput?.stopRecording()
+        dispatch_async(recordingQueue) {
+            internalStopRecording()
+        }
+    }
+
+    private fun internalStopRecording() {
+        if (!isRecording) return
+        isRecording = false
+
+        val writer = assetWriter
+        val vInput = assetWriterVideoInput
+        val aInput = assetWriterAudioInput
+        val path = activeRecordingPath
+        val callback = onCompleteCallback
+        val startTime = recordingStartTimeMs
+
+        assetWriter = null
+        assetWriterVideoInput = null
+        assetWriterAudioInput = null
+        activeRecordingPath = null
+        onCompleteCallback = null
+
+        if (writer == null || vInput == null || aInput == null || path == null) {
+            callback?.invoke(null)
+            return
+        }
+
+        if (!hasStartedSession || writer.status != AVAssetWriterStatusWriting) {
+            vInput.markAsFinished()
+            aInput.markAsFinished()
+            writer.cancelWriting()
+            NSFileManager.defaultManager.removeItemAtPath(path, null)
+            callback?.invoke(null)
+            return
+        }
+
+        vInput.markAsFinished()
+        aInput.markAsFinished()
+
+        writer.finishWritingWithCompletionHandler {
+            val duration = (currentTimeMillis() - startTime).coerceAtLeast(500L)
+            if (writer.status == AVAssetWriterStatusCompleted) {
+                val clip = RecordedClip(
+                    path = path,
+                    durationMs = duration,
+                    width = spec.targetSidePx,
+                    height = spec.targetSidePx,
+                    thumbnailPath = null,
+                )
+                callback?.invoke(clip)
+            } else {
+                callback?.invoke(null)
+            }
+        }
     }
 
     override fun cancelRecording() {
-        movieOutput?.stopRecording()
-        activeRecordingPath?.let { path ->
-            NSFileManager.defaultManager.removeItemAtPath(path, null)
+        dispatch_async(recordingQueue) {
+            internalCancelRecording()
         }
+    }
+
+    private fun internalCancelRecording() {
+        if (!isRecording && assetWriter == null) return
+        isRecording = false
+
+        val writer = assetWriter
+        val vInput = assetWriterVideoInput
+        val aInput = assetWriterAudioInput
+        val path = activeRecordingPath
+        val callback = onCompleteCallback
+
+        assetWriter = null
+        assetWriterVideoInput = null
+        assetWriterAudioInput = null
         activeRecordingPath = null
         onCompleteCallback = null
+
+        vInput?.markAsFinished()
+        aInput?.markAsFinished()
+        writer?.cancelWriting()
+
+        path?.let {
+            NSFileManager.defaultManager.removeItemAtPath(it, null)
+        }
+        callback?.invoke(null)
     }
 
     override fun switchCamera(): Boolean {
@@ -335,6 +560,7 @@ class IosVideoRecorder : VideoRecorderBridge {
             captureSession.addInput(newInput)
             videoInput = newInput
             currentCameraPosition = newPosition
+            configureVideoConnection()
             true
         } else {
             false
@@ -387,23 +613,28 @@ class IosVideoRecorder : VideoRecorderBridge {
         }
     }
 
-    private class RecordingDelegate(
-        val onFinished: (NSURL?, NSError?) -> Unit,
-    ) : NSObject(), AVCaptureFileOutputRecordingDelegateProtocol {
+    private class VideoCircleSampleDelegate(
+        private val onSample: (AVCaptureOutput, CMSampleBufferRef) -> Unit,
+    ) : NSObject(),
+        AVCaptureVideoDataOutputSampleBufferDelegateProtocol,
+        AVCaptureAudioDataOutputSampleBufferDelegateProtocol {
         override fun captureOutput(
-            output: AVCaptureFileOutput,
-            didFinishRecordingToOutputFileAtURL: NSURL,
-            fromConnections: List<*>,
-            error: NSError?,
+            output: AVCaptureOutput,
+            didOutputSampleBuffer: CMSampleBufferRef?,
+            fromConnection: AVCaptureConnection,
         ) {
-            onFinished(didFinishRecordingToOutputFileAtURL, error)
+            if (didOutputSampleBuffer != null) {
+                onSample(output, didOutputSampleBuffer)
+            }
         }
     }
 }
 
 @Composable
-actual fun rememberPlatformVideoRecorder(): VideoRecorderBridge? {
-    val recorder = remember { IosVideoRecorder() }
+actual fun rememberPlatformVideoRecorder(
+    spec: VideoCircleSpec,
+): VideoRecorderBridge? {
+    val recorder = remember(spec) { IosVideoRecorder(spec) }
     DisposableEffect(recorder) {
         onDispose {
             recorder.release()

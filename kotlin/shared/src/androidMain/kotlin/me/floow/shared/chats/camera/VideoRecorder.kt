@@ -8,10 +8,14 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
+import android.util.Rational
+import android.view.Surface
 import androidx.annotation.OptIn
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.Preview
+import androidx.camera.core.UseCaseGroup
+import androidx.camera.core.ViewPort
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.video.ExperimentalAudioApi
 import androidx.camera.video.FallbackStrategy
@@ -30,6 +34,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.content.PermissionChecker
 import androidx.lifecycle.LifecycleOwner
+import me.floow.shared.chats.camera.VideoCirclePreset
+import me.floow.shared.chats.camera.VideoCircleSpec
 import me.floow.shared.chats.uilogic.direct.RecordedClip
 import me.floow.shared.chats.uilogic.direct.VideoRecorderBridge
 import java.io.File
@@ -57,6 +63,7 @@ internal fun storeCachedThumbnail(videoPath: String, bitmap: androidx.compose.ui
 class VideoRecorder(
     private val context: Context,
     private val lifecycleOwner: LifecycleOwner,
+    override val spec: VideoCircleSpec = VideoCirclePreset.Standard,
 ) : VideoRecorderBridge {
     private val previewView = PreviewView(context)
     private var cameraProvider: ProcessCameraProvider? = null
@@ -260,7 +267,10 @@ class VideoRecorder(
             lastCameraSwitchAtMs = 0L
             setZoomRatio(1f)
 
-            val outputOptions = FileOutputOptions.Builder(file).build()
+            val outputOptions = FileOutputOptions.Builder(file)
+                .setFileSizeLimit(spec.maxFileSizeBytes)
+                .setDurationLimitMillis(spec.maxDurationSeconds * 1000L)
+                .build()
             val pendingRecording = capture.output
                 .prepareRecording(context, outputOptions)
                 .apply {
@@ -316,9 +326,11 @@ class VideoRecorder(
             activeSession = null
         }
 
-        val hasError = event.hasError()
-        if (hasError) {
-            Log.e(TAG, "recording error: ${event.cause}")
+        val isBenignLimit = event.error == VideoRecordEvent.Finalize.ERROR_DURATION_LIMIT_REACHED ||
+            event.error == VideoRecordEvent.Finalize.ERROR_FILE_SIZE_LIMIT_REACHED
+        val hasFatalError = event.hasError() && !isBenignLimit
+        if (hasFatalError) {
+            Log.e(TAG, "recording fatal error: ${event.error}, cause: ${event.cause}")
             File(sessionSnapshot.filePath).delete()
             mainHandler.post { sessionSnapshot.onComplete(null) }
             return
@@ -484,12 +496,8 @@ class VideoRecorder(
         val previousIsFront = isFrontCamera
         val previousZoomRatio = currentZoomRatio
         val recorderInstance = recorder ?: Recorder.Builder()
-            .setQualitySelector(
-                QualitySelector.from(
-                    Quality.SD,
-                    FallbackStrategy.lowerQualityOrHigherThan(Quality.SD),
-                )
-            )
+            .setQualitySelector(QualitySelector.from(Quality.SD))
+            .setTargetVideoEncodingBitRate(spec.videoBitrateBps)
             .build()
             .also { recorder = it }
         val preview = Preview.Builder().build().also {
@@ -497,9 +505,19 @@ class VideoRecorder(
         }
         val capture = VideoCapture.withOutput(recorderInstance)
         val selector = if (useFront) CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA
+
+        val rotation = previewView.display?.rotation ?: Surface.ROTATION_0
+        val viewPort = ViewPort.Builder(Rational(1, 1), rotation)
+            .setScaleType(ViewPort.FILL_CENTER)
+            .build()
+        val useCaseGroup = UseCaseGroup.Builder()
+            .setViewPort(viewPort)
+            .addUseCase(preview)
+            .addUseCase(capture)
+            .build()
         try {
             provider.unbindAll()
-            camera = provider.bindToLifecycle(lifecycleOwner, selector, preview, capture)
+            camera = provider.bindToLifecycle(lifecycleOwner, selector, useCaseGroup)
             previewUseCase = preview
             videoCapture = capture
             setZoomRatio(previousZoomRatio)
@@ -519,7 +537,12 @@ class VideoRecorder(
                     } else {
                         CameraSelector.DEFAULT_BACK_CAMERA
                     }
-                    camera = provider.bindToLifecycle(lifecycleOwner, restoreSelector, previousPreview, previousCapture)
+                    val restoreGroup = UseCaseGroup.Builder()
+                        .setViewPort(viewPort)
+                        .addUseCase(previousPreview)
+                        .addUseCase(previousCapture)
+                        .build()
+                    camera = provider.bindToLifecycle(lifecycleOwner, restoreSelector, restoreGroup)
                     previewUseCase = previousPreview
                     videoCapture = previousCapture
                     setZoomRatio(previousZoomRatio)

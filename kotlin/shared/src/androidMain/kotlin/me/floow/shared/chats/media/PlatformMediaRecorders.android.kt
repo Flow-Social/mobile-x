@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import me.floow.shared.chats.camera.VideoCircleSpec
 import me.floow.shared.chats.camera.VideoRecorder
 import me.floow.shared.chats.uilogic.direct.RecordedVoiceClip
 import me.floow.shared.chats.uilogic.direct.VideoRecorderBridge
@@ -15,11 +16,13 @@ import me.floow.shared.chats.voice.VoiceRecorder
 import java.io.File
 
 @Composable
-actual fun rememberPlatformVideoRecorder(): VideoRecorderBridge? {
+actual fun rememberPlatformVideoRecorder(
+    spec: VideoCircleSpec,
+): VideoRecorderBridge? {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val recorder = remember {
-        VideoRecorder(context, lifecycleOwner).also {
+    val recorder = remember(spec) {
+        VideoRecorder(context, lifecycleOwner, spec).also {
             it.init(File(context.cacheDir, "video_circles"))
         }
     }

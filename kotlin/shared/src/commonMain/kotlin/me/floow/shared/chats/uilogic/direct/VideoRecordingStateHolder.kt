@@ -223,6 +223,10 @@ class VideoRecordingStateHolder(
     }
 
     private fun handleFinalize(clip: RecordedClip?) {
+        if (machineState == MachineState.Recording || machineState == MachineState.LockedRecording) {
+            timerJob?.cancel()
+            machineState = MachineState.Finalizing
+        }
         if (machineState != MachineState.Finalizing) return
         val wasInstantFlight = isInstantFlightActive
         isInstantFlightActive = false
@@ -319,19 +323,3 @@ class VideoRecordingStateHolder(
     }
 }
 
-interface VideoRecorderBridge {
-    val currentRecordingFilePath: String? get() = null
-    fun prepareCamera() {}
-    fun stopCamera() {}
-    fun startRecording(
-        onAudioLevel: (Float) -> Unit = {},
-        onComplete: (RecordedClip?) -> Unit,
-    )
-    fun stopRecording()
-    fun cancelRecording()
-    fun switchCamera(): Boolean
-    fun zoomBy(scaleFactor: Float): Float?
-    fun setZoomRatio(zoomRatio: Float): Float?
-    fun deleteTempFile(path: String)
-    fun capturePreviewBitmap(): androidx.compose.ui.graphics.ImageBitmap? = null
-}
