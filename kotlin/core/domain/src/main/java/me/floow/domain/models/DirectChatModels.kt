@@ -14,6 +14,28 @@ enum class MessageDeliveryStatus {
 	FAILED
 }
 
+enum class ChatMessageContentType {
+	TEXT,
+	IMAGE,
+	VIDEO,
+	VIDEO_NOTE,
+	VOICE;
+
+	companion object {
+		fun fromString(raw: String?, mimeType: String? = null): ChatMessageContentType {
+			val normalized = raw?.trim()?.lowercase()
+			val mime = mimeType?.trim()?.lowercase()
+			return when {
+				normalized == "video_circle" -> VIDEO_NOTE
+				normalized == "video" || mime?.startsWith("video") == true -> VIDEO
+				normalized == "voice" || normalized == "audio" || mime?.startsWith("audio") == true -> VOICE
+				normalized == "image" || normalized == "photo" || mime?.startsWith("image") == true -> IMAGE
+				else -> TEXT
+			}
+		}
+	}
+}
+
 enum class DirectChatOutboxState {
 	QUEUED,
 	SENDING,

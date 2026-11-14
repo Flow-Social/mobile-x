@@ -21,9 +21,11 @@ import me.floow.domain.data.repos.PresenceRepository
 import me.floow.domain.models.DirectChatConversation
 import me.floow.domain.models.DirectChatRealtimeEvent
 import me.floow.domain.models.MessageDeliveryStatus
+import me.floow.domain.models.ChatMessageContentType
 import me.floow.shared.chats.model.ChatDeliveryStatus
 import me.floow.shared.chats.model.ConversationActivityState
 import me.floow.shared.chats.model.ChatListItemModel
+import me.floow.shared.chats.model.ChatListMediaPreview
 import me.floow.shared.chats.model.ChatListItemVisualType
 import me.floow.shared.chats.uilogic.ChatsListRepository
 import me.floow.shared.chats.uilogic.ChatsPagingState
@@ -385,7 +387,7 @@ private fun me.floow.domain.models.UserNotificationsPage.toRepliesItem(): ChatLi
 		isPinned = false,
 		isOnline = false,
 		avatarUrl = null,
-		hasAttachmentPreview = false,
+		mediaPreview = null,
 		isOutgoingPreview = false,
 		deliveryStatus = null,
 		visualType = ChatListItemVisualType.RepliesInbox,
@@ -403,7 +405,7 @@ private fun emptyRepliesItem(): ChatListItemModel {
 		isPinned = false,
 		isOnline = false,
 		avatarUrl = null,
-		hasAttachmentPreview = false,
+		mediaPreview = null,
 		isOutgoingPreview = false,
 		deliveryStatus = null,
 		visualType = ChatListItemVisualType.RepliesInbox,
@@ -419,16 +421,33 @@ private fun DirectChatConversation.toChatListItem(
 	val latestMessage = lastMessage
 	val title = resolveTitle()
 	val isActuallySaved = isSavedMessages || (selfUserId != null && peer.id == selfUserId)
-	val hasMedia = latestMessage?.media != null || !latestMessage?.contentType.isNullOrBlank()
+	val mediaType = ChatMessageContentType.fromString(
+		raw = latestMessage?.contentType,
+		mimeType = latestMessage?.media?.mimeType
+	)
 	val previewText = latestMessage?.text?.takeIf(String::isNotBlank)
 		?: when {
 			latestMessage?.groupId != null || latestMessage?.media?.groupId != null -> "Альбом"
-			latestMessage?.contentType == "video_circle" || latestMessage?.media?.mimeType?.startsWith("video") == true -> "Видеосообщение"
-			latestMessage?.contentType == "voice" || latestMessage?.media?.mimeType?.startsWith("audio") == true -> "Голосовое сообщение"
-			latestMessage?.contentType == "image" || latestMessage?.media != null -> "Фотография"
+			mediaType == ChatMessageContentType.VIDEO_NOTE -> "Видеосообщение"
+			mediaType == ChatMessageContentType.VIDEO -> "Видео"
+			mediaType == ChatMessageContentType.VOICE -> "Голосовое сообщение"
+			mediaType == ChatMessageContentType.IMAGE -> "Фотография"
 			isActuallySaved -> "Нет сообщений"
 			else -> "Диалог создан"
 		}
+	val mediaPreview: ChatListMediaPreview? = when (mediaType) {
+		ChatMessageContentType.TEXT, ChatMessageContentType.VOICE -> null
+		ChatMessageContentType.IMAGE, ChatMessageContentType.VIDEO -> {
+			val url = latestMessage?.media?.thumbnailUrl?.takeIf(String::isNotBlank)
+				?: latestMessage?.media?.url?.takeIf(String::isNotBlank)
+			url?.let { ChatListMediaPreview(thumbnailUrl = it, isCircle = false) }
+		}
+		ChatMessageContentType.VIDEO_NOTE -> {
+			val url = latestMessage?.media?.thumbnailUrl?.takeIf(String::isNotBlank)
+				?: latestMessage?.media?.url?.takeIf(String::isNotBlank)
+			url?.let { ChatListMediaPreview(thumbnailUrl = it, isCircle = true) }
+		}
+	}
 	val isOutgoingPreview = latestMessage?.sender?.id?.takeIf(String::isNotBlank) == selfUserId && !isActuallySaved
 	val deliveryStatus = if (!isOutgoingPreview || latestMessage == null) {
 		null
@@ -457,7 +476,7 @@ private fun DirectChatConversation.toChatListItem(
 		isOnline = !isActuallySaved && isOnline,
 		avatarUrl = if (isActuallySaved) null else peer.avatarUrl,
 		avatarThumb = if (isActuallySaved) null else peer.avatarThumb,
-		hasAttachmentPreview = hasMedia,
+		mediaPreview = mediaPreview,
 		isOutgoingPreview = isOutgoingPreview,
 		deliveryStatus = deliveryStatus,
 		visualType = if (isSavedMessages) ChatListItemVisualType.SavedMessages else ChatListItemVisualType.Regular,

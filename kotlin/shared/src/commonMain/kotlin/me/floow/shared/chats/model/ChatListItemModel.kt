@@ -1,5 +1,10 @@
 package me.floow.shared.chats.model
 
+data class ChatListMediaPreview(
+	val thumbnailUrl: String,
+	val isCircle: Boolean = false,
+)
+
 data class ChatListItemModel(
 	val id: String,
 	val peerUserId: String? = null,
@@ -12,13 +17,16 @@ data class ChatListItemModel(
 	val isOnline: Boolean,
 	val avatarUrl: String?,
 	val avatarThumb: String? = null,
-	val hasAttachmentPreview: Boolean,
+	val mediaPreview: ChatListMediaPreview? = null,
 	val isOutgoingPreview: Boolean,
 	val deliveryStatus: ChatDeliveryStatus?,
 	val visualType: ChatListItemVisualType,
 	val activityState: ConversationActivityState = ConversationActivityState.None,
 	val isPinned: Boolean = false,
-)
+) {
+	val hasAttachmentPreview: Boolean
+		get() = mediaPreview != null
+}
 
 sealed interface ConversationActivityState {
 	data object None : ConversationActivityState

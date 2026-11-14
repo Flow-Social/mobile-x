@@ -35,7 +35,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.SpanStyle
+import coil3.compose.AsyncImage
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -236,12 +238,16 @@ private fun ChatListItem(
 			Spacer(Modifier.height(4.dp))
 
 			Row(verticalAlignment = Alignment.CenterVertically) {
-				if (chat.hasAttachmentPreview) {
-					Box(
-						Modifier
-							.clip(RoundedCornerShape(4.dp))
-							.background(Color.LightGray)
-							.size(18.dp),
+				val mediaPreview = chat.mediaPreview
+				if (mediaPreview != null && mediaPreview.thumbnailUrl.isNotBlank()) {
+					val shape = if (mediaPreview.isCircle) CircleShape else RoundedCornerShape(4.dp)
+					AsyncImage(
+						model = mediaPreview.thumbnailUrl,
+						contentDescription = null,
+						contentScale = ContentScale.Crop,
+						modifier = Modifier
+							.size(18.dp)
+							.clip(shape),
 					)
 					Spacer(Modifier.width(6.dp))
 				}

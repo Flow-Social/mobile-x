@@ -33,7 +33,7 @@ class ChatsListStateHolderTest {
 							isMuted = false,
 							isOnline = true,
 							avatarUrl = null,
-							hasAttachmentPreview = false,
+							mediaPreview = null,
 							isOutgoingPreview = false,
 							deliveryStatus = null,
 							visualType = ChatListItemVisualType.Regular,
@@ -85,7 +85,7 @@ class ChatsListStateHolderTest {
 				isMuted = false,
 				isOnline = true,
 				avatarUrl = null,
-				hasAttachmentPreview = false,
+				mediaPreview = null,
 				isOutgoingPreview = false,
 				deliveryStatus = null,
 				visualType = ChatListItemVisualType.Regular,
@@ -107,6 +107,41 @@ class ChatsListStateHolderTest {
 		val state = holder.state.value as? ChatsScreenState.HasData
 		assertTrue(state != null)
 		assertEquals(cachedItems, state.chats)
+		coroutineContext.cancelChildren()
+	}
+
+	@Test
+	fun `holder state is initialized immediately with HasData when cached items exist`() = runTest {
+		val cachedItems = listOf(
+			ChatListItemModel(
+				id = "1",
+				peerUserId = "1",
+				conversationId = 1L,
+				title = "Instant Chat",
+				previewText = "hello",
+				timeLabel = "10:00",
+				unreadCount = 0,
+				isMuted = false,
+				isOnline = true,
+				avatarUrl = null,
+				mediaPreview = null,
+				isOutgoingPreview = false,
+				deliveryStatus = null,
+				visualType = ChatListItemVisualType.Regular,
+			)
+		)
+		val holder = ChatsListStateHolder(
+			repository = object : ChatsListRepository {
+				override fun observeChats() = MutableStateFlow<List<ChatListItemModel>?>(cachedItems)
+				override suspend fun refreshChats(): Result<List<ChatListItemModel>> = Result.success(cachedItems)
+			},
+			scope = this,
+		)
+
+		// Synchronously check before any advanceUntilIdle
+		val immediateState = holder.state.value
+		assertTrue(immediateState is ChatsScreenState.HasData)
+		assertEquals(cachedItems, immediateState.chats)
 		coroutineContext.cancelChildren()
 	}
 }

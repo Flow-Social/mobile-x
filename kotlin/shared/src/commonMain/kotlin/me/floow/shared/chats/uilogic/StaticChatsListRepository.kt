@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import me.floow.shared.chats.model.ChatListItemModel
+import me.floow.shared.chats.model.ChatListMediaPreview
 import me.floow.shared.chats.model.ChatListItemVisualType
 import me.floow.shared.chats.model.ChatDeliveryStatus
 
@@ -37,7 +38,7 @@ class StaticChatsListRepository(
 				isMuted = false,
 				isOnline = false,
 				avatarUrl = null,
-				hasAttachmentPreview = false,
+				mediaPreview = null,
 				isOutgoingPreview = false,
 				deliveryStatus = null,
 				visualType = ChatListItemVisualType.RepliesInbox,
@@ -53,7 +54,7 @@ class StaticChatsListRepository(
 				isMuted = false,
 				isOnline = false,
 				avatarUrl = null,
-				hasAttachmentPreview = false,
+				mediaPreview = null,
 				isOutgoingPreview = false,
 				deliveryStatus = null,
 				visualType = ChatListItemVisualType.SavedMessages,
@@ -69,7 +70,7 @@ class StaticChatsListRepository(
 				isMuted = false,
 				isOnline = true,
 				avatarUrl = null,
-				hasAttachmentPreview = false,
+				mediaPreview = null,
 				isOutgoingPreview = false,
 				deliveryStatus = null,
 				visualType = ChatListItemVisualType.Regular,
@@ -85,7 +86,7 @@ class StaticChatsListRepository(
 				isMuted = true,
 				isOnline = false,
 				avatarUrl = null,
-				hasAttachmentPreview = true,
+				mediaPreview = ChatListMediaPreview(thumbnailUrl = "https://example.com/thumb.jpg", isCircle = false),
 				isOutgoingPreview = true,
 				deliveryStatus = ChatDeliveryStatus.Read,
 				visualType = ChatListItemVisualType.Regular,
