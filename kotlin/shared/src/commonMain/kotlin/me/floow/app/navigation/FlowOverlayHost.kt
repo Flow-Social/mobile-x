@@ -2,6 +2,7 @@ package me.floow.app.navigation
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -21,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import me.floow.shared.profile.ui.addpost.CreatePostSheetRoute
 import me.floow.shared.profile.ui.addpost.EditPostSheetRoute
+import me.floow.shared.profile.ui.bump.ProfileBumpSheetContent
 import me.floow.shared.profile.ui.edit.EditProfileBottomSheet
 import me.floow.shared.profile.uilogic.ProfileStateHolder
 import me.floow.shared.profile.ui.model.ProfilePostItem
@@ -45,6 +47,7 @@ sealed interface FlowOverlay {
     data class EditProfile(val data: EditProfileOverlayData) : FlowOverlay
     data class EditPost(val post: ProfilePostItem) : FlowOverlay
     data class ViewPost(val model: PostScreenModel) : FlowOverlay
+    data class ProfileBump(val slug: String) : FlowOverlay
 }
 
 @Stable
@@ -98,15 +101,19 @@ fun FlowOverlayHost(
             is FlowOverlay.EditProfile -> 1003L
             is FlowOverlay.EditPost -> 1005L
             is FlowOverlay.ViewPost -> 1006L
+            is FlowOverlay.ProfileBump -> 1007L
         }
     }
 
     val isCreatePost = currentOverlay is FlowOverlay.CreatePost
+    val isBump = currentOverlay is FlowOverlay.ProfileBump
+    val isEdgeToEdge = isCreatePost || isBump
     val (sheetHeightFraction, scrimMaxAlpha) = when (currentOverlay) {
         is FlowOverlay.CreatePost -> 0.86f to 0.57f
         is FlowOverlay.EditProfile -> 0.85f to 0.32f
         is FlowOverlay.EditPost -> 0.72f to 0.69f
         is FlowOverlay.ViewPost -> 0.62f to 0.57f
+        is FlowOverlay.ProfileBump -> 0.68f to 0.57f
     }
 
     val canDragToDismiss = when (currentOverlay) {
@@ -124,12 +131,12 @@ fun FlowOverlayHost(
         expandedSheetHeightFraction = 1f,
         minSheetHeight = if (isCreatePost) 555.dp else 440.dp,
         scrimMaxAlpha = scrimMaxAlpha,
-        containerColor = if (isCreatePost) Color.Transparent else MaterialTheme.colorScheme.background,
-        bottomPadding = if (isCreatePost) 0.dp else null,
+        containerColor = if (isCreatePost) Color.Transparent else if (isBump) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.background,
+        bottomPadding = if (isEdgeToEdge) 0.dp else null,
         respectStatusBar = true,
         avoidIme = false,
         expandRequestKey = if (isCreatePost) createPostExpandRequest else null,
-        sheetShape = if (isCreatePost) RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp) else RoundedCornerShape(28.dp),
+        sheetShape = if (isEdgeToEdge) RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp) else RoundedCornerShape(28.dp),
         modifier = modifier.fillMaxSize(),
     ) {
         when (currentOverlay) {
@@ -248,6 +255,20 @@ fun FlowOverlayHost(
                         },
                     )
                 }
+            }
+
+            is FlowOverlay.ProfileBump -> {
+                ProfileBumpSheetContent(
+                    profileQrData = "https://floow.me/profile/${currentOverlay.slug}",
+                    onShareLinkClick = {
+                        val url = "https://floow.me/${currentOverlay.slug}"
+                        me.floow.shared.platform.systemShareText(url)
+                        overlayState.dismiss()
+                    },
+                    onImpactDetected = {},
+                    dragHandleModifier = dragHandleModifier,
+                    modifier = Modifier.fillMaxWidth().navigationBarsPadding(),
+                )
             }
         }
     }

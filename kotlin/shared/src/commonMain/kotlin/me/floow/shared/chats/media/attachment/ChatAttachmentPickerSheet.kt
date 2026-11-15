@@ -63,6 +63,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
@@ -90,8 +91,8 @@ fun ChatAttachmentPickerSheet(
         mutableStateListOf<String>().apply { addAll(initialSelectedUris) }
     }
 
-    val isDark = isSystemInDarkTheme()
-    val galleryBackground = if (isDark) Color(0xFF050506) else MaterialTheme.colorScheme.surface
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val galleryBackground = if (isDark) Color(0xFF050506) else Color.White
     val textColor = MaterialTheme.colorScheme.onSurface
     val secondaryTextColor = MaterialTheme.colorScheme.onSurfaceVariant
     val handleColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
@@ -249,7 +250,10 @@ fun ChatAttachmentPickerSheet(
                         contentPadding = PaddingValues(top = 0.dp, bottom = bottomContentPadding),
                         horizontalArrangement = Arrangement.spacedBy(2.dp),
                         verticalArrangement = Arrangement.spacedBy(2.dp),
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
+                            .background(galleryBackground),
                     ) {
                         items(
                             items = galleryState.images,
@@ -371,52 +375,53 @@ fun ChatAttachmentPickerSheet(
                         }
                     }
                 }
-            }
 
-            AnimatedVisibility(
-                visible = selectedUris.isNotEmpty(),
-                enter = slideInVertically(
-                    animationSpec = tween(140, easing = FastOutSlowInEasing),
-                ) { it } + fadeIn(
-                    animationSpec = tween(140),
-                ),
-                exit = slideOutVertically(
-                    animationSpec = tween(100, easing = FastOutLinearInEasing),
-                ) { it } + fadeOut(
-                    animationSpec = tween(100),
-                ),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Box(
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = selectedUris.isNotEmpty(),
+                    enter = slideInVertically(
+                        animationSpec = tween(140, easing = FastOutSlowInEasing),
+                    ) { it } + fadeIn(
+                        animationSpec = tween(140),
+                    ),
+                    exit = slideOutVertically(
+                        animationSpec = tween(100, easing = FastOutLinearInEasing),
+                    ) { it } + fadeOut(
+                        animationSpec = tween(100),
+                    ),
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .background(galleryBackground)
-                        .navigationBarsPadding()
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth(),
                 ) {
-                    Button(
-                        onClick = {
-                            if (selectedUris.isNotEmpty()) {
-                                onImagesSelected(selectedUris.toList(), null)
-                            }
-                            onDismissRequest()
-                        },
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(48.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = Color.White,
-                        ),
+                            .navigationBarsPadding()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
                     ) {
-                        Text(
-                            text = "Прикрепить (${selectedUris.size})",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Button(
+                            onClick = {
+                                if (selectedUris.isNotEmpty()) {
+                                    onImagesSelected(selectedUris.toList(), null)
+                                }
+                                onDismissRequest()
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = Color.White,
+                            ),
+                        ) {
+                            Text(
+                                text = "Прикрепить (${selectedUris.size})",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                        }
                     }
                 }
             }

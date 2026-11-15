@@ -40,6 +40,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import me.floow.uikit.components.shell.MainShellDefaults
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -265,7 +268,11 @@ fun ProfileScreenSuccessState(
         )
     }
 
-    Column(modifier = modifier.fillMaxSize()) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .clip(MainShellDefaults.contentShape)
+    ) {
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
@@ -353,7 +360,9 @@ fun ProfileScreenSuccessState(
                 sheetSwipeEnabled = true,
                 sheetShape = androidx.compose.foundation.shape.RoundedCornerShape(
                     topStart = sheetCornerRadius,
-                    topEnd = sheetCornerRadius
+                    topEnd = sheetCornerRadius,
+                    bottomStart = 36.dp,
+                    bottomEnd = 36.dp,
                 ),
                 sheetContainerColor = MaterialTheme.colorScheme.surface,
             ) { _ ->

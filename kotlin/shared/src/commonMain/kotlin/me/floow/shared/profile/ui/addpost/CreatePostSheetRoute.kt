@@ -562,7 +562,7 @@ private fun CreatePostEmptyPlaceholder(
             .dashedBorder(
                 color = colors.placeholderBorder,
                 cornerRadius = 18.dp,
-                strokeWidth = 1.dp,
+                strokeWidth = 3.5.dp,
             )
             .graphicsLayer {
                 scaleX = scale.value
@@ -594,23 +594,12 @@ private fun CreatePostEmptyPlaceholder(
             },
         contentAlignment = Alignment.Center,
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Default.Add,
-                contentDescription = null,
-                tint = colors.placeholderIcon,
-                modifier = Modifier.size(48.dp),
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = "Добавить фото",
-                color = colors.placeholderText,
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-            )
-        }
+        Icon(
+            imageVector = Icons.Default.Add,
+            contentDescription = "Добавить фото",
+            tint = colors.placeholderIcon,
+            modifier = Modifier.size(44.dp),
+        )
     }
 }
 

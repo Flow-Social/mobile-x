@@ -385,7 +385,7 @@ fun MessageInputField(
 			.testTag("chat_input_row")
 			.fillMaxWidth()
 			.padding(horizontal = 16.dp)
-			.padding(top = 16.dp, bottom = 12.dp)
+			.padding(top = 8.dp, bottom = 12.dp)
 			.clickable(
 				interactionSource = inputInteractionSource,
 				indication = null,

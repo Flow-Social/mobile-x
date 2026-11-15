@@ -55,6 +55,7 @@ fun ProfileBumpSheetContent(
     profileQrData: String?,
     onShareLinkClick: () -> Unit,
     onImpactDetected: (Float) -> Unit = {},
+    dragHandleModifier: Modifier = Modifier,
     modifier: Modifier = Modifier,
 ) {
     var isQrMode by remember { mutableStateOf(false) }
@@ -112,7 +113,8 @@ fun ProfileBumpSheetContent(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(24.dp),
+                .height(24.dp)
+                .then(dragHandleModifier),
             contentAlignment = Alignment.Center,
         ) {
             Box(

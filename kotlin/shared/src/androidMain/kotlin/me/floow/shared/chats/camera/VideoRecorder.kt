@@ -496,7 +496,12 @@ class VideoRecorder(
         val previousIsFront = isFrontCamera
         val previousZoomRatio = currentZoomRatio
         val recorderInstance = recorder ?: Recorder.Builder()
-            .setQualitySelector(QualitySelector.from(Quality.SD))
+            .setQualitySelector(
+                QualitySelector.from(
+                    Quality.SD,
+                    FallbackStrategy.higherQualityOrLowerThan(Quality.SD)
+                )
+            )
             .setTargetVideoEncodingBitRate(spec.videoBitrateBps)
             .build()
             .also { recorder = it }

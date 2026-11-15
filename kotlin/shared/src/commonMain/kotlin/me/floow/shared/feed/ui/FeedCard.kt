@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
@@ -194,9 +195,8 @@ internal fun SharedPostHeader(
         )
         Box(
             modifier = Modifier
-                .height(32.dp)
-                .width(56.dp)
-                .border(1.dp, colors.border, RoundedCornerShape(100.dp))
+                .size(32.dp)
+                .clip(CircleShape)
                 .clickable { onMoreClick(post) },
             contentAlignment = Alignment.Center,
         ) {
@@ -205,7 +205,7 @@ internal fun SharedPostHeader(
                 contentDescription = "Меню",
                 tint = colors.content,
                 modifier = Modifier
-                    .size(22.dp)
+                    .size(20.dp)
                     .graphicsLayer { rotationZ = 90f },
             )
         }

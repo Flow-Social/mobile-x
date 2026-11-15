@@ -53,6 +53,7 @@ fun MainTabsScreen(
     onNavigateToEditPost: (ProfilePostItem) -> Unit = {},
     onNavigateToReplies: () -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
+    onNavigateToBump: (slug: String) -> Unit = {},
     modifier: Modifier = Modifier,
     feedStateHolder: SharedFeedStateHolder = koinInject(),
     chatsListStateHolder: ChatsListStateHolder = koinInject(),
@@ -198,6 +199,7 @@ fun MainTabsScreen(
                             val url = "https://floow.me/$slug"
                             me.floow.shared.platform.systemShareText(url)
                         },
+                        onBumpClick = onNavigateToBump,
                         onOpenPost = { postModel ->
                             onNavigateToPostWithModel?.invoke(postModel) ?: onNavigateToPost(postModel.postId)
                         },

@@ -5,13 +5,19 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -19,10 +25,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import flow.core.uikit.generated.resources.Res
 import flow.core.uikit.generated.resources.status_checked
 import flow.core.uikit.generated.resources.status_nochecked
 import me.floow.uikit.chat.model.ChatMessageDeliveryStatus
+import me.floow.uikit.chat.model.formatChatClockTime
 import org.jetbrains.compose.resources.painterResource
 
 val FlowStatusIconColor = Color(0xFF89898D)
@@ -85,6 +93,41 @@ fun MessageDeliveryStatusIcon(
                         modifier = Modifier.size(width = 11.dp, height = 9.dp)
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun ChatMediaClockOverlay(
+    createdAtMillis: Long,
+    isOutgoing: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .background(
+                color = Color.Black.copy(alpha = 0.50f),
+                shape = RoundedCornerShape(10.dp)
+            )
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Text(
+                text = formatChatClockTime(createdAtMillis),
+                color = Color.White,
+                fontSize = 11.sp
+            )
+            if (isOutgoing) {
+                Icon(
+                    painter = painterResource(Res.drawable.status_checked),
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(width = 11.dp, height = 7.dp)
+                )
             }
         }
     }

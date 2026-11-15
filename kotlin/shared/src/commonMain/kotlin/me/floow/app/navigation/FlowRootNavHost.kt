@@ -177,7 +177,7 @@ fun FlowRootNavHost(
     var hostedFullscreenViewer by remember { mutableStateOf<HostedFullscreenImageViewer?>(null) }
     val postCacheById = remember { mutableStateMapOf<String, Post>() }
 
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
         NavHost(
             navController = navController,
             startDestination = initialStartDestination,
@@ -373,6 +373,9 @@ fun FlowRootNavHost(
                     },
                     onNavigateToSettings = {
                         pushOverlay(FlowSubscreen.Settings)
+                    },
+                    onNavigateToBump = { slug ->
+                        overlayState.show(FlowOverlay.ProfileBump(slug))
                     },
                 )
             }
@@ -595,6 +598,9 @@ private fun SubscreenContent(
                 },
                 onSettingsClick = {
                     pushOverlay(FlowSubscreen.Settings)
+                },
+                onBumpClick = { slug ->
+                    overlayState.show(FlowOverlay.ProfileBump(slug))
                 },
                 modifier = Modifier.fillMaxSize(),
             )

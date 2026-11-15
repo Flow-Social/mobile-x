@@ -3,6 +3,7 @@ package me.floow.uikit.chat.states
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,6 +32,7 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import me.floow.uikit.chat.components.ChatAlbumBubble
 import me.floow.uikit.chat.components.ChatTailVector
 import me.floow.uikit.chat.components.MessageTimestampRow
@@ -41,6 +43,7 @@ import me.floow.uikit.chat.model.ChatMessage
 import me.floow.uikit.chat.model.ChatMessageTapOutcome
 import me.floow.uikit.chat.model.ChatScreenConfig
 import me.floow.uikit.chat.model.ImageMessage
+import me.floow.uikit.chat.components.ChatMediaClockOverlay
 import me.floow.uikit.chat.model.PostPreviewMessage
 import me.floow.uikit.chat.model.PrimaryInMessage
 import me.floow.uikit.chat.model.PrimaryOutMessage
@@ -371,6 +374,15 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 										}
 									},
 								)
+								if (showTimestamp) {
+									ChatMediaClockOverlay(
+										createdAtMillis = message.createdAtMillis,
+										isOutgoing = message.isOutgoing,
+										modifier = Modifier
+											.align(Alignment.BottomEnd)
+											.padding(end = 12.dp, bottom = 8.dp),
+									)
+								}
 							}
 						}
 					}
@@ -495,7 +507,7 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 										{ clientMessageId -> onImageCancel?.invoke(clientMessageId) }
 									)
 								}
-								if (showTimestamp) {
+								if (showTimestamp && (message as? ImageMessage)?.messageText?.isNotBlank() == true) {
 									Spacer(Modifier.height(3.dp))
 									MessageTimestampRow(
 										formattedTime = formatChatClockTime(message.createdAtMillis),

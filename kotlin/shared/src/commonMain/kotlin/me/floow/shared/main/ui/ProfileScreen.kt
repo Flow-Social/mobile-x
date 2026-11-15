@@ -19,7 +19,6 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import me.floow.shared.post.ui.PostScreenModel
 import me.floow.shared.profile.ui.ProfileScreenSuccessState
-import me.floow.shared.profile.ui.bump.ProfileBumpSheetContent
 import me.floow.shared.profile.ui.model.ProfilePostItem
 import me.floow.shared.profile.uilogic.ProfileMessageTarget
 import me.floow.shared.profile.uilogic.ProfileScreenState
@@ -31,7 +30,6 @@ import me.floow.shared.profile.uilogic.toEditProfileOverlayData
 import me.floow.shared.profile.uilogic.toMessageTarget
 import me.floow.shared.profile.uilogic.toPostScreenModel
 import me.floow.uikit.components.loading.FlowLoadingIndicator
-import me.floow.uikit.components.sheet.FlowModalSheetOverlay
 
 @Composable
 fun ProfileScreen(
@@ -41,6 +39,7 @@ fun ProfileScreen(
     onProfileEditClick: (EditProfileOverlayData) -> Unit = {},
     onMessageButtonClick: (ProfileMessageTarget) -> Unit = {},
     onShareProfileClick: (String) -> Unit = {},
+    onBumpClick: (slug: String) -> Unit = {},
     onEditPost: (ProfilePostItem) -> Unit = {},
     onOpenPost: (PostScreenModel) -> Unit = {},
     onSettingsClick: () -> Unit = {},
@@ -48,7 +47,6 @@ fun ProfileScreen(
 ) {
     val state by stateHolder.state.collectAsState()
     val scope = rememberCoroutineScope()
-    var isBumpSheetVisible by remember { mutableStateOf(false) }
 
     LaunchedEffect(stateHolder) {
         stateHolder.loadIfNeeded()
@@ -98,7 +96,7 @@ fun ProfileScreen(
                 onShareProfileClick = { onShareProfileClick(actionContext.shareProfileSlug()) },
                 onTopBarActionClick = {
                     if (currentState.isSelf) {
-                        isBumpSheetVisible = true
+                        onBumpClick(actionContext.shareProfileSlug())
                     } else {
                         onShareProfileClick(actionContext.shareProfileSlug())
                     }
@@ -124,33 +122,6 @@ fun ProfileScreen(
                 onLoadMorePosts = stateHolder::loadMorePosts,
                 modifier = modifier
             )
-
-            if (isBumpSheetVisible) {
-                FlowModalSheetOverlay(
-                    entryId = 2001L,
-                    onClose = { isBumpSheetVisible = false },
-                    canDragToDismiss = true,
-                    sheetHeightFraction = 0.65f,
-                    minSheetHeight = 440.dp,
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    sheetShape = androidx.compose.foundation.shape.RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-                ) {
-                    val profileUrl = remember(actionContext) {
-                        "https://floow.me/profile/${actionContext.shareProfileSlug()}"
-                    }
-                    ProfileBumpSheetContent(
-                        profileQrData = profileUrl,
-                        onShareLinkClick = {
-                            onShareProfileClick(actionContext.shareProfileSlug())
-                            isBumpSheetVisible = false
-                        },
-                        onImpactDetected = {
-                            // Bump impact detected
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            }
         }
     }
 }

@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
@@ -74,7 +75,7 @@ fun MainScreenScaffold(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(containerPadding),
-                shape = if (shellMode == MainScreenScaffoldMode.Immersive) RectangleShape else MainShellDefaults.contentShape,
+                shape = MainShellDefaults.contentShape,
                 containerColor = if (shellMode == MainScreenScaffoldMode.Immersive) Color.Black else MainShellDefaults.contentContainerColor
             ) {
                 Box(
