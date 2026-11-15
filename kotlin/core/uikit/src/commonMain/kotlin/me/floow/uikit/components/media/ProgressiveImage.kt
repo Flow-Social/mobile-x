@@ -173,6 +173,12 @@ fun ProgressiveImage(
         }
     }
 
+    LaunchedEffect(microThumbBitmap) {
+        if (microThumbBitmap != null && latestRenderedPainter == null) {
+            onPainterChanged?.invoke(BitmapPainter(microThumbBitmap))
+        }
+    }
+
     Box(
         modifier = modifier.background(placeholderColor)
     ) {
@@ -188,7 +194,7 @@ fun ProgressiveImage(
         }
 
         // Слой 2: Thumb (микро-превью синхронно декодируется в кадр 0, обычный thumb через AsyncImage)
-        if (targetAlpha < 1f && !resolvedThumb.isNullOrBlank() && resolvedThumb != resolvedTarget) {
+        if (targetAlpha < 1f && !resolvedThumb.isNullOrBlank()) {
             if (microThumbBitmap != null) {
                 androidx.compose.foundation.Image(
                     bitmap = microThumbBitmap,
@@ -196,7 +202,7 @@ fun ProgressiveImage(
                     contentScale = contentScale,
                     modifier = Modifier.fillMaxSize()
                 )
-            } else {
+            } else if (resolvedThumb != resolvedTarget) {
                 AsyncImage(
                     model = resolvedThumb,
                     contentDescription = contentDescription,

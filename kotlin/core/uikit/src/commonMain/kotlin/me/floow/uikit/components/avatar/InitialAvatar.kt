@@ -7,6 +7,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -113,7 +117,8 @@ fun NetworkAvatar(
             modifier = Modifier.fillMaxSize()
         )
 
-        if (normalizedModel != null || cleanThumb != null) {
+        var avatarLoadFailed by remember(normalizedModel) { mutableStateOf(false) }
+        if (!avatarLoadFailed && (normalizedModel != null || cleanThumb != null)) {
             if (normalizedModel is String || normalizedModel == null) {
                 ProgressiveImage(
                     thumbUrl = cleanThumb,
@@ -121,14 +126,16 @@ fun NetworkAvatar(
                     contentDescription = contentDescription,
                     contentScale = contentScale,
                     placeholderColor = Color.Transparent,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
+                    onError = { avatarLoadFailed = true }
                 )
             } else {
                 AsyncImage(
                     model = normalizedModel,
                     contentDescription = contentDescription,
                     contentScale = contentScale,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
+                    onError = { avatarLoadFailed = true }
                 )
             }
         }

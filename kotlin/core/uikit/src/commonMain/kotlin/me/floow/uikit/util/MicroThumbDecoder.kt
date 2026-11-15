@@ -72,9 +72,15 @@ object MicroThumbDecoder {
 
         if (bytes.isEmpty()) return null
 
+        val decodedBytes = if (TelegramStrippedThumb.isStrippedThumb(bytes)) {
+            TelegramStrippedThumb.inflate(bytes)
+        } else {
+            bytes
+        }
+
         // 3. Decode & blur on CPU
         val mark = TimeSource.Monotonic.markNow()
-        val bitmap = decodeAndBlurMicroThumb(bytes, blurRadius) ?: return null
+        val bitmap = decodeAndBlurMicroThumb(decodedBytes, blurRadius) ?: return null
         val durationUs = mark.elapsedNow().inWholeMicroseconds
 
         // 4. Store in LRU cache & record metrics

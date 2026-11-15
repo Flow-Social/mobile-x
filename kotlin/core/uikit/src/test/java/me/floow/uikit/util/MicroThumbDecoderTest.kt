@@ -81,4 +81,19 @@ class MicroThumbDecoderTest {
         }
         assertTrue("StackBlur should modify boundary pixels", changedCount > 0)
     }
+
+    @Test
+    fun testTelegramStrippedThumbInflation() {
+        // Sample stripped thumbnail bytes: 0x01 (version), 20 (height), 20 (width), 3 bytes scan
+        val fakeStripped = byteArrayOf(0x01, 20.toByte(), 20.toByte(), 0x12, 0x34, 0x56)
+        assertTrue(TelegramStrippedThumb.isStrippedThumb(fakeStripped))
+        val inflated = TelegramStrippedThumb.inflate(fakeStripped)
+        assertEquals(0xFF.toByte(), inflated[0])
+        assertEquals(0xD8.toByte(), inflated[1])
+        assertEquals(20.toByte(), inflated[142])
+        assertEquals(20.toByte(), inflated[144])
+        assertEquals(0xFF.toByte(), inflated[inflated.size - 2])
+        assertEquals(0xD9.toByte(), inflated[inflated.size - 1])
+        assertEquals(589 + 3 + 2, inflated.size)
+    }
 }
