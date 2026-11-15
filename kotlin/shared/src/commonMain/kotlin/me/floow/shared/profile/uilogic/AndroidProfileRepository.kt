@@ -119,6 +119,7 @@ class AndroidProfileRepository(
                 displayName = chat.title,
                 username = null,
                 avatarUrl = chat.avatarUrl,
+                avatarThumb = chat.avatarThumb,
             )
             headerSeeds[seed.userId] = seed
             return seed

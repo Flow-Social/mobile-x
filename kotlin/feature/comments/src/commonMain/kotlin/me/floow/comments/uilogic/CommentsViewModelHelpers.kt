@@ -211,7 +211,8 @@ internal fun CommentsVmState.buildPostPreviewMessage(): PostPreviewMessage? {
 			)
 		},
 		likesCount = postLikesCount,
-			authorAvatarUrl = postAuthorAvatarUrl,
+		authorAvatarUrl = postAuthorAvatarUrl,
+		authorAvatarThumb = postAuthorAvatarThumb,
 		authorName = postAuthorName,
 		authorUsername = postAuthorUsername
 	)

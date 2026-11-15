@@ -331,6 +331,7 @@ class ProfileStateHolderTest {
             displayName = "Bob",
             username = "bob123",
             avatarUrl = "https://example.com/bob.jpg",
+            avatarThumb = "https://example.com/bob_thumb.jpg",
         )
         val holder = ProfileStateHolder(
             repository = object : ProfileRepository {
@@ -340,6 +341,7 @@ class ProfileStateHolderTest {
                         id = "bob-id",
                         shortUsername = "bob123",
                         avatarUrl = "https://example.com/bob.jpg",
+                        avatarThumb = "https://example.com/bob_thumb.jpg",
                         backgroundUrl = null,
                         displayName = "Bob",
                         description = "Full bio",
@@ -365,6 +367,7 @@ class ProfileStateHolderTest {
         assertEquals("Bob", immediateState.displayName)
         assertEquals("bob123", immediateState.shortUsername)
         assertEquals("https://example.com/bob.jpg", immediateState.avatarUri)
+        assertEquals("https://example.com/bob_thumb.jpg", immediateState.avatarThumb)
         assertTrue(immediateState.arePostsLoading) // Header is rendered, posts section is loading
         assertFalse(immediateState.isSelf)
         coroutineContext.cancelChildren()

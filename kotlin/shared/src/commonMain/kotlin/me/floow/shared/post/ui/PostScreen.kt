@@ -700,6 +700,7 @@ data class PostScreenModel(
     val authorName: String?,
     val authorUsername: String?,
     val authorAvatarUrl: String?,
+    val authorAvatarThumb: String? = null,
     val category: String? = null,
     val createdAtLabel: String? = null,
     val topBarCreatedAtLabel: String? = null,
@@ -1295,13 +1296,6 @@ private data class DetailVariantUrls(
 )
 
 private fun toDetailVariantUrls(fullUrl: String): DetailVariantUrls {
-    if (fullUrl.endsWith("_full.jpg")) {
-        val stem = fullUrl.removeSuffix("_full.jpg")
-        return DetailVariantUrls(
-            lqUrl = "${stem}_lq.jpg",
-            previewUrl = "${stem}_preview.jpg"
-        )
-    }
     return DetailVariantUrls(
         lqUrl = fullUrl,
         previewUrl = fullUrl

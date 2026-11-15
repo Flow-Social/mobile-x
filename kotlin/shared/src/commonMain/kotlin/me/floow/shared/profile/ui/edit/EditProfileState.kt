@@ -9,9 +9,11 @@ interface EditProfileState {
         val bio: ValidatedField = ValidatedField.Valid(""),
         val avatarPreviewUri: String? = null,
         val avatarRemoteUrl: String? = null,
+        val avatarThumb: String? = null,
         val avatarErrorMessage: String? = null,
         val backgroundPreviewUri: String? = null,
         val backgroundRemoteUrl: String? = null,
+        val backgroundThumb: String? = null,
         val backgroundErrorMessage: String? = null,
         val isSubmitting: Boolean = false,
     ) : EditProfileState

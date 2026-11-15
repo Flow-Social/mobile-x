@@ -19,13 +19,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import me.floow.uikit.components.avatar.InitialAvatar
 import me.floow.uikit.components.avatar.NetworkAvatar
 import me.floow.uikit.theme.NinehedronShape
 
@@ -37,7 +37,13 @@ internal fun SharedPostFooter(
     onHeightChanged: ((Int) -> Unit)? = null,
     colors: SharedFeedTopCardColors,
 ) {
-    val previewAvatars = commentersPreview.toCommenterAvatarUiModels(limit = 3)
+    val previewAvatars = remember(commentersPreview) {
+        commentersPreview.asSequence()
+            .map(String::trim)
+            .filter(String::isNotEmpty)
+            .take(3)
+            .toList()
+    }
     val avatarSize = 28.dp
     val overlapStep = 12.dp
     val avatarsGroupWidth = if (previewAvatars.isEmpty()) 0.dp else avatarSize + overlapStep * (previewAvatars.size - 1)
@@ -59,26 +65,19 @@ internal fun SharedPostFooter(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (previewAvatars.isNotEmpty()) {
                     Box(Modifier.width(avatarsGroupWidth)) {
-                        previewAvatars.forEachIndexed { index, avatar ->
+                        previewAvatars.forEachIndexed { index, raw ->
+                            val isRemote = raw.startsWith("http://", ignoreCase = true) || raw.startsWith("https://", ignoreCase = true)
                             val avatarModifier = Modifier
                                 .offset(x = overlapStep * index)
                                 .border(1.2.dp, MaterialTheme.colorScheme.surfaceContainer, NinehedronShape)
                                 .size(avatarSize)
-                            when (avatar) {
-                                is CommenterAvatarUiModel.Remote -> NetworkAvatar(
-                                    avatar.fallbackName,
-                                    avatar.url,
-                                    modifier = avatarModifier,
-                                    size = avatarSize,
-                                    shape = NinehedronShape,
-                                )
-                                is CommenterAvatarUiModel.Initial -> InitialAvatar(
-                                    avatar.name,
-                                    modifier = avatarModifier,
-                                    size = avatarSize,
-                                    shape = NinehedronShape,
-                                )
-                            }
+                            NetworkAvatar(
+                                name = if (isRemote) "?" else raw,
+                                avatarModel = if (isRemote) raw else null,
+                                modifier = avatarModifier,
+                                size = avatarSize,
+                                shape = NinehedronShape,
+                            )
                         }
                     }
                 }
@@ -92,21 +91,3 @@ internal fun SharedPostFooter(
         }
     }
 }
-
-internal sealed interface CommenterAvatarUiModel {
-    data class Remote(val url: String, val fallbackName: String = "?") : CommenterAvatarUiModel
-    data class Initial(val name: String) : CommenterAvatarUiModel
-}
-
-internal fun List<String>.toCommenterAvatarUiModels(limit: Int = 3): List<CommenterAvatarUiModel> = asSequence()
-    .map(String::trim)
-    .filter(String::isNotEmpty)
-    .take(limit)
-    .map { raw ->
-        if (raw.startsWith("http://", ignoreCase = true) || raw.startsWith("https://", ignoreCase = true)) {
-            CommenterAvatarUiModel.Remote(raw)
-        } else {
-            CommenterAvatarUiModel.Initial(raw)
-        }
-    }
-    .toList()

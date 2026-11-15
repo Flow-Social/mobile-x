@@ -20,7 +20,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import flow.shared.generated.resources.Res
 import flow.shared.generated.resources.no_display_name
-import me.floow.shared.profile.resolveProfileListUrls
 import me.floow.shared.profile.ui.LikesLabel
 import me.floow.uikit.components.avatar.InitialAvatar
 import me.floow.uikit.components.media.ProgressiveImage
@@ -43,11 +42,6 @@ fun AvatarUsernameProfileSummaryPage(
         verticalArrangement = Arrangement.Center,
         modifier = modifier.padding(bottom = 0.dp)
     ) {
-        val avatarModel = profileAvatarUri?.takeIf { it.isNotBlank() }
-        val (avatarLqUrl, avatarPreviewUrl) = remember(avatarModel) {
-            resolveProfileListUrls(avatarModel)
-        }
-
         Box(
             modifier = Modifier
                 .size(150.dp)
@@ -63,12 +57,10 @@ fun AvatarUsernameProfileSummaryPage(
                 modifier = Modifier.fillMaxSize()
             )
 
-            val effectiveThumb = avatarThumb ?: avatarLqUrl
-            val effectiveTarget = avatarPreviewUrl ?: avatarLqUrl
-            if (!effectiveThumb.isNullOrBlank() || !effectiveTarget.isNullOrBlank()) {
+            if (!profileAvatarUri.isNullOrBlank() || !avatarThumb.isNullOrBlank()) {
                 ProgressiveImage(
-                    thumbUrl = effectiveThumb,
-                    targetUrl = effectiveTarget ?: effectiveThumb,
+                    thumbUrl = avatarThumb,
+                    targetUrl = profileAvatarUri,
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,

@@ -233,8 +233,8 @@ private fun ZoomableViewerImageV2(
     var lqPainter by remember(imageUrl, resetKey) { mutableStateOf<Painter?>(null) }
     var previewPainter by remember(imageUrl, resetKey) { mutableStateOf<Painter?>(null) }
     var fullPainter by remember(imageUrl, resetKey) { mutableStateOf<Painter?>(null) }
-    var lqSettled by remember(imageUrl, resetKey) { mutableStateOf(false) }
-    var previewSettled by remember(imageUrl, resetKey) { mutableStateOf(false) }
+    var lqSettled by remember(imageUrl, resetKey) { mutableStateOf(urls.lqUrl.isNullOrBlank()) }
+    var previewSettled by remember(imageUrl, resetKey) { mutableStateOf(urls.previewUrl.isNullOrBlank()) }
     var lqReady by remember(imageUrl, resetKey) { mutableStateOf(false) }
     var previewReady by remember(imageUrl, resetKey) { mutableStateOf(false) }
     var fullReady by remember(imageUrl, resetKey) { mutableStateOf(false) }
@@ -522,46 +522,17 @@ private fun resolveViewerPainterAspectRatio(painter: Painter, fallback: Float): 
 }
 
 private data class ViewerImageUrls(
-    val lqUrl: String,
-    val previewUrl: String,
+    val lqUrl: String? = null,
+    val previewUrl: String? = null,
     val fullUrl: String
 )
 
 private fun resolveViewerImageUrls(rawUrl: String): ViewerImageUrls {
-    return when {
-        rawUrl.endsWith("_full.jpg") -> {
-            val stem = rawUrl.removeSuffix("_full.jpg")
-            ViewerImageUrls(
-                lqUrl = "${stem}_lq.jpg",
-                previewUrl = "${stem}_preview.jpg",
-                fullUrl = rawUrl
-            )
-        }
-
-        rawUrl.endsWith("_preview.jpg") -> {
-            val stem = rawUrl.removeSuffix("_preview.jpg")
-            ViewerImageUrls(
-                lqUrl = "${stem}_lq.jpg",
-                previewUrl = rawUrl,
-                fullUrl = "${stem}_full.jpg"
-            )
-        }
-
-        rawUrl.endsWith("_lq.jpg") -> {
-            val stem = rawUrl.removeSuffix("_lq.jpg")
-            ViewerImageUrls(
-                lqUrl = rawUrl,
-                previewUrl = "${stem}_preview.jpg",
-                fullUrl = "${stem}_full.jpg"
-            )
-        }
-
-        else -> ViewerImageUrls(
-            lqUrl = rawUrl,
-            previewUrl = rawUrl,
-            fullUrl = rawUrl
-        )
-    }
+    return ViewerImageUrls(
+        lqUrl = null,
+        previewUrl = null,
+        fullUrl = rawUrl
+    )
 }
 
 private fun Modifier.verticalDismissGestureV2(

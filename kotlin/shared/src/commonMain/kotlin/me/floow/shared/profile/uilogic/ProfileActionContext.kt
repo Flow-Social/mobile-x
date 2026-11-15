@@ -1,5 +1,6 @@
 package me.floow.shared.profile.uilogic
 
+import me.floow.domain.models.PostImageVariant
 import me.floow.shared.post.ui.PostScreenModel
 import me.floow.shared.profile.ui.model.ProfilePostItem
 import me.floow.shared.profile.uilogic.edit.EditProfileOverlayData
@@ -9,7 +10,9 @@ data class ProfileActionContext(
     val id: String,
     val shortUsername: String?,
     val avatarUri: String?,
+    val avatarThumb: String? = null,
     val backgroundUri: String?,
+    val backgroundThumb: String? = null,
     val displayName: String?,
     val description: String?,
 )
@@ -25,7 +28,9 @@ fun ProfileScreenState.Success.toActionContext(): ProfileActionContext {
         id = id,
         shortUsername = shortUsername,
         avatarUri = avatarUri,
+        avatarThumb = avatarThumb,
         backgroundUri = backgroundUri,
+        backgroundThumb = backgroundThumb,
         displayName = displayName,
         description = description,
     )
@@ -37,7 +42,9 @@ fun ProfileActionContext.toEditProfileOverlayData(): EditProfileOverlayData {
         username = shortUsername.orEmpty(),
         bio = description.orEmpty(),
         avatarUrl = avatarUri,
+        avatarThumb = avatarThumb,
         backgroundUrl = backgroundUri,
+        backgroundThumb = backgroundThumb,
     )
 }
 
@@ -67,12 +74,19 @@ fun ProfileScreenState.Success.toPostScreenModel(
         imageUrls = post.viewerUrls.ifEmpty {
             listOfNotNull(post.fullUrl ?: post.previewUrl ?: post.lqUrl)
         },
+        imageVariants = post.imageVariants.map { variant ->
+            PostImageVariant(
+                thumbUrl = variant.thumbUrl,
+                fullUrl = variant.fullUrl,
+            )
+        },
         mediaTransferSnapshot = sourceSnapshot,
         description = post.description,
         authorId = id,
         authorName = displayName,
         authorUsername = shortUsername,
         authorAvatarUrl = avatarUri,
+        authorAvatarThumb = avatarThumb,
         category = post.category,
         createdAtLabel = post.createdAtLabel,
         likesCount = post.likesCount,

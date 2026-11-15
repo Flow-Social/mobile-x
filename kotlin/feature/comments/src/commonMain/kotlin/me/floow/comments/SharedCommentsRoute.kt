@@ -133,12 +133,10 @@ fun SharedCommentsRoute(
 		if (handoffUrls.isNotEmpty()) {
 			handoffUrls
 		} else {
-			initialData.postImageUrls
-				.filter(String::isNotBlank)
-					initialData.postImageVariants.mapNotNull { variant ->
-						variant.fullUrl?.takeIf(String::isNotBlank)
-							?: variant.thumbUrl?.takeIf(String::isNotBlank)
-					}
+			initialData.postImageVariants.mapNotNull { variant ->
+				variant.fullUrl?.takeIf(String::isNotBlank)
+					?: variant.thumbUrl?.takeIf(String::isNotBlank)
+			}
 		}
 	}
 	var openingPainter by remember(initialData.postId) { mutableStateOf<Painter?>(null) }
@@ -235,6 +233,7 @@ fun SharedCommentsRoute(
 			postAuthorId = initialData.postAuthorId,
 			postAuthorName = initialData.postAuthorName,
 			postAuthorAvatarUrl = initialData.postAuthorAvatarUrl,
+			postAuthorAvatarThumb = initialData.postAuthorAvatarThumb,
 			postAuthorUsername = initialData.postAuthorUsername,
 			postImageUrls = initialData.postImageUrls,
 			postImageVariants = initialData.postImageVariants,

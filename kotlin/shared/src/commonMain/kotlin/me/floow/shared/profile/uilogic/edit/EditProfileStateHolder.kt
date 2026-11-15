@@ -27,7 +27,9 @@ data class EditProfileOverlayData(
     val username: String,
     val bio: String,
     val avatarUrl: String?,
+    val avatarThumb: String? = null,
     val backgroundUrl: String?,
+    val backgroundThumb: String? = null,
 )
 
 private data class EditProfileInternalState(
@@ -37,10 +39,12 @@ private data class EditProfileInternalState(
     val avatarPreviewUri: String? = null,
     val avatarHandleId: String? = null,
     val avatarRemoteUrl: String? = null,
+    val avatarThumb: String? = null,
     val avatarErrorMessage: String? = null,
     val backgroundPreviewUri: String? = null,
     val backgroundHandleId: String? = null,
     val backgroundRemoteUrl: String? = null,
+    val backgroundThumb: String? = null,
     val backgroundErrorMessage: String? = null,
     val isSubmitting: Boolean = false,
 )
@@ -65,7 +69,9 @@ class EditProfileStateHolder(
             username = ValidatedField.Valid(initialData.username),
             bio = ValidatedField.Valid(initialData.bio),
             avatarRemoteUrl = initialData.avatarUrl,
+            avatarThumb = initialData.avatarThumb,
             backgroundRemoteUrl = initialData.backgroundUrl,
+            backgroundThumb = initialData.backgroundThumb,
         )
     )
     private val _state = MutableStateFlow(_internalState.value.toUiState())
@@ -276,9 +282,11 @@ private fun EditProfileInternalState.toUiState(): EditProfileState {
         bio = bio,
         avatarPreviewUri = avatarPreviewUri,
         avatarRemoteUrl = avatarRemoteUrl,
+        avatarThumb = if (avatarPreviewUri != null) null else avatarThumb,
         avatarErrorMessage = avatarErrorMessage,
         backgroundPreviewUri = backgroundPreviewUri,
         backgroundRemoteUrl = backgroundRemoteUrl,
+        backgroundThumb = if (backgroundPreviewUri != null) null else backgroundThumb,
         backgroundErrorMessage = backgroundErrorMessage,
         isSubmitting = isSubmitting,
     )

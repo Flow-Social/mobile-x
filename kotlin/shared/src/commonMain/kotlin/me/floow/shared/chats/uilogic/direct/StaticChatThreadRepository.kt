@@ -30,6 +30,7 @@ class StaticChatThreadRepository(
 				selfUserId = if (request.isSavedMessages) "self" else null,
 				title = request.peerDisplayName,
 				avatarUrl = request.peerAvatarUrl,
+				avatarThumb = request.peerAvatarThumb,
 				subtitle = if (request.isSavedMessages) null else formatPresenceStatusLabel(isOnline = true, lastSeenAtMillis = null),
 				isSavedMessages = request.isSavedMessages,
 			),

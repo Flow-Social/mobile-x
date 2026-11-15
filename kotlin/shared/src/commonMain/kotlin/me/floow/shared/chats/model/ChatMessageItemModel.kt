@@ -15,4 +15,6 @@ data class ChatMessageItemModel(
 	val deliveryState: ChatDeliveryState? = null,
 	val content: ChatMessageContent = ChatMessageContent.Text,
 	val pinnedAtMillis: Long? = null,
+	val authorAvatarUrl: String? = null,
+	val authorAvatarThumb: String? = null,
 )

@@ -199,8 +199,7 @@ fun FullscreenImageViewer(
                 .filter { it in 0 until imageCount }
         }
         val currentImageRaw = model.images[currentPage]
-        val currentImageModel = currentImageRaw
-        val asyncPainter = rememberAsyncImagePainter(model = currentImageModel)
+        val asyncPainter = rememberAsyncImagePainter(model = currentImageRaw)
         val cachedPainter = pagePainters[currentPage]
         val openingPainter = model.openingPainter
         val displaySnapshots = remember { mutableStateMapOf<Int, DisplaySnapshot>() }
@@ -735,24 +734,7 @@ private fun resolveCloseStartRect(
 
 private fun prefetchViewerUrls(rawUrl: String): List<String> {
     if (rawUrl.isBlank() || rawUrl.startsWith("/")) return emptyList()
-    return when {
-        rawUrl.endsWith("_full.jpg") -> {
-            val stem = rawUrl.removeSuffix("_full.jpg")
-            listOf("${stem}_lq.jpg", "${stem}_preview.jpg")
-        }
-
-        rawUrl.endsWith("_preview.jpg") -> {
-            val stem = rawUrl.removeSuffix("_preview.jpg")
-            listOf("${stem}_lq.jpg", rawUrl)
-        }
-
-        rawUrl.endsWith("_lq.jpg") -> {
-            val stem = rawUrl.removeSuffix("_lq.jpg")
-            listOf(rawUrl, "${stem}_preview.jpg")
-        }
-
-        else -> listOf(rawUrl)
-    }
+    return listOf(rawUrl)
 }
 
 private fun resolvePainterAspectRatio(painter: Painter, fallback: Float): Float {

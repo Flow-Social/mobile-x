@@ -71,7 +71,6 @@ import flow.shared.generated.resources.share
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
-import me.floow.shared.profile.resolveProfileListUrls
 import me.floow.shared.image.PrefetchImageUrlsEffect
 import me.floow.shared.profile.ui.model.ProfilePostItem
 import me.floow.shared.profile.uilogic.ProfilePostSyncState
@@ -371,9 +370,6 @@ fun ProfileScreenSuccessState(
                     ) {
                         val fallbackPainter = ColorPainter(Color.DarkGray)
                         val backgroundModel = backgroundUri?.takeIf { it.isNotBlank() }
-                        val (backgroundLqUrl, backgroundPreviewUrl) = remember(backgroundModel) {
-                            resolveProfileListUrls(backgroundModel)
-                        }
                         var heroBackgroundPainter by remember(backgroundModel) {
                             mutableStateOf<Painter>(fallbackPainter)
                         }
@@ -386,8 +382,8 @@ fun ProfileScreenSuccessState(
                             )
                         } else {
                             ProgressiveImage(
-                                thumbUrl = backgroundThumb ?: (backgroundLqUrl ?: backgroundPreviewUrl),
-                                targetUrl = backgroundPreviewUrl ?: backgroundModel ?: backgroundLqUrl,
+                                thumbUrl = backgroundThumb,
+                                targetUrl = backgroundModel,
                                 contentDescription = null,
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Crop,
@@ -479,13 +475,7 @@ fun ProfileScreenSuccessState(
 private fun addProfileHeroPrefetchUrls(rawUrl: String?): List<String> {
     val normalized = rawUrl?.trim().orEmpty()
     if (normalized.isBlank()) return emptyList()
-
-    val (lqUrl, previewUrl) = resolveProfileListUrls(normalized)
-    return buildList {
-        add(normalized)
-        if (!lqUrl.isNullOrBlank()) add(lqUrl)
-        if (!previewUrl.isNullOrBlank()) add(previewUrl)
-    }
+    return listOf(normalized)
 }
 
 private fun Modifier.desktopSheetWheelInterceptor(

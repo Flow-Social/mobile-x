@@ -5,6 +5,7 @@ data class RepliesThreadItemModel(
 	val actorUserId: String? = null,
 	val actorDisplayName: String,
 	val actorAvatarUrl: String? = null,
+	val actorAvatarThumb: String? = null,
 	val text: String,
 	val createdAtMillis: Long,
 	val targetPostId: String? = null,

@@ -1,5 +1,6 @@
 package me.floow.shared.profile.ui.model
 
+import me.floow.shared.profile.uilogic.ProfileImageVariant
 import me.floow.shared.profile.uilogic.ProfilePostPendingMutationType
 import me.floow.shared.profile.uilogic.ProfilePostSyncState
 
@@ -13,6 +14,7 @@ data class ProfilePostItem(
     val fullUrl: String? = null,
     val viewerUrls: List<String>,
     val previewUrls: List<String>,
+    val imageVariants: List<ProfileImageVariant> = emptyList(),
     val likesCount: Int,
     val commentsCount: Int,
     val commentersPreview: List<String> = emptyList(),

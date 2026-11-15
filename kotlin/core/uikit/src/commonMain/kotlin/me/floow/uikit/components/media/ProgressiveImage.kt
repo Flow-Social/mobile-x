@@ -37,20 +37,15 @@ data class ProgressiveTargets(
     val target: String?
 )
 
-fun deriveProgressiveThumb(targetUrl: String?): String? {
-    return null
-}
-
 fun resolveProgressiveTargets(
     thumbUrl: String?,
     targetUrl: String?
 ): ProgressiveTargets {
     val cleanTarget = targetUrl?.trim()?.takeIf { it.isNotEmpty() }
     val explicitThumb = thumbUrl?.trim()?.takeIf { it.isNotEmpty() && it != cleanTarget }
-    val cleanThumb = explicitThumb ?: deriveProgressiveThumb(cleanTarget)
     return ProgressiveTargets(
-        thumb = cleanThumb?.takeIf { it != cleanTarget },
-        target = cleanTarget ?: cleanThumb
+        thumb = explicitThumb,
+        target = cleanTarget ?: explicitThumb
     )
 }
 
@@ -69,100 +64,6 @@ fun resolveProgressiveTargets(
         thumbUrl = resolvedThumb,
         targetUrl = resolvedTarget
     )
-}
-
-class ProgressiveImageCoordinator(
-    thumbUrl: String? = null,
-    targetUrl: String? = null
-) {
-    var thumbUrl: String? = thumbUrl
-        private set
-    var targetUrl: String? = targetUrl
-        private set
-
-    var isThumbLoaded: Boolean = false
-        private set
-    var isTargetLoaded: Boolean = false
-        private set
-    var targetAlpha: Float = 0f
-        private set
-    var crossfadeProgress: Float = 0f
-        private set
-    var retainedPreviewModel: String? = null
-        private set
-
-    val hasRetainedPreview: Boolean
-        get() = retainedPreviewModel != null
-
-    val shouldRenderThumb: Boolean
-        get() {
-            if (hasRetainedPreview) return true
-            if (targetAlpha >= 1f && isTargetLoaded) return false
-            val effectiveThumb = effectiveThumbModel
-            return !effectiveThumb.isNullOrBlank() && effectiveThumb != targetUrl
-        }
-
-    val effectiveThumbModel: String?
-        get() = retainedPreviewModel ?: thumbUrl
-
-    val hasBlackFrame: Boolean
-        get() {
-            val hasVisibleTarget = isTargetLoaded && targetAlpha > 0f
-            val hasVisibleThumb = shouldRenderThumb && isThumbLoaded
-            val hasVisibleRetained = hasRetainedPreview
-            return !hasVisibleTarget && !hasVisibleThumb && !hasVisibleRetained
-        }
-
-    fun onThumbLoaded() {
-        isThumbLoaded = true
-    }
-
-    fun onTargetLoading() {
-        // Keeps thumb visible
-    }
-
-    fun onTargetLoaded() {
-        isTargetLoaded = true
-        if (retainedPreviewModel == null && !isThumbLoaded) {
-            targetAlpha = 1f
-        }
-    }
-
-    fun onTargetImmediateCacheHit() {
-        isTargetLoaded = true
-        targetAlpha = 1f
-        retainedPreviewModel = null
-    }
-
-    fun onTargetFailed() {
-        isTargetLoaded = false
-        targetAlpha = 0f
-    }
-
-    fun updateCrossfadeProgress(progress: Float) {
-        crossfadeProgress = progress.coerceIn(0f, 1f)
-        targetAlpha = crossfadeProgress
-        if (targetAlpha >= 1f) {
-            retainedPreviewModel = null
-        }
-    }
-
-    fun updateModels(newThumbUrl: String?, newTargetUrl: String?) {
-        if (newTargetUrl != targetUrl) {
-            if (isTargetLoaded && targetUrl != null) {
-                retainedPreviewModel = targetUrl
-            } else if (isThumbLoaded && thumbUrl != null) {
-                retainedPreviewModel = thumbUrl
-            }
-            targetUrl = newTargetUrl
-            thumbUrl = newThumbUrl
-            isTargetLoaded = false
-            targetAlpha = 0f
-            crossfadeProgress = 0f
-        } else if (newThumbUrl != thumbUrl) {
-            thumbUrl = newThumbUrl
-        }
-    }
 }
 
 @Composable

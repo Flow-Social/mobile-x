@@ -268,7 +268,9 @@ fun SharedEditProfileFormContent(
     ) {
         EditProfileMediaCard(
             avatarModel = state.avatarPreviewUri ?: state.avatarRemoteUrl,
+            avatarThumb = state.avatarThumb,
             backgroundModel = state.backgroundPreviewUri ?: state.backgroundRemoteUrl,
+            backgroundThumb = state.backgroundThumb,
             onAvatarPickerClick = onAvatarPickerClick,
             onBackgroundPickerClick = onBackgroundPickerClick,
         )
@@ -353,7 +355,9 @@ fun SharedProfileDetailsFields(
 @Composable
 private fun EditProfileMediaCard(
     avatarModel: String?,
+    avatarThumb: String? = null,
     backgroundModel: String?,
+    backgroundThumb: String? = null,
     onAvatarPickerClick: () -> Unit,
     onBackgroundPickerClick: () -> Unit,
 ) {
@@ -377,7 +381,7 @@ private fun EditProfileMediaCard(
         ) {
             if (!backgroundModel.isNullOrBlank()) {
                 ProgressiveImage(
-                    thumbUrl = null,
+                    thumbUrl = backgroundThumb,
                     targetUrl = backgroundModel,
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
@@ -426,7 +430,7 @@ private fun EditProfileMediaCard(
             ) {
                 if (!avatarModel.isNullOrBlank()) {
                     ProgressiveImage(
-                        thumbUrl = null,
+                        thumbUrl = avatarThumb,
                         targetUrl = avatarModel,
                         contentDescription = null,
                         modifier = Modifier.fillMaxSize(),

@@ -10,6 +10,7 @@ data class ProfileHeaderSeed(
     val displayName: String?,
     val username: String?,
     val avatarUrl: String?,
+    val avatarThumb: String? = null,
 )
 
 interface ProfileRepository {

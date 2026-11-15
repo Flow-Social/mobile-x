@@ -8,6 +8,7 @@ data class CommentsRouteInitialData(
 	val postAuthorId: String,
 	val postAuthorName: String,
 	val postAuthorAvatarUrl: String?,
+	val postAuthorAvatarThumb: String? = null,
 	val postAuthorUsername: String?,
 	val postImageUrls: List<String>,
 	val postImageVariants: List<PostImageVariant>,

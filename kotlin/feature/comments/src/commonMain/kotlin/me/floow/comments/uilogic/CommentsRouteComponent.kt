@@ -16,6 +16,7 @@ interface CommentsRouteComponent {
 		postAuthorId: String,
 		postAuthorName: String,
 		postAuthorAvatarUrl: String?,
+		postAuthorAvatarThumb: String? = null,
 		postAuthorUsername: String?,
 		postImageUrls: List<String>,
 		postImageVariants: List<PostImageVariant>,

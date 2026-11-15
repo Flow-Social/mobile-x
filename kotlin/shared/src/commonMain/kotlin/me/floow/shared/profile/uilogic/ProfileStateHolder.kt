@@ -58,7 +58,7 @@ class ProfileStateHolder(
                     id = seed.userId,
                     shortUsername = seed.username,
                     avatarUri = seed.avatarUrl,
-                    avatarThumb = null,
+                    avatarThumb = seed.avatarThumb,
                     backgroundUri = null,
                     backgroundThumb = null,
                     displayName = seed.displayName,
@@ -273,7 +273,9 @@ class ProfileStateHolder(
             shortUsername = data.username,
             description = data.bio,
             avatarUri = data.avatarUrl,
+            avatarThumb = if (data.avatarUrl == current.avatarUri) current.avatarThumb else null,
             backgroundUri = data.backgroundUrl,
+            backgroundThumb = if (data.backgroundUrl == current.backgroundUri) current.backgroundThumb else null,
         )
     }
 
@@ -329,6 +331,7 @@ internal fun profilePostToUiModel(post: ProfilePost): ProfilePostItem {
         fullUrl = firstVariant?.fullUrl ?: fallbackUrls.firstOrNull(),
         viewerUrls = viewerUrls,
         previewUrls = previewUrls,
+        imageVariants = normalizedVariants,
         likesCount = post.likesCount,
         commentsCount = post.commentsCount,
         commentersPreview = post.commentersPreview,

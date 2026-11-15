@@ -716,6 +716,7 @@ private fun DirectChatInitialRequest.toCachedConversation(conversationId: Long):
 			username = null,
 			name = peerDisplayName,
 			avatarUrl = peerAvatarUrl,
+			avatarThumb = peerAvatarThumb,
 		),
 		lastMessage = null,
 		unreadCount = 0,
@@ -872,6 +873,8 @@ internal fun DirectChatMessage.toItemModel(selfUserId: String?): ChatMessageItem
 		isDeleted = false,
 		deliveryState = deliveryState,
 		content = content,
+		authorAvatarUrl = sender.avatarUrl,
+		authorAvatarThumb = sender.avatarThumb,
 	)
 }
 

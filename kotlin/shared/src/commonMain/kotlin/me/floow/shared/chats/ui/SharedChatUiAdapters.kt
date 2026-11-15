@@ -338,6 +338,8 @@ private fun ChatMessageItemModel.toChatMessage(): ChatMessage {
 			isOutgoing = isOutgoing,
 			isPinned = isPinned,
 			authorName = senderDisplayName,
+			authorAvatarUrl = authorAvatarUrl,
+			authorAvatarThumb = authorAvatarThumb,
 			deliveryStatus = deliveryStatus,
 			images = listOf(
 				ChatImageItem(
@@ -412,7 +414,8 @@ private fun ChatMessageItemModel.toChatMessage(): ChatMessage {
 				)
 			),
 			likesCount = postPreview.likesCount,
-			authorAvatarUrl = null,
+			authorAvatarUrl = authorAvatarUrl,
+			authorAvatarThumb = authorAvatarThumb,
 			isPinned = isPinned,
 			authorName = senderDisplayName,
 			deliveryStatus = deliveryStatus,
@@ -442,7 +445,8 @@ private fun ChatMessageItemModel.toChatMessage(): ChatMessage {
 			replyMessageText = replyToMessageText.orEmpty(),
 			isPinned = isPinned,
 			authorName = senderDisplayName,
-			authorAvatarUrl = null,
+			authorAvatarUrl = authorAvatarUrl,
+			authorAvatarThumb = authorAvatarThumb,
 			deliveryStatus = deliveryStatus,
 		)
 
@@ -465,7 +469,8 @@ private fun ChatMessageItemModel.toChatMessage(): ChatMessage {
 			createdAtMillis = createdAtMillis,
 			isPinned = isPinned,
 			authorName = senderDisplayName,
-			authorAvatarUrl = null,
+			authorAvatarUrl = authorAvatarUrl,
+			authorAvatarThumb = authorAvatarThumb,
 			deliveryStatus = deliveryStatus,
 		)
 	}
@@ -552,6 +557,7 @@ private fun RepliesThreadItemModel.toChatMessage(): ChatMessage {
 		createdAtMillis = createdAtMillis,
 		authorName = actorDisplayName,
 		authorAvatarUrl = actorAvatarUrl,
+		authorAvatarThumb = actorAvatarThumb,
 	)
 }
 

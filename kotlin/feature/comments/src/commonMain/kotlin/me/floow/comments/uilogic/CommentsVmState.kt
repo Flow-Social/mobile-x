@@ -14,6 +14,7 @@ internal data class CommentsVmState(
 	val postAuthorName: String = "",
 	val defaultTitle: String = "",
 	val postAuthorAvatarUrl: String? = null,
+	val postAuthorAvatarThumb: String? = null,
 	val postAuthorUsername: String? = null,
 	val postImageUrls: List<String> = emptyList(),
 	val postImageVariants: List<PostImageVariant> = emptyList(),

@@ -149,36 +149,18 @@ fun NetworkAvatar(
     contentScale: ContentScale = ContentScale.Crop,
     contentDescription: String? = null
 ) {
-    val cleanTarget = targetUrl?.trim()?.takeIf { it.isNotEmpty() }
-    val cleanThumb = thumbUrl?.trim()?.takeIf { it.isNotEmpty() }
-
-    Box(
-        modifier = modifier
-            .size(size)
-            .clip(shape)
-            .background(backgroundColor),
-        contentAlignment = Alignment.Center
-    ) {
-        InitialAvatar(
-            name = name,
-            size = size,
-            backgroundColor = backgroundColor,
-            textColor = textColor,
-            textStyle = textStyle,
-            shape = shape,
-            modifier = Modifier.fillMaxSize()
-        )
-
-        if (cleanTarget != null || cleanThumb != null) {
-            ProgressiveImage(
-                thumbUrl = cleanThumb,
-                targetUrl = cleanTarget,
-                contentDescription = contentDescription,
-                contentScale = contentScale,
-                placeholderColor = Color.Transparent,
-                modifier = Modifier.fillMaxSize()
-            )
-        }
-    }
+    NetworkAvatar(
+        name = name,
+        avatarModel = targetUrl,
+        modifier = modifier,
+        avatarThumb = thumbUrl,
+        size = size,
+        backgroundColor = backgroundColor,
+        textColor = textColor,
+        textStyle = textStyle,
+        shape = shape,
+        contentScale = contentScale,
+        contentDescription = contentDescription
+    )
 }
 
