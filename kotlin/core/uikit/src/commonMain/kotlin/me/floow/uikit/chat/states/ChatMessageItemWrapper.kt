@@ -34,8 +34,9 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import me.floow.uikit.chat.components.ChatAlbumBubble
+import me.floow.uikit.chat.components.ChatMessageTimestamp
 import me.floow.uikit.chat.components.ChatTailVector
-import me.floow.uikit.chat.components.MessageTimestampRow
+import me.floow.uikit.chat.components.chatMessageTimestampPadding
 import me.floow.uikit.chat.components.replyable.ReplyableChatContent
 import me.floow.uikit.chat.model.ChatContextMenuAction
 import me.floow.uikit.chat.model.ChatImageItem
@@ -43,7 +44,6 @@ import me.floow.uikit.chat.model.ChatMessage
 import me.floow.uikit.chat.model.ChatMessageTapOutcome
 import me.floow.uikit.chat.model.ChatScreenConfig
 import me.floow.uikit.chat.model.ImageMessage
-import me.floow.uikit.chat.components.ChatMediaClockOverlay
 import me.floow.uikit.chat.model.PostPreviewMessage
 import me.floow.uikit.chat.model.PrimaryInMessage
 import me.floow.uikit.chat.model.PrimaryOutMessage
@@ -303,14 +303,11 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 								}
 								if (showTimestamp) {
 									Spacer(Modifier.height(3.dp))
-									MessageTimestampRow(
-										formattedTime = formatChatClockTime(preview.createdAtMillis),
+									ChatMessageTimestamp(
+										message = preview,
 										isOutgoing = false,
-										deliveryStatus = preview.deliveryStatus,
-										isPinned = preview.isPinned,
-										showMessageStatus = true,
 										showUnreadDot = false,
-										modifier = Modifier.padding(start = 20.dp)
+										modifier = Modifier.padding(start = 20.dp),
 									)
 								}
 							}
@@ -375,9 +372,11 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 									},
 								)
 								if (showTimestamp) {
-									ChatMediaClockOverlay(
-										createdAtMillis = message.createdAtMillis,
+									ChatMessageTimestamp(
+										message = message,
 										isOutgoing = message.isOutgoing,
+										showUnreadDot = showUnreadDot,
+										isOverlay = true,
 										modifier = Modifier
 											.align(Alignment.BottomEnd)
 											.padding(end = 12.dp, bottom = 8.dp),
@@ -430,17 +429,11 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 								}
 								if (showTimestamp) {
 									Spacer(Modifier.height(3.dp))
-									MessageTimestampRow(
-										formattedTime = formatChatClockTime(message.createdAtMillis),
+									ChatMessageTimestamp(
+										message = message,
 										isOutgoing = message.isOutgoing,
-										deliveryStatus = message.deliveryStatus,
-										isPinned = message.isPinned,
-										showMessageStatus = true,
-										showUnreadDot = false,
-										modifier = Modifier.padding(
-											start = if (message.isOutgoing) 0.dp else 20.dp,
-											end = if (message.isOutgoing) 20.dp else 0.dp
-										)
+										showUnreadDot = showUnreadDot,
+										modifier = Modifier.chatMessageTimestampPadding(message.isOutgoing),
 									)
 								}
 							}
@@ -507,19 +500,13 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 										{ clientMessageId -> onImageCancel?.invoke(clientMessageId) }
 									)
 								}
-								if (showTimestamp && (message as? ImageMessage)?.messageText?.isNotBlank() == true) {
+								if (showTimestamp) {
 									Spacer(Modifier.height(3.dp))
-									MessageTimestampRow(
-										formattedTime = formatChatClockTime(message.createdAtMillis),
+									ChatMessageTimestamp(
+										message = message,
 										isOutgoing = message.isOutgoing,
-										deliveryStatus = message.deliveryStatus,
-										isPinned = message.isPinned,
-										showMessageStatus = true,
-										showUnreadDot = false,
-										modifier = Modifier.padding(
-											start = if (message.isOutgoing) 0.dp else 20.dp,
-											end = if (message.isOutgoing) 20.dp else 0.dp
-										)
+										showUnreadDot = showUnreadDot,
+										modifier = Modifier.chatMessageTimestampPadding(message.isOutgoing),
 									)
 								}
 							}

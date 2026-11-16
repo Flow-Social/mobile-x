@@ -145,16 +145,6 @@ fun ChatAlbumBubble(
 				onCancelDownloadImage = onCancelDownloadImage,
 				modifier = Modifier.fillMaxWidth(),
 			)
-
-			if (!hasCaption) {
-				ChatMediaClockOverlay(
-					createdAtMillis = message.createdAtMillis,
-					isOutgoing = isOutgoing,
-					modifier = Modifier
-						.align(Alignment.BottomEnd)
-						.padding(end = 8.dp, bottom = 8.dp),
-				)
-			}
 		}
 
 		if (hasCaption) {

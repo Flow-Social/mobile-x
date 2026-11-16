@@ -257,18 +257,13 @@ fun ChatBubble(
 
 		if (showTimestamp) {
 			Spacer(Modifier.height(3.dp))
-			MessageTimestampRow(
-				formattedTime = formattedMessageTime,
+			ChatMessageTimestamp(
+				message = chatMessage,
 				isOutgoing = isOut,
-				deliveryStatus = chatMessage.deliveryStatus,
-				isPinned = chatMessage.isPinned,
-				showMessageStatus = showMessageStatus,
 				showUnreadDot = showUnreadDot,
-				onRetrySendClick = onRetrySendClick?.let { handler -> { handler(chatMessage) } },
-				modifier = Modifier.padding(
-					start = if (isOut) 0.dp else 20.dp,
-					end = if (isOut) 20.dp else 0.dp
-				)
+				showMessageStatus = showMessageStatus,
+				onRetryClick = onRetrySendClick?.let { handler -> { handler(chatMessage) } },
+				modifier = Modifier.chatMessageTimestampPadding(isOut),
 			)
 		}
 	}

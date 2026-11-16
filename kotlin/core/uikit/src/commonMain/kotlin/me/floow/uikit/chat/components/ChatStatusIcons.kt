@@ -42,6 +42,7 @@ fun MessageDeliveryStatusIcon(
     isRead: Boolean,
     onRetryClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
+    tint: Color = FlowStatusIconColor,
 ) {
     Box(
         modifier = modifier.size(14.dp),
@@ -61,7 +62,7 @@ fun MessageDeliveryStatusIcon(
                 Icon(
                     imageVector = Icons.Outlined.Schedule,
                     contentDescription = "Sending",
-                    tint = FlowStatusIconColor,
+                    tint = tint,
                     modifier = Modifier
                         .size(12.dp)
                         .graphicsLayer { rotationZ = rotation }
@@ -82,14 +83,14 @@ fun MessageDeliveryStatusIcon(
                     Icon(
                         painter = painterResource(Res.drawable.status_checked),
                         contentDescription = "Read",
-                        tint = FlowStatusIconColor,
+                        tint = tint,
                         modifier = Modifier.size(width = 13.dp, height = 8.dp)
                     )
                 } else {
                     Icon(
                         painter = painterResource(Res.drawable.status_nochecked),
                         contentDescription = "Sent",
-                        tint = FlowStatusIconColor,
+                        tint = tint,
                         modifier = Modifier.size(width = 11.dp, height = 9.dp)
                     )
                 }
@@ -98,37 +99,24 @@ fun MessageDeliveryStatusIcon(
     }
 }
 
+@Deprecated(
+    message = "Use MessageTimestampRow with isOverlay = true instead",
+    replaceWith = ReplaceWith("MessageTimestampRow(formattedTime = formatChatClockTime(createdAtMillis), isOutgoing = isOutgoing, deliveryStatus = deliveryStatus, isOverlay = true, modifier = modifier)")
+)
 @Composable
 fun ChatMediaClockOverlay(
     createdAtMillis: Long,
     isOutgoing: Boolean,
     modifier: Modifier = Modifier,
+    deliveryStatus: ChatMessageDeliveryStatus = ChatMessageDeliveryStatus.SENT,
+    isRead: Boolean = true,
 ) {
-    Box(
-        modifier = modifier
-            .background(
-                color = Color.Black.copy(alpha = 0.50f),
-                shape = RoundedCornerShape(10.dp)
-            )
-            .padding(horizontal = 6.dp, vertical = 2.dp)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(3.dp)
-        ) {
-            Text(
-                text = formatChatClockTime(createdAtMillis),
-                color = Color.White,
-                fontSize = 11.sp
-            )
-            if (isOutgoing) {
-                Icon(
-                    painter = painterResource(Res.drawable.status_checked),
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(width = 11.dp, height = 7.dp)
-                )
-            }
-        }
-    }
+    MessageTimestampRow(
+        formattedTime = formatChatClockTime(createdAtMillis),
+        isOutgoing = isOutgoing,
+        deliveryStatus = deliveryStatus,
+        showUnreadDot = !isRead,
+        isOverlay = true,
+        modifier = modifier,
+    )
 }
