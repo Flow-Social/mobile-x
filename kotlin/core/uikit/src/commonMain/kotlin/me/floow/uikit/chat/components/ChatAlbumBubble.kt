@@ -506,7 +506,7 @@ private fun SingleImageCell(
 		val hasLocalFile = remember(downloadedLocalPath, initialLocalPath) {
 			(downloadedLocalPath ?: initialLocalPath)?.let(::platformChatFileExists) == true
 		}
-		val isFullReady = hasLocalFile || downloadState is MediaDownloadState.Completed
+		val isFullReady = hasLocalFile || downloadState is MediaDownloadState.Completed || painter != null
 
 		var activeModel by remember(fullSource) { mutableStateOf(fullSource) }
 		val displayTarget = activeModel ?: remoteUrl

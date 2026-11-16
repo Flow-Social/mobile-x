@@ -144,20 +144,13 @@ fun ProfileBumpSheetContent(
                 )
             } else {
                 Text(
-                    text = "Flow Bump",
-                    style = LocalTypography.current.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    text = "Соударите телефоны",
+                    text = "Потрясите телефон!",
                     style = LocalTypography.current.titleLarge,
                     color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 2.dp),
                 )
                 Text(
-                    text = "Поднесите устройства близко друг к другу",
+                    text = "Потрясите телефонами чтобы открыть профиль друга!",
                     style = LocalTypography.current.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 6.dp),

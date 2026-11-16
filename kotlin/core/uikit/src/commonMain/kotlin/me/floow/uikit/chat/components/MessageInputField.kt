@@ -434,7 +434,7 @@ fun MessageInputField(
 				}
 				.background(capsuleBg, capsuleShape)
 				.padding(
-					start = if (onAttachClick != null && !isAnyRecording && !hasAnyDraft) 13.dp else 16.dp,
+					start = if (isAnyRecording) 7.dp else if (onAttachClick != null && !hasAnyDraft) 13.dp else 16.dp,
 					end = 7.dp,
 					top = 7.dp,
 					bottom = 7.dp,

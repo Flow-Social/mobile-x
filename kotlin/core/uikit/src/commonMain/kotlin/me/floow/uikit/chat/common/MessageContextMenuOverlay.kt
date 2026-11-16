@@ -2,7 +2,9 @@ package me.floow.uikit.chat.common
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.updateTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -14,6 +16,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -91,6 +94,16 @@ fun MessageContextMenuOverlay(
 		MutableTransitionState(false).apply { targetState = true }
 	}
 
+	val transition = updateTransition(visibilityState, label = "ContextMenuOverlay")
+	val overlayAlpha by transition.animateFloat(
+		transitionSpec = {
+			if (targetState) tween(160) else tween(120)
+		},
+		label = "overlayAlpha",
+	) { isVisible ->
+		if (isVisible) 1f else 0f
+	}
+
 	BoxWithConstraints(
 		modifier = modifier.fillMaxSize(),
 	) {
@@ -125,6 +138,7 @@ fun MessageContextMenuOverlay(
 			modifier = Modifier
 				.fillMaxSize()
 				.graphicsLayer {
+					alpha = overlayAlpha
 					compositingStrategy = CompositingStrategy.Offscreen
 				}
 				.drawWithContent {
@@ -134,7 +148,7 @@ fun MessageContextMenuOverlay(
 							color = Color.Transparent,
 							topLeft = rect.topLeft,
 							size = rect.size,
-							cornerRadius = CornerRadius(22.dp.toPx(), 22.dp.toPx()),
+							cornerRadius = CornerRadius(20.dp.toPx(), 20.dp.toPx()),
 							blendMode = BlendMode.Clear,
 						)
 					}
@@ -155,7 +169,8 @@ fun MessageContextMenuOverlay(
 			Column(
 				modifier = Modifier
 					.wrapContentWidth()
-					.widthIn(min = 220.dp, max = 280.dp)
+					.width(IntrinsicSize.Max)
+					.widthIn(max = 280.dp)
 					.background(
 						color = MaterialTheme.colorScheme.surfaceContainerHighest,
 						shape = RoundedCornerShape(16.dp),

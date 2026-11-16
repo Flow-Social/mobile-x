@@ -74,8 +74,7 @@ fun UnifiedRecordingCapsule(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
-            .height(36.dp)
-            .padding(horizontal = 4.dp),
+            .height(36.dp),
     ) {
         if (state.isLocked) {
             // --- Залоченный режим (Locked State) ---

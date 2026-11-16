@@ -538,7 +538,7 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 					}
 				} else {
 					Row(
-						verticalAlignment = Alignment.Top,
+						verticalAlignment = Alignment.Bottom,
 						horizontalArrangement = Arrangement.spacedBy(6.dp)
 					) {
 						if (showIncomingAvatar) {
