@@ -44,6 +44,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.CompositingStrategy
@@ -111,9 +112,25 @@ fun MessageContextMenuOverlay(
 		val density = LocalDensity.current
 		val horizontalPaddingPx = with(density) { 16.dp.toPx() }
 		val verticalPaddingPx = with(density) { 16.dp.toPx() }
-		val overlapWithAnchorPx = with(density) { 10.dp.toPx() }
+		val overlapWithAnchorPx = with(density) { 14.dp.toPx() }
+		val shift28Px = with(density) { 28.dp.toPx() }
 		val viewportWidthPx = with(density) { maxWidth.toPx() }
 		val viewportHeightPx = with(density) { maxHeight.toPx() }
+		val resolvedCornerRadius = remember(highlightRect, density) {
+			if (highlightRect == null) {
+				CornerRadius.Zero
+			} else {
+				val w = highlightRect.width
+				val h = highlightRect.height
+				if (kotlin.math.abs(w - h) < 4f) {
+					CornerRadius(w / 2f, w / 2f)
+				} else {
+					val r = minOf(h / 2f, with(density) { 20.dp.toPx() })
+					CornerRadius(r, r)
+				}
+			}
+		}
+		val scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.25f)
 		val estimatedMenuSizePx = remember(actions, density) {
 			val estimatedWidth = with(density) { 252.dp.toPx().roundToInt() }
 			val itemHeight = with(density) { 52.dp.toPx().roundToInt() }
@@ -123,7 +140,7 @@ fun MessageContextMenuOverlay(
 				height = (actions.size * itemHeight) + (max(0, actions.size - 1) * dividerHeight),
 			)
 		}
-		val menuOffset = remember(anchorRect, menuSizePx, estimatedMenuSizePx, viewportWidthPx, viewportHeightPx) {
+		val menuOffset = remember(anchorRect, menuSizePx, estimatedMenuSizePx, viewportWidthPx, viewportHeightPx, shift28Px, overlapWithAnchorPx) {
 			resolveAnchoredMenuOffset(
 				anchorRect = anchorRect,
 				menuSizePx = if (menuSizePx == IntSize.Zero) estimatedMenuSizePx else menuSizePx,
@@ -132,6 +149,7 @@ fun MessageContextMenuOverlay(
 				horizontalPaddingPx = horizontalPaddingPx,
 				verticalPaddingPx = verticalPaddingPx,
 				overlapWithAnchorPx = overlapWithAnchorPx,
+				shift28Px = shift28Px,
 			)
 		}
 		Box(
@@ -142,13 +160,13 @@ fun MessageContextMenuOverlay(
 					compositingStrategy = CompositingStrategy.Offscreen
 				}
 				.drawWithContent {
-					drawRect(Color.Black.copy(alpha = 0.18f))
+					drawRect(scrimColor)
 					highlightRect?.let { rect ->
 						drawRoundRect(
 							color = Color.Transparent,
 							topLeft = rect.topLeft,
 							size = rect.size,
-							cornerRadius = CornerRadius(20.dp.toPx(), 20.dp.toPx()),
+							cornerRadius = resolvedCornerRadius,
 							blendMode = BlendMode.Clear,
 						)
 					}
@@ -171,6 +189,10 @@ fun MessageContextMenuOverlay(
 					.wrapContentWidth()
 					.width(IntrinsicSize.Max)
 					.widthIn(max = 280.dp)
+					.shadow(
+						elevation = 16.dp,
+						shape = RoundedCornerShape(16.dp),
+					)
 					.background(
 						color = MaterialTheme.colorScheme.surfaceContainerHighest,
 						shape = RoundedCornerShape(16.dp),
@@ -309,6 +331,7 @@ private fun resolveAnchoredMenuOffset(
 	horizontalPaddingPx: Float,
 	verticalPaddingPx: Float,
 	overlapWithAnchorPx: Float,
+	shift28Px: Float,
 ): IntOffset {
 	if (menuSizePx == IntSize.Zero || anchorRect == null) {
 		val centeredX = ((viewportWidthPx - menuSizePx.width) / 2f).coerceAtLeast(horizontalPaddingPx)
@@ -316,7 +339,12 @@ private fun resolveAnchoredMenuOffset(
 		return IntOffset(centeredX.roundToInt(), centeredY.roundToInt())
 	}
 
-	val desiredX = anchorRect.center.x - (menuSizePx.width / 2f)
+	val isOutgoing = (viewportWidthPx - anchorRect.right) < anchorRect.left || anchorRect.center.x > (viewportWidthPx / 2f)
+	val desiredX = if (isOutgoing) {
+		anchorRect.right - menuSizePx.width + shift28Px
+	} else {
+		anchorRect.left - shift28Px
+	}
 	val minX = horizontalPaddingPx
 	val maxX = (viewportWidthPx - menuSizePx.width - horizontalPaddingPx).coerceAtLeast(minX)
 	val resolvedX = desiredX.coerceIn(minX, maxX)
@@ -328,7 +356,7 @@ private fun resolveAnchoredMenuOffset(
 	val resolvedY = when {
 		preferredTopY >= minY -> preferredTopY
 		fallbackBottomY <= maxY -> fallbackBottomY
-		else -> minY
+		else -> ((viewportHeightPx - menuSizePx.height) / 2f).coerceIn(minY, maxY)
 	}.coerceIn(minY, maxY)
 
 	return IntOffset(resolvedX.roundToInt(), resolvedY.roundToInt())

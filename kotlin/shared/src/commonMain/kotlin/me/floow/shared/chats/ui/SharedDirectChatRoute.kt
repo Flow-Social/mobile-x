@@ -1041,6 +1041,7 @@ fun SharedDirectChatRoute(
 		state = state,
 		initialHeader = initialRequest.toInitialHeader(initialAvatarThumb),
 		selectionState = selectionState,
+		activeContextMenuMessageId = activeContextMenuMessageId,
 		contextMenuActions = contextMenuActions,
 		resolveContextMenuActions = { messageId ->
 			messagesById[messageId]?.let(::resolveContextMenuActions).orEmpty()

@@ -1,6 +1,9 @@
 package me.floow.uikit.chat.states
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -21,11 +24,14 @@ import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.boundsInRoot
@@ -33,6 +39,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import me.floow.uikit.chat.components.ChatAlbumBubble
 import me.floow.uikit.chat.components.ChatMessageTimestamp
 import me.floow.uikit.chat.components.ChatTailVector
@@ -53,6 +60,8 @@ import me.floow.uikit.chat.model.VideoCircleOutMessage
 import me.floow.uikit.chat.model.VoiceMessage
 import me.floow.uikit.chat.model.formatChatClockTime
 import me.floow.uikit.chat.model.resolveMessageTapOutcome
+
+val LocalActiveContextMenuMessageId = compositionLocalOf<Long?> { null }
 
 /**
  * Message item row wrapper handling swipe-to-reply, multi-selection mode (checkboxes / borders),
@@ -111,6 +120,16 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 	val interactionPolicy = config.interactionPolicy
 	val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
 
+	val isContextMenuActive = LocalActiveContextMenuMessageId.current == message.id
+	val popProgress by animateFloatAsState(
+		targetValue = if (isContextMenuActive) 1f else 0f,
+		animationSpec = spring(
+			dampingRatio = Spring.DampingRatioMediumBouncy,
+			stiffness = Spring.StiffnessMediumLow,
+		),
+		label = "BubblePopProgress",
+	)
+
 	val isFirstInGroup = layoutState?.isFirstInCluster ?: true
 	val isLastInGroup = layoutState?.isLastInCluster ?: true
 	val showTail = layoutState?.showTail ?: isLastInGroup
@@ -153,8 +172,8 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 		Modifier
 	}
 
-	val contextMenuHighlightModifier = if (shouldMeasureBounds) {
-		Modifier.onGloballyPositioned { coordinates ->
+	val contextMenuHighlightModifier = Modifier
+		.onGloballyPositioned { coordinates ->
 			if (!isScrollBusy || isVideoCircle) {
 				val bounds = coordinates.boundsInRoot()
 				bubbleBoundsByMessageKey[message.uiKey] = bounds
@@ -163,9 +182,12 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 				}
 			}
 		}
-	} else {
-		Modifier
-	}
+		.graphicsLayer {
+			scaleX = 1f + 0.04f * popProgress
+			scaleY = 1f + 0.04f * popProgress
+			shadowElevation = (12f * popProgress).dp.toPx()
+		}
+		.zIndex(if (isContextMenuActive) 50f else 0f)
 
 	val incomingBubbleModifier = if (showMessageAction) {
 		Modifier
@@ -175,7 +197,11 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 		Modifier.wrapContentWidth()
 	}
 
-	Column(modifier = modifier.fillMaxWidth()) {
+	Column(
+		modifier = modifier
+			.fillMaxWidth()
+			.zIndex(if (isContextMenuActive) 50f else 0f),
+	) {
 		if (shouldShowUnreadBoundaryBeforeMessage) {
 			UnreadBoundaryRow(
 				modifier = Modifier

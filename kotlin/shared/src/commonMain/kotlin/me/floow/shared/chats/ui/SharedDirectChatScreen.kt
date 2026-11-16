@@ -18,6 +18,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -40,6 +41,7 @@ import me.floow.shared.chats.model.ChatThreadHeaderModel
 import me.floow.shared.chats.model.withSavedMessagesSemantics
 import me.floow.shared.chats.uilogic.direct.DirectChatScreenState
 import me.floow.uikit.chat.common.ChatScreenBody
+import me.floow.uikit.chat.common.MessageContextMenuOverlay
 import me.floow.uikit.chat.components.FlowPinnedMessagesBar
 import me.floow.uikit.chat.input.ChatInputController
 import me.floow.uikit.chat.input.rememberChatInputController
@@ -55,6 +57,7 @@ import me.floow.uikit.chat.model.VideoRecordingState
 import me.floow.uikit.chat.model.resolveReplyTargetId
 import me.floow.uikit.chat.states.ChatMessagesSkeleton
 import me.floow.uikit.chat.states.HasDataState
+import me.floow.uikit.chat.states.LocalActiveContextMenuMessageId
 import me.floow.uikit.util.overlayHorizontalSwipeZone
 import org.jetbrains.compose.resources.painterResource
 
@@ -63,6 +66,7 @@ internal fun SharedDirectChatScreen(
 	state: DirectChatScreenState,
 	initialHeader: ChatThreadHeaderModel,
 	selectionState: ChatSelectionState,
+	activeContextMenuMessageId: Long? = null,
 	contextMenuActions: List<ChatContextMenuAction>,
 	resolveContextMenuActions: (Long) -> List<ChatContextMenuAction>,
 	jumpRequest: SharedJumpRequest?,
@@ -325,9 +329,12 @@ internal fun SharedDirectChatScreen(
 		)
 	}
 
-	ChatScreenBody(
-		title = header.title,
-		subtitle = header.subtitle,
+	CompositionLocalProvider(
+		LocalActiveContextMenuMessageId provides activeContextMenuMessageId,
+	) {
+		ChatScreenBody(
+			title = header.title,
+			subtitle = header.subtitle,
 		avatarSource = header.avatarSource,
 		isSavedMessages = header.isSavedMessages,
 		onBackClick = onBackClick,
@@ -518,7 +525,7 @@ internal fun SharedDirectChatScreen(
 			else -> null
 		},
 		contextMenuOverlay = {
-			DirectChatContextMenuOverlay(
+			MessageContextMenuOverlay(
 				actions = contextMenuActions,
 				anchorRect = contextMenuAnchorRect,
 				highlightRect = contextMenuHighlightRect,
@@ -531,6 +538,7 @@ internal fun SharedDirectChatScreen(
 			.then(recordingSwipeBlockModifier),
 	)
 	}
+}
 
 @Composable
 private fun resolveSavedMessagesAvatarPainter(
@@ -553,24 +561,6 @@ private fun resolveDirectChatHeader(
 	} else {
 		baseHeader
 	}
-}
-
-@Composable
-private fun DirectChatContextMenuOverlay(
-	actions: List<ChatContextMenuAction>,
-	anchorRect: Rect?,
-	highlightRect: Rect?,
-	onActionClick: (ChatContextMenuAction) -> Unit,
-	onDismissRequest: () -> Unit,
-) {
-	if (actions.isEmpty()) return
-	me.floow.uikit.chat.common.MessageContextMenuOverlay(
-		actions = actions,
-		anchorRect = anchorRect,
-		highlightRect = highlightRect,
-		onActionClick = onActionClick,
-		onDismissRequest = onDismissRequest,
-	)
 }
 
 private fun currentMessageIds(
