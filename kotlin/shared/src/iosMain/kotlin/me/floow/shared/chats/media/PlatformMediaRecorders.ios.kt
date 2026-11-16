@@ -476,6 +476,7 @@ class IosVideoRecorder(
         val path = activeRecordingPath
         val callback = onCompleteCallback
         val startTime = recordingStartTimeMs
+        val sessionStarted = hasStartedSession
 
         assetWriter = null
         assetWriterVideoInput = null
@@ -483,22 +484,24 @@ class IosVideoRecorder(
         activeRecordingPath = null
         onCompleteCallback = null
 
-        if (writer == null || vInput == null || aInput == null || path == null) {
+        if (writer == null || path == null) {
             callback?.invoke(null)
             return
         }
 
-        if (!hasStartedSession || writer.status != AVAssetWriterStatusWriting) {
-            vInput.markAsFinished()
-            aInput.markAsFinished()
-            writer.cancelWriting()
+        // Если сессия не стартовала или writer не в статусе Writing,
+        // AVFoundation запрещает дергать markAsFinished() — это кидает NSInternalInconsistencyException.
+        if (!sessionStarted || writer.status != AVAssetWriterStatusWriting) {
+            if (writer.status == AVAssetWriterStatusWriting) {
+                writer.cancelWriting()
+            }
             NSFileManager.defaultManager.removeItemAtPath(path, null)
             callback?.invoke(null)
             return
         }
 
-        vInput.markAsFinished()
-        aInput.markAsFinished()
+        vInput?.markAsFinished()
+        aInput?.markAsFinished()
 
         writer.finishWritingWithCompletionHandler {
             val duration = (currentTimeMillis() - startTime).coerceAtLeast(500L)
@@ -513,6 +516,7 @@ class IosVideoRecorder(
                 )
                 callback?.invoke(clip)
             } else {
+                runCatching { NSFileManager.defaultManager.removeItemAtPath(path, null) }
                 callback?.invoke(null)
             }
         }
@@ -546,8 +550,6 @@ class IosVideoRecorder(
         isRecording = false
 
         val writer = assetWriter
-        val vInput = assetWriterVideoInput
-        val aInput = assetWriterAudioInput
         val path = activeRecordingPath
         val callback = onCompleteCallback
 
@@ -557,9 +559,9 @@ class IosVideoRecorder(
         activeRecordingPath = null
         onCompleteCallback = null
 
-        vInput?.markAsFinished()
-        aInput?.markAsFinished()
-        writer?.cancelWriting()
+        if (writer?.status == AVAssetWriterStatusWriting) {
+            writer.cancelWriting()
+        }
 
         path?.let {
             NSFileManager.defaultManager.removeItemAtPath(it, null)

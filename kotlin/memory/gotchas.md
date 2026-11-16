@@ -87,3 +87,67 @@
 ### 4.1. Зависание unit-тестов корутин с System.currentTimeMillis()
 - **ГРАБЛИ**: Запуск тестов с бесконечными циклами ожидания реального времени (`System.currentTimeMillis()`) вешает Gradle Test Executor на 100% CPU навсегда, потому что виртуальный `advanceUntilIdle()` не двигает системные часы.
 - Для быстрой верификации в агентах запускать компиляцию модулей (`./gradlew :core:uikit:compileDebugKotlin :feature:chats:compileDebugKotlin`) или строго изолированные тесты без циклов реального времени.
+
+---
+
+## 5. iOS Multiplatform (KMP), Koin DI и AVFoundation
+
+### 5.1. Koin DI в общем коде: падения из-за Android-only зависимостей
+- **КРИТИЧЕСКИЕ ГРАБЛИ**: В общем модуле `SharedCommonModule.kt` нельзя безусловно биндить реализации, зависящие от Android-only компонентов (например, `AndroidRepliesRepository(get(), get(), get())`, требующий `NotificationsRealtimeRepository` из Android `:core:data`). На iOS это вызывает фатальный краш в рантайме: `NoBeanDefFoundException` при открытии экранов (например, `SharedRepliesRoute`).
+- **ПРАВИЛО**: Всегда использовать безопасный фоллбэк: `getOrNull<NotificationsRealtimeRepository>() ?: StaticRepliesRepository()`, либо выносить платформенные репозитории в platform-specific DI модули.
+
+### 5.2. `ParametersHolder.get()` vs проверка типов
+- **ГРАБЛИ**: Использование позиционного `params.get<T>(index)` при резолве ViewModel/StateHolder падает с `IndexOutOfBoundsException`, если фабрика вызвана с неполным или перемешанным набором аргументов.
+- **ПРАВИЛО**: Использовать `params.values.filterIsInstance<T>().firstOrNull()` или типизированный `getOrNull<T>()`.
+
+### 5.3. AVFoundation Video Circle & Voice: состояние AVAssetWriter
+- **ГРАБЛИ**: Вызов `AVAssetWriter.finishWritingWithCompletionHandler` на iOS, когда запись была прервана, отменена или не успела стартовать (статус writer не равен `AVAssetWriterStatusWriting`), выбрасывает нативное исключение `NSInternalInconsistencyException` и валит приложение (`SIGABRT`).
+- **ПРАВИЛО**: Всегда проверять:
+  ```kotlin
+  if (writer.status == AVAssetWriterStatusWriting) {
+      writer.finishWritingWithCompletionHandler { ... }
+  } else {
+      writer.cancelWriting()
+  }
+  ```
+
+---
+
+## 6. Автоматизация UI, Скриншоты и Twombly
+
+### 6.1. Правило точечных исправлений (No Blind Mass Re-runs)
+- **ГЛАВНОЕ ПРАВИЛО**: Если на холсте Twombly уже есть 20 экранов и не заскринились только 2-3 (или пользователь попросил добавить конкретные экраны), **ЗАПРЕЩЕНО** сносить все фреймы и запускать полный 40-экраный сьют заново.
+- Полный перегон тратит время, перегружает машину и может сломать фреймы, которые уже были идеальными. Пиши точечный скрипт, снимай ровно недостающие экраны и обновляй их поштучно.
+
+### 6.2. Асинхронная загрузка контента (Лента/Feed) перед снимком
+- **ГРАБЛИ**: Попытка снять скриншот сразу после `launch` приложения приводит к захвату чёрного/пустого экрана загрузки (файл ~68 КБ вместо >1 МБ).
+- **ПРАВИЛО**: Всегда опрашивать состояние (`snapshot`) на наличие маркеров готового контента (например, `"0 комментариев"`, `"@y9finsi"`) и давать 1.5–2 секунды на полную отрисовку картинок Coil/Compose перед вызовом `xcrun simctl io booted screenshot`.
+
+### 6.3. Интеракция с оверлеями и навигация на экранах с Dynamic Island
+- **Контекстное меню сообщений**: Оверлей `MessageContextMenuOverlay` открывается по клику на бабл сообщения. Чтобы надёжно снять его, проверяй наличие в дереве действий (`"Ответить"`, `"Скопировать"`).
+- **Безопасное закрытие оверлея**: Кликать строго по пустому фону (например, `(50, 700)`), а не по верхней части экрана, иначе тап попадёт в кнопку «Ответить» и откроет клавиатуру.
+- **TopBar на устройствах с Dynamic Island (iPhone 17, 16 Pro и др.)**: Координаты системных кнопок навбара находятся ниже, чем на старых iPhone: `y ≈ 111` (а не 94). Для кнопки возврата из чата используй клик по лейблу/стрелке `(28, 111)`.
+
+### 6.4. In-place обновление фреймов Twombly
+- Twombly кэширует внутренние хэши/блобы контента (`content`). Простое изменение файла на диске не обновляет отображение на канвасе.
+- Для обновления существующего фрейма используй:
+  ```bash
+  twombly update <frame_id> <path/to/image.png>
+  ```
+  Это сохраняет комментарии, координаты и структуру холста. Новые экраны добавляются через `twombly add <path> --x N --y N --title "..."`.
+
+### 6.5. Зависания `agent-device` и очистка фоновых ресурсов
+- Если фоновый раннер `AgentDeviceRunner` завис или был оборван посреди snapshot, SpringBoard блокирует повторный запуск тестов ошибкой `Application failed preflight checks (Busy)`.
+- **Лечение**: Сбросить зависший раннер:
+  ```bash
+  xcrun simctl uninstall booted com.callstack.agentdevice.runner.uitests.xctrunner
+  ```
+- **ОБЯЗАТЕЛЬНАЯ ОЧИСТКА ПОСЛЕ РАБОТЫ**: Никаких висящих в фоне эмуляторов и сборщиков, греющих процессор:
+  ```bash
+  xcrun simctl terminate booted me.floow.iosApp
+  xcrun simctl shutdown all
+  killall Simulator 2>/dev/null || true
+  killall xcodebuild 2>/dev/null || true
+  pkill -f AgentDeviceRunner 2>/dev/null || true
+  cd Mobile/kotlin && ./gradlew --stop
+  ```

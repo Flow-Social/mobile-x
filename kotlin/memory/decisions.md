@@ -153,3 +153,19 @@
   1. *Бэкенд*: `internal/storage/minithumb.go` использует стандартный энкодер `image/jpeg` с качеством 20, вырезает заголовок и EOI-маркер и упаковывает чистые байты энтропийного скана в MTProto-подобный формат: `[0x01, height, width] + scanBytes`. Размер полезной нагрузки снижен до 50–70 байт (~70–110 символов base64 data URI).
   2. *Клиент (commonMain)*: `TelegramStrippedThumb.kt` держит статический 589-байтный заголовок стандартного baseline JPEG. Метод `inflate` на кадре 0 дополняет полезную нагрузку заголовком с подстановкой реальных размеров в SOF0 (байты 142 и 144) и завершающим EOI (`0xFF, 0xD9`). Нативные декодеры (Android `BitmapFactory`, iOS `Skia Image.makeFromEncoded`) получают 100% валидный JPEG без оверхеда.
   3. *Zero-flicker ProgressiveImage*: слой `microThumbBitmap` монтируется мгновенно на кадре 0, эмитит `onPainterChanged` для исключения скачков границ вьюера и плавно растворяется при загрузке целевой картинки (`targetAlpha == 1f`). При ошибке загрузки сети `InitialAvatar` чисто отображает инициалы.
+
+## ADR-021: Стабилизация KMP DI, рантайма iOS и UI-аудит (16 ноября 2026)
+- **Контекст**: При запуске общего Compose UI на iOS клиенте возникали рантайм-падения:
+  1. `NoBeanDefFoundException` при открытии `SharedRepliesRoute` из-за безусловной привязки Android-only `NotificationsRealtimeRepository`.
+  2. `IndexOutOfBoundsException` в фабрике `EditProfileStateHolder` из-за обращения к `params.get(index)`.
+  3. `SIGABRT` / `NSInternalInconsistencyException` в `PlatformMediaRecorders.ios.kt` при отмене записи видеокружка до перехода `AVAssetWriter` в состояние `Writing`.
+  4. При автоматизированном снятии UI для аудита (Twombly) лента захватывалась до завершения загрузки постов (черный экран 68 КБ), контекстное меню чата не удерживалось открытым, а фоновые раннеры `agent-device` и сборщики оставались висеть в памяти, потребляя 50–100% CPU.
+- **Решение**:
+  1. *Безопасный Koin DI в commonMain*: `SharedCommonModule.kt` переведен на `getOrNull<NotificationsRealtimeRepository>() ?: StaticRepliesRepository()`, исключив падения на iOS при сохранении нативной реализации на Android.
+  2. *Типизированные параметры*: фабрика `EditProfileStateHolder` извлекает параметры через `filterIsInstance<...>()` вместо хрупкой позиционной индексации.
+  3. *Гард AVAssetWriter*: в `PlatformMediaRecorders.ios.kt` вызов `finishWritingWithCompletionHandler` защищен проверкой `writer.status == AVAssetWriterStatusWriting`; во всех остальных случаях вызывается безопасный `cancelWriting()`.
+  4. *Инварианты UI-скриншотов и Twombly*:
+     - Запрещены слепые полные перезапуски сьюта (40+ экранов) при необходимости обновить 2–3 экрана: используется точечный пересъем и in-place обновление фреймов через `twombly update <frame_id> <path>`.
+     - Скриншот ленты выполняется строго после ожидания маркеров загрузки постов (`0 комментариев`, `@y9finsi`) с паузой на отрисовку медиа Coil/Compose.
+     - Оверлей контекстного меню сообщений проверяется на наличие экшенов в дереве перед снимком, а закрывается кликом по безопасному пустому фону `(50, 700)` без активации ввода.
+     - Обязательный teardown: завершение процесса приложения `iosApp`, остановка демонов Gradle (`./gradlew --stop`), сброс блокировок SpringBoard раннера и шатдаун симулятора после завершения аудита.

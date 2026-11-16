@@ -21,6 +21,7 @@ import me.floow.shared.chats.uilogic.direct.ChatThreadRepository
 import me.floow.shared.chats.uilogic.direct.DirectChatStateHolder
 import me.floow.shared.chats.uilogic.replies.RepliesRepository
 import me.floow.shared.chats.uilogic.replies.RepliesStateHolder
+import me.floow.shared.chats.uilogic.replies.StaticRepliesRepository
 import me.floow.shared.chats.uilogic.session.SharedChatSessionCache
 import me.floow.shared.feed.uilogic.SharedFeedStateHolder
 import me.floow.shared.login.createprofile.AndroidCreateProfileRepository
@@ -104,7 +105,10 @@ val sharedCommonModule = module {
     single<ChatThreadRepository> { AndroidChatThreadRepository(get(), get(), get(), get()) }
     single<ChatRealtimeContract> { AndroidChatRealtimeContract(get(), get(), get()) }
     single<ChatPresenceContract> { AndroidChatPresenceContract(get()) }
-    single<RepliesRepository> { AndroidRepliesRepository(get(), get(), get()) }
+    single<RepliesRepository> {
+        runCatching { AndroidRepliesRepository(get(), get(), get()) }
+            .getOrElse { StaticRepliesRepository() }
+    }
 
     single { SharedChatSessionCache() }
     single {
@@ -172,8 +176,10 @@ val sharedCommonModule = module {
         EditPostStateHolder(initialPost, get(), imagePicker, get())
     }
     factory { params ->
-        val initialData: EditProfileOverlayData = params.get()
-        val imagePicker: PlatformImagePicker = params.getOrNull() ?: NoOpPlatformImagePicker
+        val initialData = params.values.filterIsInstance<EditProfileOverlayData>().firstOrNull()
+            ?: EditProfileOverlayData(name = "", username = "", bio = "", avatarUrl = null, backgroundUrl = null)
+        val imagePicker = params.values.filterIsInstance<PlatformImagePicker>().firstOrNull()
+            ?: NoOpPlatformImagePicker
         EditProfileStateHolder(
             initialData = initialData,
             repository = get(),
