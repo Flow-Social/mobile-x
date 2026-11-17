@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyItemScope
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -172,20 +174,26 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 		Modifier
 	}
 
+	val bubbleShape = if (isVideoCircle) CircleShape else RoundedCornerShape(20.dp)
+	val bubbleScale = 1f + 0.04f * popProgress
 	val contextMenuHighlightModifier = Modifier
 		.onGloballyPositioned { coordinates ->
 			if (!isScrollBusy || isVideoCircle) {
 				val bounds = coordinates.boundsInRoot()
 				bubbleBoundsByMessageKey[message.uiKey] = bounds
+				bubbleBoundsByMessageKey["msg_${message.id}"] = bounds
+				bubbleBoundsByMessageKey[message.id.toString()] = bounds
 				message.clientMessageId?.takeIf(String::isNotBlank)?.let { cmid ->
 					bubbleBoundsByMessageKey["cmid_$cmid"] = bounds
 				}
 			}
 		}
 		.graphicsLayer {
-			scaleX = 1f + 0.04f * popProgress
-			scaleY = 1f + 0.04f * popProgress
+			scaleX = bubbleScale
+			scaleY = bubbleScale
 			shadowElevation = (12f * popProgress).dp.toPx()
+			shape = bubbleShape
+			clip = false
 		}
 		.zIndex(if (isContextMenuActive) 50f else 0f)
 
@@ -234,10 +242,14 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 						ChatMessageTapOutcome.ToggleSelection -> onToggleSelection(message.id)
 						ChatMessageTapOutcome.OpenContextMenu -> {
 							if (resolveContextMenuActions(message).isNotEmpty()) {
+								val highlight = bubbleBoundsByMessageKey[message.uiKey]
+									?: bubbleBoundsByMessageKey["msg_${message.id}"]
+									?: bubbleBoundsByMessageKey[message.id.toString()]
+									?: message.clientMessageId?.let { bubbleBoundsByMessageKey["cmid_$it"] }
 								onContextMenuOpenRequest(
 									message,
-									rowBoundsByMessageKey[message.uiKey],
-									bubbleBoundsByMessageKey[message.uiKey]
+									highlight ?: rowBoundsByMessageKey[message.uiKey],
+									highlight
 								)
 							}
 							onChatBubbleClick(message)
@@ -375,9 +387,7 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 						modifier = Modifier.fillMaxWidth(),
 					) {
 						Row(
-							modifier = Modifier
-								.fillMaxWidth()
-								.animateContentSize(animationSpec = tween(180)),
+							modifier = Modifier.fillMaxWidth(),
 							horizontalArrangement = if (message.isOutgoing) {
 								Arrangement.End
 							} else {
@@ -392,8 +402,20 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 										if (isSelectionMode) {
 											onToggleSelection(message.id)
 										} else {
-											onContextMenuDismissRequest()
-											onChatBubbleLongClick(message)
+											val highlight = bubbleBoundsByMessageKey[message.uiKey]
+												?: bubbleBoundsByMessageKey["msg_${message.id}"]
+												?: bubbleBoundsByMessageKey[message.id.toString()]
+												?: message.clientMessageId?.let { bubbleBoundsByMessageKey["cmid_$it"] }
+											if (resolveContextMenuActions(message).isNotEmpty()) {
+												onContextMenuOpenRequest(
+													message,
+													highlight ?: rowBoundsByMessageKey[message.uiKey],
+													highlight
+												)
+											} else {
+												onContextMenuDismissRequest()
+												onChatBubbleLongClick(message)
+											}
 										}
 									},
 								)
@@ -434,8 +456,20 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 											if (isSelectionMode) {
 												onToggleSelection(message.id)
 											} else {
-												onContextMenuDismissRequest()
-												onChatBubbleLongClick(message)
+												val highlight = bubbleBoundsByMessageKey[message.uiKey]
+													?: bubbleBoundsByMessageKey["msg_${message.id}"]
+													?: bubbleBoundsByMessageKey[message.id.toString()]
+													?: message.clientMessageId?.let { bubbleBoundsByMessageKey["cmid_$it"] }
+												if (resolveContextMenuActions(message).isNotEmpty()) {
+													onContextMenuOpenRequest(
+														message,
+														highlight ?: rowBoundsByMessageKey[message.uiKey],
+														highlight
+													)
+												} else {
+													onContextMenuDismissRequest()
+													onChatBubbleLongClick(message)
+												}
 											}
 										}
 									)
@@ -504,10 +538,14 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 												ChatMessageTapOutcome.ToggleSelection -> onToggleSelection(message.id)
 												ChatMessageTapOutcome.OpenContextMenu -> {
 													if (resolveContextMenuActions(message).isNotEmpty()) {
+														val highlight = bubbleBoundsByMessageKey[message.uiKey]
+															?: bubbleBoundsByMessageKey["msg_${message.id}"]
+															?: bubbleBoundsByMessageKey[message.id.toString()]
+															?: message.clientMessageId?.let { bubbleBoundsByMessageKey["cmid_$it"] }
 														onContextMenuOpenRequest(
 															message,
-															rowBoundsByMessageKey[message.uiKey],
-															bubbleBoundsByMessageKey[message.uiKey]
+															highlight ?: rowBoundsByMessageKey[message.uiKey],
+															highlight
 														)
 													}
 													onChatBubbleClick(message)

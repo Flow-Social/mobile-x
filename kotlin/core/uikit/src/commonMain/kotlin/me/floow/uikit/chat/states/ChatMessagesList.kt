@@ -654,7 +654,7 @@ internal fun rememberChatMessagesPositioningState(
 				val visibleKeySet = snapshot.visibleItemKeys.filterIsInstance<String>().toSet()
 				rowBoundsByMessageKey.keys.retainAll(visibleKeySet)
 				bubbleBoundsByMessageKey.keys.removeAll { key ->
-					key !in visibleKeySet && !key.startsWith("cmid_") && !key.startsWith("local_vc_")
+					key !in visibleKeySet && !key.startsWith("cmid_") && !key.startsWith("msg_") && !key.startsWith("local_vc_")
 				}
 				onViewportSnapshotChanged(
 					ChatViewportSnapshot(

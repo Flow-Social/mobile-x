@@ -172,6 +172,9 @@ fun SharedDirectChatRoute(
 		}
 	}
 	val rowBoundsByMessageKey = remember(stateHolder) { androidx.compose.runtime.mutableStateMapOf<String, Rect>() }
+	val effectiveBubbleBoundsByMessageKey = remember(stateHolder) {
+		bubbleBoundsByMessageKey
+	}
 	var jumpRequest by remember(stateHolder) { mutableStateOf<SharedJumpRequest?>(null) }
 	var activeContextMenuMessageId by remember(stateHolder) { mutableStateOf<Long?>(null) }
 	var contextMenuFallbackAnchorRect by remember(stateHolder) { mutableStateOf<Rect?>(null) }
@@ -316,7 +319,7 @@ fun SharedDirectChatRoute(
 		contextMenuMessage,
 		contextMenuMessageKey,
 		contextMenuFallbackAnchorRect,
-		bubbleBoundsByMessageKey,
+		effectiveBubbleBoundsByMessageKey,
 		rowBoundsByMessageKey,
 	) {
 		derivedStateOf {
@@ -329,22 +332,20 @@ fun SharedDirectChatRoute(
 					add(it.toString())
 				}
 				if (imgGroupId != null) {
-					bubbleBoundsByMessageKey.keys.firstOrNull { it.contains(imgGroupId) }?.let(::add)
+					effectiveBubbleBoundsByMessageKey.keys.firstOrNull { it.contains(imgGroupId) }?.let(::add)
 					rowBoundsByMessageKey.keys.firstOrNull { it.contains(imgGroupId) }?.let(::add)
 				}
 			}
-			candidateKeys.firstNotNullOfOrNull(bubbleBoundsByMessageKey::get)
-				?: candidateKeys.firstNotNullOfOrNull(rowBoundsByMessageKey::get)
+			candidateKeys.firstNotNullOfOrNull(effectiveBubbleBoundsByMessageKey::get)
 				?: contextMenuFallbackAnchorRect
+				?: candidateKeys.firstNotNullOfOrNull(rowBoundsByMessageKey::get)
 		}
 	}
 	val liveContextMenuHighlightRect by remember(
 		contextMenuMessage,
 		contextMenuMessageKey,
 		contextMenuFallbackHighlightRect,
-		liveContextMenuAnchorRect,
-		bubbleBoundsByMessageKey,
-		rowBoundsByMessageKey,
+		effectiveBubbleBoundsByMessageKey,
 	) {
 		derivedStateOf {
 			val imgGroupId = (contextMenuMessage?.content as? ChatMessageContent.Image)?.groupId?.takeIf(String::isNotBlank)
@@ -356,14 +357,11 @@ fun SharedDirectChatRoute(
 					add(it.toString())
 				}
 				if (imgGroupId != null) {
-					bubbleBoundsByMessageKey.keys.firstOrNull { it.contains(imgGroupId) }?.let(::add)
-					rowBoundsByMessageKey.keys.firstOrNull { it.contains(imgGroupId) }?.let(::add)
+					effectiveBubbleBoundsByMessageKey.keys.firstOrNull { it.contains(imgGroupId) }?.let(::add)
 				}
 			}
-			candidateKeys.firstNotNullOfOrNull(bubbleBoundsByMessageKey::get)
-				?: candidateKeys.firstNotNullOfOrNull(rowBoundsByMessageKey::get)
+			candidateKeys.firstNotNullOfOrNull(effectiveBubbleBoundsByMessageKey::get)
 				?: contextMenuFallbackHighlightRect
-				?: liveContextMenuAnchorRect
 		}
 	}
 	val selectionMode = selectedMessageIds.isNotEmpty()
@@ -1080,7 +1078,7 @@ fun SharedDirectChatRoute(
 		onContextMenuOpen = { messageId, anchorRect, highlightRect ->
 			activeContextMenuMessageId = messageId
 			contextMenuFallbackAnchorRect = anchorRect
-			contextMenuFallbackHighlightRect = highlightRect ?: anchorRect
+			contextMenuFallbackHighlightRect = highlightRect
 		},
 		contextMenuAnchorRect = liveContextMenuAnchorRect,
 		contextMenuHighlightRect = liveContextMenuHighlightRect,
@@ -1236,7 +1234,7 @@ fun SharedDirectChatRoute(
 		onImageDraftRemove = effectiveImageDraftRemove,
 		onImageDraftReorder = effectiveImageDraftReorder,
 		rowBoundsByMessageKey = rowBoundsByMessageKey,
-		bubbleBoundsByMessageKey = bubbleBoundsByMessageKey,
+		bubbleBoundsByMessageKey = effectiveBubbleBoundsByMessageKey,
 		modifier = modifier,
 	)
 
