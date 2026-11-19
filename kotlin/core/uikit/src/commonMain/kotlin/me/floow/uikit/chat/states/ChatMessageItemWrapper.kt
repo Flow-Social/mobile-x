@@ -1,9 +1,5 @@
 package me.floow.uikit.chat.states
 
-import androidx.compose.runtime.snapshotFlow
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.ui.graphics.graphicsLayer
 import me.floow.uikit.chat.model.currentChatTimeMillis
 import androidx.compose.ui.graphics.TransformOrigin
@@ -71,6 +67,9 @@ import androidx.compose.ui.unit.sp
 import me.floow.uikit.chat.common.ElevatedMessageData
 import me.floow.uikit.chat.components.ChatAlbumBubble
 import me.floow.uikit.chat.components.ReplyPill
+import me.floow.uikit.chat.components.LocalChatTextSendTransitions
+import me.floow.uikit.chat.components.ChatTextSendTarget
+import androidx.compose.runtime.DisposableEffect
 import me.floow.uikit.chat.components.ChatMessageTimestamp
 import me.floow.uikit.chat.components.ChatTailVector
 import me.floow.uikit.chat.components.chatMessageTimestampPadding
@@ -100,7 +99,6 @@ val LocalContextMenuElevation = compositionLocalOf<ElevatedMessageData?> { null 
 internal fun LazyItemScope.ChatMessageItemWrapper(
 	message: ChatMessage,
     entryTimeMillis: Long?,
-    entryOrigin: Offset?,
     playedEntrances: MutableMap<String, Long>,
 	layoutState: ChatMessageLayoutState?,
 	isReverseLayout: Boolean,
@@ -180,25 +178,26 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 		((message as? VideoCircleOutMessage)?.isOutgoing == true) ||
 		(message is VoiceMessage && message.isOutgoing)
 
+    val flights = LocalChatTextSendTransitions.current
+    val textFlight = if (isOut) flights?.get(message.uiKey) else null
+    val flightLayer = if (textFlight != null) rememberGraphicsLayer() else null
+    if (textFlight != null) {
+        DisposableEffect(textFlight) {
+            onDispose {
+                // A recycled row can no longer provide a valid layer.
+                flights?.finish(message.uiKey, textFlight)
+            }
+        }
+    }
     val isTextEntry = !isImage && !isVideoCircle && !isVoice && !isPostPreview
     val entrance = remember(message.uiKey, entryTimeMillis) {
-        if (isTextEntry && entryTimeMillis != null &&
+        if (textFlight == null && isTextEntry && entryTimeMillis != null &&
             currentChatTimeMillis() - entryTimeMillis in 0..650L &&
             playedEntrances[message.uiKey] != entryTimeMillis
         ) Animatable(0f) else null
     }
-    var entryDelta by remember(entrance) { mutableStateOf<Offset?>(null) }
     LaunchedEffect(entrance) {
         if (entrance != null && entryTimeMillis != null) {
-            if (entryOrigin != null && isOut) {
-                val destination = withTimeoutOrNull(120L) { snapshotFlow { bubbleRect }.filterNotNull().first() }
-                if (destination != null) {
-                    entryDelta = Offset(
-                        entryOrigin.x - destination.left,
-                        entryOrigin.y - destination.center.y,
-                    )
-                }
-            }
             playedEntrances.entries.removeAll { currentChatTimeMillis() - it.value > 1_000L }
             playedEntrances[message.uiKey] = entryTimeMillis
             entrance.animateTo(1f, spring(dampingRatio = if (isOut) 0.78f else 0.9f, stiffness = 550f))
@@ -248,13 +247,12 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 				}
 			}
 		}
-        .then(if (entrance != null && entryOrigin != null) Modifier.graphicsLayer {
-            val delta = entryDelta ?: return@graphicsLayer
-            val remaining = 1f - entrance.value
-            translationX = (delta.x * 0.45f).coerceIn(-100.dp.toPx(), 100.dp.toPx()) * remaining
-            translationY = delta.y.coerceIn(0f, 72.dp.toPx()) * remaining
-        } else Modifier)
 		.drawWithContent {
+            if (textFlight != null && flightLayer != null) {
+                flightLayer.record { this@drawWithContent.drawContent() }
+                bubbleRect?.let { textFlight.target = ChatTextSendTarget(it, flightLayer) }
+                return@drawWithContent
+            }
 			if (activeElevation != null && activeElevation.foregroundLayer === elevationLayer) {
 				// Capture only the active bubble, in the same Compose root as the backdrop.
 				elevationLayer.record { this@drawWithContent.drawContent() }
@@ -405,7 +403,7 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
                     .then(if (entrance != null) Modifier.graphicsLayer {
                         val progress = entrance.value
                         val remaining = 1f - progress
-                        translationY = if (entryOrigin == null) (if (isOut) 8.dp else 4.dp).toPx() * remaining else 0f
+                        translationY = (if (isOut) 8.dp else 4.dp).toPx() * remaining
                         val scale = 1f - (if (isOut) 0.035f else 0.018f) * remaining
                         scaleX = scale
                         scaleY = scale

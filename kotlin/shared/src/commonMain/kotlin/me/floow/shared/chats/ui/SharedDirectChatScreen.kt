@@ -47,6 +47,10 @@ import me.floow.uikit.chat.common.ChatScreenBody
 import me.floow.uikit.chat.common.MessageContextMenuOverlay
 import me.floow.uikit.chat.input.ChatInputMode
 import me.floow.uikit.chat.components.FlowPinnedMessagesBar
+import me.floow.uikit.chat.components.ChatTextSendSource
+import me.floow.uikit.chat.components.ChatTextSendTransitions
+import me.floow.uikit.chat.components.ChatTextSendTransitionLayer
+import me.floow.uikit.chat.components.LocalChatTextSendTransitions
 import me.floow.uikit.chat.input.ChatInputController
 import me.floow.uikit.chat.input.rememberChatInputController
 import me.floow.uikit.chat.input.rememberChatInputLayoutState
@@ -169,12 +173,9 @@ internal fun SharedDirectChatScreen(
 		)
 	}
 	val config = remember(header) { sharedDirectChatConfig(header) }
-    val textFlights = remember(header.peerUserId) { androidx.compose.runtime.mutableStateMapOf<String, Offset>() }
-    val textSource = remember(header.peerUserId) { mutableStateOf<Offset?>(null) }
-    val mappedState = remember(state, selectionState) { state.toSharedChatUiState(selectionState) }
-    val uiState = if (mappedState is ChatScreenUiState.HasData) {
-        mappedState.copy(messageEntryOrigins = textFlights.toMap())
-    } else mappedState
+    val textFlights = remember(header.peerUserId) { ChatTextSendTransitions() }
+    val textSource = remember(header.peerUserId) { mutableStateOf<ChatTextSendSource?>(null) }
+    val uiState = remember(state, selectionState) { state.toSharedChatUiState(selectionState) }
 	val density = LocalDensity.current
 	val fallbackPanelHeightPx = remember(density) { with(density) { 340.dp.roundToPx() } }
 	val inputController = rememberChatInputController(
@@ -349,8 +350,10 @@ internal fun SharedDirectChatScreen(
 	}
 
 	CompositionLocalProvider(
-		LocalContextMenuElevation provides contextMenuElevatedData,
-	) {
+        LocalContextMenuElevation provides contextMenuElevatedData,
+        LocalChatTextSendTransitions provides textFlights,
+    ) {
+        Box(Modifier.fillMaxSize()) {
 		ChatScreenBody(
 			title = header.title,
 			subtitle = header.subtitle,
@@ -372,17 +375,13 @@ internal fun SharedDirectChatScreen(
 		showInputBar = true,
 		inputController = inputController,
 		actualImeHeightPx = actualImeHeightPx,
-		onTextSourcePosition = { textSource.value = it },
+        onTextSendSource = { textSource.value = it },
         onSendClick = {
-            val origin = textSource.value
+            val draft = inputController.textFieldValue.text.trim()
+            val source = textSource.value?.takeIf { it.layout.layoutInput.text.text.trim() == draft }
             val clientId = onSendClick()
-            if (clientId != null && origin != null) {
-                val key = "cmid_$clientId"
-                textFlights[key] = origin
-                scope.launch {
-                    kotlinx.coroutines.delay(1_000L)
-                    textFlights.remove(key)
-                }
+            if (clientId != null && source != null && draft.isNotEmpty()) {
+                textFlights.start("cmid_$clientId", source)
             }
         },
 		sendButtonActive = sendButtonActive,
@@ -574,8 +573,10 @@ internal fun SharedDirectChatScreen(
 		modifier = modifier
 			.fillMaxSize()
 			.then(recordingSwipeBlockModifier),
-	)
-	}
+        )
+        ChatTextSendTransitionLayer(textFlights)
+        }
+    }
 }
 
 @Composable

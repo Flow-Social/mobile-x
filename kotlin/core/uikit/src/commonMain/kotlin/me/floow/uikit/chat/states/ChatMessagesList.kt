@@ -902,7 +902,6 @@ internal fun ChatMessagesList(
 					ChatMessageItemWrapper(
 						message = message,
                         entryTimeMillis = state.messageEntryTimes[message.uiKey],
-                        entryOrigin = state.messageEntryOrigins[message.uiKey],
                         playedEntrances = playedEntrances,
                         layoutState = layoutState,
 						isReverseLayout = isReverseLayout,

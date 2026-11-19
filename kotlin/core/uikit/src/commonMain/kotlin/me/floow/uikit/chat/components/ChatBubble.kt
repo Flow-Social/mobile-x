@@ -122,6 +122,11 @@ fun ChatBubble(
 	bubbleBoundsModifier: Modifier = Modifier
 ) {
 	val isOut = chatMessage is PrimaryOutMessage || chatMessage is ReplyOutMessage
+    val flight = if (isOut) LocalChatTextSendTransitions.current?.get(chatMessage.uiKey) else null
+    val flightDecorations = if (flight == null) Modifier else Modifier.graphicsLayer {
+        alpha = ((flight.progress.value - 0.68f) / 0.32f).coerceIn(0f, 1f)
+    }
+
 	val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
 	val defaultBubbleColor = if (isOut) Color(0xFF7A73F8) else if (isDark) Color(0xFF262626) else Color(0xFFE2E2E3)
 	val defaultTextColor = if (isOut || isDark) Color.White else Color(0xFF000000)
@@ -171,7 +176,7 @@ fun ChatBubble(
 				isOut = isOut,
 				onClick = { onReplyClick(chatMessage) },
                 enabled = quote.isAvailable,
-				modifier = Modifier
+				modifier = flightDecorations
 					.widthIn(max = 263.dp)
 					.layout { measurable, constraints ->
 						val placeable = measurable.measure(constraints)
@@ -265,7 +270,7 @@ fun ChatBubble(
 				showUnreadDot = showUnreadDot,
 				showMessageStatus = showMessageStatus,
 				onRetryClick = onRetrySendClick?.let { handler -> { handler(chatMessage) } },
-				modifier = Modifier.chatMessageTimestampPadding(isOut),
+				modifier = flightDecorations.chatMessageTimestampPadding(isOut),
 			)
 		}
 	}

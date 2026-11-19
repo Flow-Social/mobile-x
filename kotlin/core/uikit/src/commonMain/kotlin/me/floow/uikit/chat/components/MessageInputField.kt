@@ -143,7 +143,7 @@ private const val RecordCancelThresholdPx = 220f
 fun MessageInputField(
 	controller: ChatInputController,
 	onSendClick: () -> Unit,
-    onTextSourcePosition: (Offset) -> Unit = {},
+    onTextSendSource: (ChatTextSendSource) -> Unit = {},
 	sendButtonActive: Boolean,
 	isEditMode: Boolean = false,
 	showEmojiButton: Boolean = true,
@@ -210,6 +210,12 @@ fun MessageInputField(
 			keyboardController?.hide()
 		}
 	}
+
+    val outgoingTextFlight = LocalChatTextSendTransitions.current?.latest()
+    val placeholderFlightFade = if (outgoingTextFlight == null) Modifier else Modifier.graphicsLayer {
+        // The frozen text still occupies the input on the first frame; don't paint a placeholder through it.
+        alpha = ((outgoingTextFlight.progress.value - 0.12f) / 0.52f).coerceIn(0f, 1f)
+    }
 
 	val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
 	val capsuleBg = if (isDark) Color(0xFF2E2E2E) else Color(0xFFDFDFDF)
@@ -527,15 +533,14 @@ fun MessageInputField(
 									.fillMaxWidth()
 									.onGloballyPositioned { coordinates ->
                                 if (showTextField) {
-                                    val position = coordinates.positionInRoot()
-                                    val layout = textLayoutResult?.takeIf { it.lineCount > 0 }
-                                    val lineTop = layout?.getLineTop(0) ?: 0f
-                                    val lineBottom = layout?.getLineBottom(0) ?: coordinates.size.height.toFloat()
-                                    val lineLeft = layout?.getLineLeft(0) ?: 0f
-                                    onTextSourcePosition(Offset(
-                                        position.x + lineLeft,
-                                        position.y + (lineTop + lineBottom) / 2f - scrollOffsetPx,
-                                    ))
+                                    val layout = textLayoutResult
+                                    if (layout != null && layout.layoutInput.text.isNotBlank()) {
+                                        onTextSendSource(ChatTextSendSource(
+                                            layout = layout,
+                                            originInRoot = coordinates.positionInRoot() - Offset(0f, scrollOffsetPx),
+                                            viewportInRoot = coordinates.boundsInRoot(),
+                                        ))
+                                    }
                                 }
                             }
                             .onSizeChanged { size ->
@@ -550,6 +555,7 @@ fun MessageInputField(
 								if (showTextField && controller.textFieldValue.text.isEmpty()) {
 									Text(
 										text = "Сообщение",
+                                        modifier = placeholderFlightFade,
 										color = placeholderColor,
 										style = LocalTypography.current.titleMedium.copy(
 											fontSize = 18.sp,

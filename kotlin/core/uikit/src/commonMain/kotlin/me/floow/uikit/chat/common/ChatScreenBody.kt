@@ -72,7 +72,7 @@ fun ChatScreenBody(
 	inputController: ChatInputController,
 	actualImeHeightPx: Int,
 	onSendClick: () -> Unit,
-    onTextSourcePosition: (androidx.compose.ui.geometry.Offset) -> Unit = {},
+    onTextSendSource: (me.floow.uikit.chat.components.ChatTextSendSource) -> Unit = {},
 	sendButtonActive: Boolean,
 	isEditMode: Boolean,
 	showEmojiButton: Boolean,
@@ -242,7 +242,7 @@ fun ChatScreenBody(
 					MessageInputField(
 						controller = inputController,
 						onSendClick = onSendClick,
-                        onTextSourcePosition = onTextSourcePosition,
+                        onTextSendSource = onTextSendSource,
 						sendButtonActive = sendButtonActive,
 						isEditMode = isEditMode,
 						showEmojiButton = showEmojiButton,
