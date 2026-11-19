@@ -69,29 +69,40 @@ class ChatRealtimeCoordinator(
 		}
 	}
 
+    private val presenceOwner = "direct-chat:${kotlin.random.Random.nextLong()}"
+    private var observedPeerId: String? = null
+
+    private fun clearPresence() {
+        presenceJob?.cancel()
+        presenceJob = null
+        if (observedPeerId != null) presenceContract?.clearTargets(presenceOwner)
+        observedPeerId = null
+        latestPresenceState = ChatPresenceState()
+        hasObservedPresenceState = false
+    }
+
 	fun observePresence(
 		header: ChatThreadHeaderModel,
 		onPresenceChanged: (ChatPresenceState) -> Unit,
 	) {
-		if (header.isSavedMessages) {
-			presenceJob?.cancel()
-			presenceJob = null
-			latestPresenceState = ChatPresenceState()
-			hasObservedPresenceState = false
-			onPresenceChanged(latestPresenceState)
-			return
-		}
-		val peerUserId = header.peerUserId
-		if (peerUserId.isBlank() || presenceContract == null) return
-		presenceJob?.cancel()
-		presenceJob = scope.launch {
-			presenceContract.observePeerPresence(peerUserId).collectLatest { presence ->
-				latestPresenceState = presence
-				hasObservedPresenceState = true
-				onPresenceChanged(presence)
-			}
-		}
-	}
+        val peerId = header.peerUserId.takeUnless { header.isSavedMessages || it.isBlank() }
+        if (peerId == null || presenceContract == null) {
+            clearPresence()
+            onPresenceChanged(latestPresenceState)
+            return
+        }
+        if (observedPeerId == peerId && presenceJob?.isActive == true) return
+        clearPresence()
+        observedPeerId = peerId
+        presenceContract.setTargets(presenceOwner, listOf(peerId))
+        presenceJob = scope.launch {
+            presenceContract.observePeerPresence(peerId).collectLatest { presence ->
+                latestPresenceState = presence
+                hasObservedPresenceState = presence.isKnown
+                onPresenceChanged(presence)
+            }
+        }
+    }
 
 	fun stopAll() {
 		realtimeJob?.cancel()
@@ -100,10 +111,7 @@ class ChatRealtimeCoordinator(
 		localMessagesJob = null
 		pinnedMessagesJob?.cancel()
 		pinnedMessagesJob = null
-		presenceJob?.cancel()
-		presenceJob = null
-		latestPresenceState = ChatPresenceState()
-		hasObservedPresenceState = false
+        clearPresence()
 	}
 
 	fun dispose() {

@@ -6,9 +6,7 @@ import me.floow.domain.models.UserPresence
 interface PresenceRepository {
 	val presences: StateFlow<Map<String, UserPresence>>
 
-	fun setTargets(owner: String, userIds: List<String>)
+	fun setTargets(owner: String, userIds: List<String>, priority: Boolean = false)
 	fun clearTargets(owner: String)
 
-	fun onAppForeground()
-	fun onAppBackground()
 }

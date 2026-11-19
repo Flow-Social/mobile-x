@@ -41,6 +41,7 @@ private fun DirectChatRealtimeEvent.toSharedEvent(selfUserId: String?): ChatReal
 	is DirectChatRealtimeEvent.MessageCreated -> ChatRealtimeEvent.MessageUpserted(
 		message = message.toRealtimeItemModel(selfUserId),
 		peerLastReadMessageId = null,
+        animateEntry = !isReplay,
 	)
 	is DirectChatRealtimeEvent.MessageUpdated -> ChatRealtimeEvent.MessageUpserted(
 		message = message.toRealtimeItemModel(selfUserId),

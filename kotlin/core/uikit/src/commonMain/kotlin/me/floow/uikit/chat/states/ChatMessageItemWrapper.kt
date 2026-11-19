@@ -1,5 +1,13 @@
 package me.floow.uikit.chat.states
 
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.withTimeoutOrNull
+import androidx.compose.ui.graphics.graphicsLayer
+import me.floow.uikit.chat.model.currentChatTimeMillis
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
@@ -91,6 +99,9 @@ val LocalContextMenuElevation = compositionLocalOf<ElevatedMessageData?> { null 
 @Composable
 internal fun LazyItemScope.ChatMessageItemWrapper(
 	message: ChatMessage,
+    entryTimeMillis: Long?,
+    entryOrigin: Offset?,
+    playedEntrances: MutableMap<String, Long>,
 	layoutState: ChatMessageLayoutState?,
 	isReverseLayout: Boolean,
 	unreadBoundaryMessageId: Long?,
@@ -169,6 +180,31 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 		((message as? VideoCircleOutMessage)?.isOutgoing == true) ||
 		(message is VoiceMessage && message.isOutgoing)
 
+    val isTextEntry = !isImage && !isVideoCircle && !isVoice && !isPostPreview
+    val entrance = remember(message.uiKey, entryTimeMillis) {
+        if (isTextEntry && entryTimeMillis != null &&
+            currentChatTimeMillis() - entryTimeMillis in 0..650L &&
+            playedEntrances[message.uiKey] != entryTimeMillis
+        ) Animatable(0f) else null
+    }
+    var entryDelta by remember(entrance) { mutableStateOf<Offset?>(null) }
+    LaunchedEffect(entrance) {
+        if (entrance != null && entryTimeMillis != null) {
+            if (entryOrigin != null && isOut) {
+                val destination = withTimeoutOrNull(120L) { snapshotFlow { bubbleRect }.filterNotNull().first() }
+                if (destination != null) {
+                    entryDelta = Offset(
+                        entryOrigin.x - destination.left,
+                        entryOrigin.y - destination.center.y,
+                    )
+                }
+            }
+            playedEntrances.entries.removeAll { currentChatTimeMillis() - it.value > 1_000L }
+            playedEntrances[message.uiKey] = entryTimeMillis
+            entrance.animateTo(1f, spring(dampingRatio = if (isOut) 0.78f else 0.9f, stiffness = 550f))
+        }
+    }
+
 	val showUnreadDot = isOut &&
 		showUnreadIndicators &&
 		message.id > 0L &&
@@ -212,6 +248,12 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 				}
 			}
 		}
+        .then(if (entrance != null && entryOrigin != null) Modifier.graphicsLayer {
+            val delta = entryDelta ?: return@graphicsLayer
+            val remaining = 1f - entrance.value
+            translationX = (delta.x * 0.45f).coerceIn(-100.dp.toPx(), 100.dp.toPx()) * remaining
+            translationY = delta.y.coerceIn(0f, 72.dp.toPx()) * remaining
+        } else Modifier)
 		.drawWithContent {
 			if (activeElevation != null && activeElevation.foregroundLayer === elevationLayer) {
 				// Capture only the active bubble, in the same Compose root as the backdrop.
@@ -360,7 +402,17 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 				modifier = Modifier
 					.fillMaxWidth()
 					.animateItem(fadeInSpec = null, placementSpec = null, fadeOutSpec = null)
-					.then(contextMenuAnchorModifier)
+                    .then(if (entrance != null) Modifier.graphicsLayer {
+                        val progress = entrance.value
+                        val remaining = 1f - progress
+                        translationY = if (entryOrigin == null) (if (isOut) 8.dp else 4.dp).toPx() * remaining else 0f
+                        val scale = 1f - (if (isOut) 0.035f else 0.018f) * remaining
+                        scaleX = scale
+                        scaleY = scale
+                        alpha = (0.78f + 0.22f * progress).coerceIn(0f, 1f)
+                        transformOrigin = TransformOrigin(if (isOut) 1f else 0f, 1f)
+                    } else Modifier)
+                    .then(contextMenuAnchorModifier)
 					.onSizeChanged { size ->
 						rowBoundsRegistry.putHeight(
 							messageId = message.id,

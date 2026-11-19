@@ -842,6 +842,9 @@ internal fun ChatMessagesList(
 	val isSelectionMode = selectionState.isSelectionMode
 	val highlightRequest = state.highlightRequest
 
+    // Offscreen history and recycled rows must not replay an entrance.
+    val playedEntrances = remember(state.timelineSessionToken) { mutableMapOf<String, Long>() }
+
 	LazyColumn(
 		state = lazyListState,
 		reverseLayout = isReverseLayout,
@@ -898,7 +901,10 @@ internal fun ChatMessagesList(
 
 					ChatMessageItemWrapper(
 						message = message,
-						layoutState = layoutState,
+                        entryTimeMillis = state.messageEntryTimes[message.uiKey],
+                        entryOrigin = state.messageEntryOrigins[message.uiKey],
+                        playedEntrances = playedEntrances,
+                        layoutState = layoutState,
 						isReverseLayout = isReverseLayout,
 						unreadBoundaryMessageId = state.unreadBoundaryMessageId,
 						isRowHighlighted = isRowHighlighted,

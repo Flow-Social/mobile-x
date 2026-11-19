@@ -7,6 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.rememberNavController
 import me.floow.app.navigation.FlowRootNavHost
+import me.floow.domain.data.repos.PresenceRepository
 import me.floow.uikit.theme.FlowTheme
 import me.floow.shared.chats.uilogic.direct.ChatThreadRepository
 import org.koin.compose.koinInject
@@ -17,6 +18,7 @@ fun FlowApp(
     modifier: Modifier = Modifier,
 ) {
     koinInject<ChatThreadRepository>() // Start pending direct-chat receipts on app start.
+    koinInject<PresenceRepository>()
     FlowTheme(darkTheme = darkTheme) {
         val navController = rememberNavController()
         Surface(

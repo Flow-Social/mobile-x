@@ -3,7 +3,10 @@ package me.floow.data.repos
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.advanceTimeBy
 import me.floow.domain.api.PresenceApi
 import me.floow.domain.api.PresenceRealtimeApi
 import me.floow.domain.api.PresenceRealtimeSession
@@ -18,8 +21,10 @@ import me.floow.domain.data.repos.PresenceSessionStore
 import me.floow.domain.utils.Logger
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class PresenceRepositoryImplTest {
 
 	private class FakeLogger : Logger {
@@ -29,6 +34,8 @@ class PresenceRepositoryImplTest {
 	private class FakePresenceApi : PresenceApi {
 		var snapshotItems: List<PresenceItem> = emptyList()
 		var getPresenceCalls = 0
+        val heartbeats = mutableListOf<String?>()
+        val offlineRequests = mutableListOf<String?>()
 
 		override suspend fun getPresence(userIds: List<String>): PresenceGetResponse {
 			getPresenceCalls += 1
@@ -36,6 +43,7 @@ class PresenceRepositoryImplTest {
 		}
 
 		override suspend fun heartbeat(sessionId: String?): PresenceUpdateResponse {
+            heartbeats += sessionId
 			return PresenceUpdateResponse.Success(
 				PresenceItem(
 					userId = "1",
@@ -47,6 +55,7 @@ class PresenceRepositoryImplTest {
 		}
 
 		override suspend fun offline(sessionId: String?): PresenceUpdateResponse {
+            offlineRequests += sessionId
 			return PresenceUpdateResponse.Success(
 				PresenceItem(
 					userId = "1",
@@ -108,23 +117,25 @@ class PresenceRepositoryImplTest {
 	}
 
 	@Test
-	fun `owner targets keep union and unsubscribe removed owner`() = runBlocking {
+	fun `owner targets keep union and unsubscribe removed owner`() = runTest {
 		val session = FakePresenceRealtimeSession()
 		val repository = PresenceRepositoryImpl(
 			logger = FakeLogger(),
 			presenceApi = FakePresenceApi(),
 			presenceRealtimeApi = FakePresenceRealtimeApi(session),
 			authenticationManager = FakeAuthenticationManager(),
-			sessionStore = FakePresenceSessionStore()
+			sessionStore = FakePresenceSessionStore(),
+            foreground = MutableStateFlow(true),
+            scope = backgroundScope,
+            clock = testScheduler.timeSource,
 		)
 
 		repository.setTargets("chat_list", listOf("2", "3"))
-		repository.onAppForeground()
-		Thread.sleep(120)
+		runCurrent()
 		repository.setTargets("profile:7", listOf("7"))
-		Thread.sleep(120)
+		runCurrent()
 		repository.clearTargets("profile:7")
-		Thread.sleep(120)
+		runCurrent()
 
 		assertEquals(listOf("2", "3"), session.subscribedBatches.first())
 		assertEquals(listOf("7"), session.subscribedBatches.last())
@@ -132,7 +143,7 @@ class PresenceRepositoryImplTest {
 	}
 
 	@Test
-	fun `resync required refreshes snapshot and updates cached presence`() = runBlocking {
+	fun `resync required refreshes snapshot and updates cached presence`() = runTest {
 		val session = FakePresenceRealtimeSession()
 		val api = FakePresenceApi().apply {
 			snapshotItems = listOf(
@@ -149,14 +160,16 @@ class PresenceRepositoryImplTest {
 			presenceApi = api,
 			presenceRealtimeApi = FakePresenceRealtimeApi(session),
 			authenticationManager = FakeAuthenticationManager(),
-			sessionStore = FakePresenceSessionStore()
+			sessionStore = FakePresenceSessionStore(),
+            foreground = MutableStateFlow(true),
+            scope = backgroundScope,
+            clock = testScheduler.timeSource,
 		)
 
 		repository.setTargets("profile:7", listOf("7"))
-		repository.onAppForeground()
-		Thread.sleep(120)
+		runCurrent()
 		session.emit(PresenceRealtimeEvent.ResyncRequired(serverTimestampMillis = 888L))
-		Thread.sleep(120)
+		runCurrent()
 
 		assertEquals(1, api.getPresenceCalls)
 		val presence = repository.presences.value["7"]
@@ -164,4 +177,65 @@ class PresenceRepositoryImplTest {
 		assertEquals(false, presence?.isOnline)
 		assertEquals(777L, presence?.lastSeenAtMillis)
 	}
+    @Test
+    fun `priority target displaces a list target and removing it restores the slot`() = runTest {
+        val session = FakePresenceRealtimeSession()
+        val repository = PresenceRepositoryImpl(
+            FakeLogger(), FakePresenceApi(), FakePresenceRealtimeApi(session),
+            FakeAuthenticationManager(), FakePresenceSessionStore(), MutableStateFlow(true),
+            backgroundScope, testScheduler.timeSource,
+        )
+        repository.setTargets("chat_list", (2..201).map(Int::toString))
+        runCurrent()
+        assertEquals(200, session.subscribedBatches.first().size)
+        repository.setTargets("direct-chat", listOf("999"), priority = true)
+        runCurrent()
+        assertEquals(listOf("201"), session.unsubscribedBatches.last())
+        assertEquals(listOf("999"), session.subscribedBatches.last())
+        repository.clearTargets("direct-chat")
+        runCurrent()
+        assertEquals(listOf("999"), session.unsubscribedBatches.last())
+        assertEquals(listOf("201"), session.subscribedBatches.last())
+    }
+
+    @Test
+    fun `an unconfirmed online lease becomes unknown rather than staying online`() = runTest {
+        val session = FakePresenceRealtimeSession()
+        val repository = PresenceRepositoryImpl(
+            FakeLogger(), FakePresenceApi(), FakePresenceRealtimeApi(session),
+            FakeAuthenticationManager(), FakePresenceSessionStore(), MutableStateFlow(true),
+            backgroundScope, testScheduler.timeSource,
+        )
+        repository.setTargets("direct-chat", listOf("7"), priority = true)
+        runCurrent()
+        session.emit(PresenceRealtimeEvent.PresenceChanged(
+            PresenceItem("7", true, 100, 100, expiresAtMillis = 10_100),
+        ))
+        runCurrent()
+        assertEquals(true, repository.presences.value["7"]?.isOnline)
+        advanceTimeBy(10_001)
+        runCurrent()
+        assertEquals(null, repository.presences.value["7"])
+    }
+
+    @Test
+    fun `resuming publishes a different lease from the one sent offline`() = runTest {
+        val api = FakePresenceApi()
+        val foreground = MutableStateFlow(true)
+        PresenceRepositoryImpl(
+            FakeLogger(), api, FakePresenceRealtimeApi(FakePresenceRealtimeSession()),
+            FakeAuthenticationManager(), FakePresenceSessionStore(), foreground,
+            backgroundScope, testScheduler.timeSource,
+        )
+        runCurrent()
+        val first = api.heartbeats.single()
+        foreground.value = false
+        runCurrent()
+        foreground.value = true
+        runCurrent()
+        assertEquals(listOf(first), api.offlineRequests)
+        assertEquals(2, api.heartbeats.size)
+        assertNotEquals(first, api.heartbeats.last())
+    }
+
 }

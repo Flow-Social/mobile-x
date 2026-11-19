@@ -14,6 +14,7 @@ sealed interface ChatRealtimeEvent {
 		val message: ChatMessageItemModel,
 		val peerLastReadMessageId: Long? = null,
         val isNew: Boolean = true,
+        val animateEntry: Boolean = isNew,
     ) : ChatRealtimeEvent
 	data class MessageDeleted(val messageId: Long) : ChatRealtimeEvent
 	data class MessagePinned(val messageId: Long, val isPinned: Boolean) : ChatRealtimeEvent

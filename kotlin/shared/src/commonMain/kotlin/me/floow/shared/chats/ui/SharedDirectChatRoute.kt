@@ -106,20 +106,9 @@ internal fun SharedDirectChatRoute(
 	onHeaderClick: (() -> Unit)? = null,
 	emojiPanel: @Composable (ChatInputController) -> Unit = { controller ->
 		me.floow.shared.chats.emoji.FlowEmojiPanel(
-			onEmojiPicked = { emoji ->
-				val current = controller.textFieldValue
-				val text = current.text
-				val selection = current.selection
-				val newText = text.replaceRange(selection.min, selection.max, emoji)
-				val newCursor = selection.min + emoji.length
-				controller.onTextFieldValueChange(
-					current.copy(
-						text = newText,
-						selection = androidx.compose.ui.text.TextRange(newCursor),
-						composition = null,
-					)
-				)
-			}
+			onEmojiPicked = controller::insertEmoji,
+            onDelete = controller::deleteBackward,
+            canDelete = controller.textFieldValue.selection.end > 0 || controller.textFieldValue.selection.start > 0,
 		)
 	},
 	videoRecordingOverlay: (@Composable (Int, Rect?, Modifier) -> Unit)? = null,
@@ -1099,7 +1088,12 @@ internal fun SharedDirectChatRoute(
 		onBackClick = onBackClick,
 		onHeaderClick = onHeaderClick,
 		onInputChange = stateHolder::updateInput,
-		onSendClick = if (!editingMessage && effectiveImageDrafts.isNotEmpty()) effectiveImageDraftSend else stateHolder::sendOrEdit,
+		onSendClick = {
+            if (!editingMessage && effectiveImageDrafts.isNotEmpty()) {
+                effectiveImageDraftSend()
+                null
+            } else stateHolder.sendOrEdit()
+        },
 		onReplyClick = stateHolder::addReply,
 		onClearReplyClick = stateHolder::clearReply,
 		onEditClick = stateHolder::startEditing,

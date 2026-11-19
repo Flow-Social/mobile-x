@@ -4,12 +4,15 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import me.floow.shared.chats.model.ChatMessageContent
 import me.floow.shared.chats.model.ChatMessageItemModel
 import me.floow.shared.chats.model.ChatOpenMode
+import me.floow.shared.chats.model.ChatPresenceState
 import me.floow.shared.chats.model.ChatThreadHeaderModel
 import me.floow.shared.chats.model.ChatThreadSnapshot
 import me.floow.uikit.chat.model.ChatViewportSnapshot
@@ -141,4 +144,38 @@ class ChatHistoryNavigationTest {
         assertEquals(10L, image.replyToMessageId)
         assertEquals("msg 10", image.replyToMessageText)
     }
+    @Test
+    fun `a directly opened chat owns its presence subscription until disposal`() = runTest {
+        val repo = object : ChatThreadRepository by StaticChatThreadRepository() {
+            override suspend fun loadInitial(request: DirectChatInitialRequest) =
+                Result.success(ChatThreadSnapshot(42, header, listOf(message(100)), false))
+        }
+        val targetOwners = mutableMapOf<String, List<String>>()
+        val peerStatus = MutableStateFlow(ChatPresenceState())
+        val presence = object : ChatPresenceContract {
+            override fun setTargets(owner: String, userIds: List<String>) {
+                targetOwners[owner] = userIds
+            }
+            override fun clearTargets(owner: String) {
+                targetOwners.remove(owner)
+            }
+            override fun observePeerPresence(peerUserId: String) = peerStatus
+            override fun observePeerTyping(peerUserId: String) = emptyFlow<me.floow.shared.chats.model.ChatTypingState>()
+        }
+        val holder = DirectChatStateHolder(repo, presenceContract = presence, scope = backgroundScope)
+        holder.load(request)
+        runCurrent()
+        assertEquals(listOf(listOf("peer")), targetOwners.values.toList())
+        assertEquals(null, holder.data().header.subtitle)
+        peerStatus.value = ChatPresenceState(isOnline = true)
+        runCurrent()
+        assertTrue(holder.data().peerIsOnline)
+        peerStatus.value = ChatPresenceState()
+        runCurrent()
+        assertFalse(holder.data().peerIsOnline)
+        assertEquals(null, holder.data().header.subtitle)
+        holder.dispose()
+        assertTrue(targetOwners.isEmpty())
+    }
+
 }

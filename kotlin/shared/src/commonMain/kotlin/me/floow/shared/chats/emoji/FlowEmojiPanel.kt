@@ -2,207 +2,174 @@ package me.floow.shared.chats.emoji
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Backspace
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ScrollableTabRow
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import flow.shared.generated.resources.Res
+import flow.shared.generated.resources.chat_emoji_delete
+import flow.shared.generated.resources.chat_emoji_recent
 import kotlinx.coroutines.launch
-import kotlin.math.floor
+import me.floow.uikit.theme.LocalTypography
+import org.jetbrains.compose.resources.stringResource
 
-private val EmojiCellSize = 42.dp
-private val EmojiCellShape = RoundedCornerShape(10.dp)
+private val EmojiCellSize = 44.dp
+private val EmojiKeyShape = RoundedCornerShape(12.dp)
 
 @Composable
 fun FlowEmojiPanel(
     onEmojiPicked: (String) -> Unit,
     modifier: Modifier = Modifier,
     recentStore: FlowEmojiRecentStore = rememberFlowEmojiRecentStore(),
+    onDelete: (() -> Unit)? = null,
+    canDelete: Boolean = false,
 ) {
-    val coroutineScope = rememberCoroutineScope()
+    val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
+    val tabsState = rememberLazyListState()
+    val colors = MaterialTheme.colorScheme
     val recentEmojis by recentStore.recentEmojis().collectAsState(initial = emptyList())
-    val categories = FlowEmojiCatalog.categories
+    val recentLabel = stringResource(Res.string.chat_emoji_recent)
+    val sections = remember(recentEmojis, recentLabel) {
+        if (recentEmojis.isEmpty()) FlowEmojiCatalog.categories
+        else listOf(FlowEmojiCategory("recent", recentLabel, Icons.Outlined.Schedule, recentEmojis)) + FlowEmojiCatalog.categories
+    }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface)
-    ) {
-        // Tab Row for fast jumping between categories
-        ScrollableTabRow(
-            selectedTabIndex = 0,
-            edgePadding = 8.dp,
-            divider = {},
-            containerColor = MaterialTheme.colorScheme.surface,
-            contentColor = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.fillMaxWidth().height(44.dp)
-        ) {
-            if (recentEmojis.isNotEmpty()) {
-                Tab(
-                    selected = false,
-                    onClick = {
-                        coroutineScope.launch {
-                            listState.animateScrollToItem(0)
-                        }
-                    },
-                    modifier = Modifier.width(40.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Schedule,
-                        contentDescription = "Недавние",
-                        modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+    BoxWithConstraints(modifier.fillMaxSize().background(colors.surface)) {
+        val columns = ((maxWidth - 24.dp) / EmojiCellSize).toInt().coerceAtLeast(1)
+        val rowCount = remember(columns, sections) {
+            sections.map { (it.emojis.size + columns - 1) / columns }
+        }
+        val sectionStarts = remember(rowCount) { rowCount.runningFold(0) { start, rows -> start + 1 + rows }.dropLast(1) }
+        val activeSection by remember(sectionStarts) {
+            derivedStateOf {
+                if (listState.layoutInfo.totalItemsCount > 0 && !listState.canScrollForward &&
+                    listState.firstVisibleItemIndex > 0
+                ) sectionStarts.lastIndex else
+                    sectionStarts.indexOfLast { it <= listState.firstVisibleItemIndex }.coerceAtLeast(0)
             }
-
-            categories.forEachIndexed { index, category ->
-                Tab(
-                    selected = false,
-                    onClick = {
-                        coroutineScope.launch {
-                            val targetIndex = (if (recentEmojis.isNotEmpty()) 1 else 0) + index
-                            listState.animateScrollToItem(targetIndex)
-                        }
-                    },
-                    modifier = Modifier.width(40.dp)
-                ) {
-                    Icon(
-                        imageVector = category.icon,
-                        contentDescription = category.title,
-                        modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+        }
+        LaunchedEffect(activeSection) {
+            if (tabsState.layoutInfo.visibleItemsInfo.none { it.index == activeSection }) {
+                tabsState.animateScrollToItem(activeSection)
             }
         }
 
-        HorizontalDivider(
-            thickness = 0.5.dp,
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-        )
-
-        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            val totalWidth = maxWidth
-            val columns = floor((totalWidth / EmojiCellSize).toDouble()).toInt().coerceAtLeast(6)
+        Column(Modifier.fillMaxSize()) {
+            Row(
+                Modifier.fillMaxWidth().height(48.dp).padding(end = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                LazyRow(
+                    state = tabsState,
+                    modifier = Modifier.weight(1f).selectableGroup(),
+                    contentPadding = PaddingValues(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    itemsIndexed(sections, key = { _, section -> section.key }) { index, section ->
+                        val selected = activeSection == index
+                        Box(
+                            Modifier.size(44.dp).selectable(
+                                selected = selected,
+                                role = Role.Tab,
+                                onClick = { scope.launch { listState.animateScrollToItem(sectionStarts[index]) } },
+                            ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Box(
+                                Modifier.size(36.dp).clip(EmojiKeyShape)
+                                    .background(if (selected) colors.primary.copy(alpha = 0.12f) else colors.surface),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    section.icon,
+                                    contentDescription = section.title,
+                                    tint = if (selected) colors.primary else colors.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+                if (onDelete != null) {
+                    IconButton(onClick = onDelete, enabled = canDelete) {
+                        Icon(
+                            Icons.AutoMirrored.Outlined.Backspace,
+                            contentDescription = stringResource(Res.string.chat_emoji_delete),
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
+            }
+            HorizontalDivider(color = colors.outlineVariant.copy(alpha = 0.5f))
 
             LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp)
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 12.dp),
             ) {
-                // Recent Section
-                if (recentEmojis.isNotEmpty()) {
-                    item(key = "section_recent") {
-                        EmojiSectionHeader(title = "Недавние")
-                        val rows = recentEmojis.chunked(columns)
-                        rows.forEach { rowEmojis ->
-                            EmojiRow(
-                                emojis = rowEmojis,
-                                columns = columns,
-                                onSelect = { emoji ->
-                                    recentStore.persistRecentEmoji(emoji)
-                                    onEmojiPicked(emoji)
+                sections.forEachIndexed { sectionIndex, section ->
+                    item(key = "${section.key}:header", contentType = "header") {
+                        Text(
+                            section.title,
+                            style = LocalTypography.current.labelMedium,
+                            color = colors.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 4.dp),
+                        )
+                    }
+                    items(rowCount[sectionIndex], key = { "${section.key}:row:$it" }, contentType = { "emoji-row" }) { row ->
+                        Row(Modifier.fillMaxWidth().height(EmojiCellSize), verticalAlignment = Alignment.CenterVertically) {
+                            repeat(columns) { column ->
+                                val emoji = section.emojis.getOrNull(row * columns + column)
+                                val cell = Modifier.weight(1f).height(EmojiCellSize)
+                                if (emoji == null) Box(cell)
+                                else Box(
+                                    cell.clip(EmojiKeyShape).clickable(role = Role.Button) {
+                                        recentStore.persistRecentEmoji(emoji)
+                                        onEmojiPicked(emoji)
+                                    },
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(emoji, fontSize = 24.sp)
                                 }
-                            )
+                            }
                         }
                     }
                 }
-
-                // Standard Categories
-                categories.forEach { category ->
-                    item(key = "section_${category.key}") {
-                        EmojiSectionHeader(title = category.title)
-                        val rows = category.emojis.chunked(columns)
-                        rows.forEach { rowEmojis ->
-                            EmojiRow(
-                                emojis = rowEmojis,
-                                columns = columns,
-                                onSelect = { emoji ->
-                                    recentStore.persistRecentEmoji(emoji)
-                                    onEmojiPicked(emoji)
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun EmojiSectionHeader(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.labelMedium.copy(
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        ),
-        modifier = Modifier.padding(start = 12.dp, top = 12.dp, bottom = 6.dp)
-    )
-}
-
-@Composable
-private fun EmojiRow(
-    emojis: List<String>,
-    columns: Int,
-    onSelect: (String) -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().height(EmojiCellSize),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        for (i in 0 until columns) {
-            val emoji = emojis.getOrNull(i)
-            if (emoji != null) {
-                Box(
-                    modifier = Modifier
-                        .size(EmojiCellSize)
-                        .clip(EmojiCellShape)
-                        .clickable { onSelect(emoji) },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = emoji,
-                        fontSize = 24.sp,
-                        textAlign = TextAlign.Center
-                    )
-                }
-            } else {
-                Box(modifier = Modifier.size(EmojiCellSize))
             }
         }
     }

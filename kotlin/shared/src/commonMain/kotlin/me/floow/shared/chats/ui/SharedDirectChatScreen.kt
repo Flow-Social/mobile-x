@@ -30,6 +30,7 @@ import androidx.compose.runtime.structuralEqualityPolicy
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -75,7 +76,7 @@ internal fun SharedDirectChatScreen(
 	onBackClick: () -> Unit,
 	onHeaderClick: (() -> Unit)?,
 	onInputChange: (String) -> Unit,
-	onSendClick: () -> Unit,
+	onSendClick: () -> String?,
 	onReplyClick: (Long) -> Unit,
 	onClearReplyClick: () -> Unit,
 	onEditClick: (Long) -> Unit,
@@ -168,11 +169,12 @@ internal fun SharedDirectChatScreen(
 		)
 	}
 	val config = remember(header) { sharedDirectChatConfig(header) }
-	val uiState = remember(state, selectionState) {
-		state.toSharedChatUiState(
-			selectionState = selectionState,
-		)
-	}
+    val textFlights = remember(header.peerUserId) { androidx.compose.runtime.mutableStateMapOf<String, Offset>() }
+    val textSource = remember(header.peerUserId) { mutableStateOf<Offset?>(null) }
+    val mappedState = remember(state, selectionState) { state.toSharedChatUiState(selectionState) }
+    val uiState = if (mappedState is ChatScreenUiState.HasData) {
+        mappedState.copy(messageEntryOrigins = textFlights.toMap())
+    } else mappedState
 	val density = LocalDensity.current
 	val fallbackPanelHeightPx = remember(density) { with(density) { 340.dp.roundToPx() } }
 	val inputController = rememberChatInputController(
@@ -370,7 +372,19 @@ internal fun SharedDirectChatScreen(
 		showInputBar = true,
 		inputController = inputController,
 		actualImeHeightPx = actualImeHeightPx,
-		onSendClick = onSendClick,
+		onTextSourcePosition = { textSource.value = it },
+        onSendClick = {
+            val origin = textSource.value
+            val clientId = onSendClick()
+            if (clientId != null && origin != null) {
+                val key = "cmid_$clientId"
+                textFlights[key] = origin
+                scope.launch {
+                    kotlinx.coroutines.delay(1_000L)
+                    textFlights.remove(key)
+                }
+            }
+        },
 		sendButtonActive = sendButtonActive,
 		isEditMode = hasDataState?.messageToEditId != null,
 		showEmojiButton = config.showEmojiButton,

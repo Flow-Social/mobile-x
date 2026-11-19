@@ -109,4 +109,6 @@
         <item quantity="one">%1$s like</item>
         <item quantity="other">%1$s likes</item>
     </plurals>
+    <string name="chat_emoji_recent">Recent</string>
+    <string name="chat_emoji_delete">Delete character</string>
 </resources>

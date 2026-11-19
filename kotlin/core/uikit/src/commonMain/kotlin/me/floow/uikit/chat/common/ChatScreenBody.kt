@@ -44,7 +44,6 @@ import me.floow.uikit.chat.components.ChatBottomHost
 import me.floow.uikit.chat.components.ChatDraftImageStrip
 import me.floow.uikit.chat.components.MessageInputField
 import me.floow.uikit.chat.input.ChatInputController
-import me.floow.uikit.chat.input.ChatInputMode
 import me.floow.uikit.chat.model.ChatDraftImage
 import me.floow.uikit.chat.model.VideoRecordingState
 import me.floow.uikit.components.media.FlowImageSource
@@ -73,6 +72,7 @@ fun ChatScreenBody(
 	inputController: ChatInputController,
 	actualImeHeightPx: Int,
 	onSendClick: () -> Unit,
+    onTextSourcePosition: (androidx.compose.ui.geometry.Offset) -> Unit = {},
 	sendButtonActive: Boolean,
 	isEditMode: Boolean,
 	showEmojiButton: Boolean,
@@ -125,20 +125,7 @@ fun ChatScreenBody(
 	val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
 	val chatBg = if (isDark) Color(0xFF121217) else Color(0xFFF6F6F6)
 
-	val bottomSpacerHeightPx = when (inputController.inputMode) {
-		ChatInputMode.Keyboard -> if (inputController.isSwitchingEmojiToKeyboard) {
-			maxOf(actualImeHeightPx, inputController.keyboardLayoutHeightPx)
-		} else {
-			actualImeHeightPx
-		}
-		ChatInputMode.Emoji -> inputController.emojiPanelHeightPx
-		ChatInputMode.None -> 0
-		ChatInputMode.Recording -> if (inputController.wasKeyboardOpenBeforeRecording) {
-			actualImeHeightPx
-		} else {
-			0
-		}
-	}
+	val bottomSpacerHeightPx = inputController.bottomPanelHeightPx(actualImeHeightPx)
 	val bottomSpacerHeightDp = with(density) { bottomSpacerHeightPx.toDp() }
 	val navBarsBottomDp = with(density) { WindowInsets.navigationBars.getBottom(density).toDp() }
 	val imeBottomDp = with(density) { WindowInsets.ime.getBottom(density).toDp() }
@@ -255,6 +242,7 @@ fun ChatScreenBody(
 					MessageInputField(
 						controller = inputController,
 						onSendClick = onSendClick,
+                        onTextSourcePosition = onTextSourcePosition,
 						sendButtonActive = sendButtonActive,
 						isEditMode = isEditMode,
 						showEmojiButton = showEmojiButton,

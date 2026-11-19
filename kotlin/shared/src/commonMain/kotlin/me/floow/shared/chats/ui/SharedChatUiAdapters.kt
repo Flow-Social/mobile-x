@@ -118,6 +118,7 @@ internal fun DirectChatScreenState.toSharedChatUiState(
 					null
 				},
                 unreadBoundaryMessageId = unreadBoundaryMessageId,
+                messageEntryTimes = messageEntryTimes,
                 hasNewerHistory = hasNewerMessages,
                 provisionalHistory = provisionalHistory,
                 typingUserNames = typingUserNames,

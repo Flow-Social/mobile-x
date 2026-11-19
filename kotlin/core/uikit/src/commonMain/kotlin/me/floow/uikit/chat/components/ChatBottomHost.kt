@@ -36,20 +36,7 @@ fun ChatBottomHost(
 	val chatBg = if (isDark) Color(0xFF121217) else Color(0xFFF6F6F6)
 	val recordingActive = isRecording || controller.inputMode == ChatInputMode.Recording
 
-	val bottomSpacerHeightPx = when (controller.inputMode) {
-		ChatInputMode.Keyboard -> if (controller.isSwitchingEmojiToKeyboard) {
-			maxOf(actualImeHeightPx, controller.keyboardLayoutHeightPx)
-		} else {
-			actualImeHeightPx
-		}
-		ChatInputMode.Emoji -> controller.emojiPanelHeightPx
-		ChatInputMode.None -> 0
-		ChatInputMode.Recording -> if (controller.wasKeyboardOpenBeforeRecording) {
-			actualImeHeightPx
-		} else {
-			0
-		}
-	}
+	val bottomSpacerHeightPx = controller.bottomPanelHeightPx(actualImeHeightPx)
 	val bottomSpacerHeightDp = with(density) { bottomSpacerHeightPx.toDp() }
 
 	val backgroundModifier = if (recordingActive) {
@@ -61,7 +48,7 @@ fun ChatBottomHost(
 					chatBg.copy(alpha = 0.0f),
 					chatBg.copy(alpha = 0.45f),
 					chatBg.copy(alpha = 0.90f),
-					chatBg,
+					if (controller.showEmojiPanel) MaterialTheme.colorScheme.surface else chatBg,
 				),
 			),
 		)
@@ -82,9 +69,9 @@ fun ChatBottomHost(
 				.testTag("chat_bottom_spacer")
 				.fillMaxWidth()
 				.height(bottomSpacerHeightDp)
-				.background(if (recordingActive) Color.Transparent else chatBg),
+				.background(if (recordingActive) Color.Transparent else if (controller.showEmojiPanel) MaterialTheme.colorScheme.surface else chatBg),
 		) {
-			if (controller.inputMode == ChatInputMode.Emoji && controller.emojiPanelHeightPx > 0) {
+			if (controller.showEmojiPanel && bottomSpacerHeightPx > 0) {
 				Box(
 					modifier = Modifier
 						.testTag("chat_emoji_panel")

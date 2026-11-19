@@ -15,11 +15,9 @@ import me.floow.app.push.ForegroundVisibleChatStore
 import me.floow.app.push.PushNotificationChannels
 import me.floow.app.push.PushServiceController
 import me.floow.app.push.PushTokenSyncScheduler
-import me.floow.app.presence.PresenceLifecycleObserver
 import me.floow.app.notifications.NotificationsReadSyncScheduler
 import me.floow.domain.auth.AuthenticationManager
 import me.floow.domain.data.repos.DirectMessagesOutgoingRetryScheduler
-import me.floow.domain.data.repos.PresenceRepository
 import androidx.lifecycle.ProcessLifecycleOwner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -51,9 +49,7 @@ class FlowApplication : Application() {
 				me.floow.domain.lifecycle.AppLifecycleBridge.onAppBackground()
 			}
 		})
-		koin?.getOrNull<PresenceRepository>()?.let { presenceRepository: PresenceRepository ->
-			ProcessLifecycleOwner.get().lifecycle.addObserver(PresenceLifecycleObserver(presenceRepository))
-		}
+
 		koin?.getOrNull<ForegroundVisibleChatStore>()?.let { foregroundVisibleChatStore ->
 			ProcessLifecycleOwner.get().lifecycle.addObserver(
 				ChatNotificationLifecycleObserver(foregroundVisibleChatStore)

@@ -9,7 +9,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
-import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
@@ -31,8 +30,6 @@ private enum class ChatInputUiState {
 }
 
 private const val MIN_VALID_KEYBOARD_HEIGHT_PX = 200
-private const val STABLE_KEYBOARD_HEIGHT_DELTA_PX = 24
-private const val STABLE_KEYBOARD_HEIGHT_LARGE_SHIFT_PX = 96
 
 @Stable
 class ChatInputController internal constructor(
@@ -61,8 +58,6 @@ class ChatInputController internal constructor(
 	var stableKeyboardHeightPx by mutableIntStateOf(0)
 		private set
 
-	private var lastKeyboardSampleHeightPx by mutableIntStateOf(0)
-	private var consecutiveNearKeyboardSamples by mutableIntStateOf(0)
 	private var keyboardHandoffHeightPx by mutableIntStateOf(0)
 	private var keepEmojiModeUntilImeHidden by mutableStateOf(false)
 
@@ -94,14 +89,14 @@ class ChatInputController internal constructor(
 		get() = when (uiState) {
 			ChatInputUiState.KeyboardRequested -> when {
 				imeHeightPx > 0 -> imeHeightPx
-				shouldRestoreKeyboardOnResume -> max(stableKeyboardHeightPx, fallbackPanelHeightPx)
+				shouldRestoreKeyboardOnResume -> preferredEmojiHeightPx
 				else -> 0
 			}
 			ChatInputUiState.KeyboardVisible -> imeHeightPx
 			ChatInputUiState.KeyboardClosing -> imeHeightPx
 			ChatInputUiState.SwitchingEmojiToKeyboard -> max(imeHeightPx, keyboardHandoffHeightPx)
 			ChatInputUiState.Recording -> if (wasKeyboardOpenBeforeRecording) {
-				max(imeHeightPx, max(stableKeyboardHeightPx, fallbackPanelHeightPx))
+				max(imeHeightPx, preferredEmojiHeightPx)
 			} else {
 				0
 			}
@@ -109,12 +104,34 @@ class ChatInputController internal constructor(
 			ChatInputUiState.EmojiVisible -> 0
 		}
 
-	val emojiPanelHeightPx: Int
-		get() = if (uiState == ChatInputUiState.EmojiVisible) {
-			max(stableKeyboardHeightPx, fallbackPanelHeightPx)
-		} else {
-			0
-		}
+    private val preferredEmojiHeightPx: Int
+        get() = stableKeyboardHeightPx.takeIf { it > 0 } ?: fallbackPanelHeightPx
+
+    val showEmojiPanel: Boolean
+        get() = uiState == ChatInputUiState.EmojiVisible || isSwitchingEmojiToKeyboard
+
+    fun bottomPanelHeightPx(actualImeHeightPx: Int): Int = when (uiState) {
+        ChatInputUiState.EmojiVisible -> max(actualImeHeightPx, preferredEmojiHeightPx)
+        ChatInputUiState.Closed -> 0
+        ChatInputUiState.KeyboardVisible,
+        ChatInputUiState.KeyboardClosing -> actualImeHeightPx
+        ChatInputUiState.Recording -> if (wasKeyboardOpenBeforeRecording) actualImeHeightPx else 0
+        else -> max(actualImeHeightPx, keyboardLayoutHeightPx)
+    }
+
+    internal fun finishEmojiKeyboardHandoff() {
+        if (!isSwitchingEmojiToKeyboard) return
+        val hasKeyboard = imeHeightPx > 0
+        clearKeyboardHandoff()
+        uiState = if (hasKeyboard) ChatInputUiState.KeyboardVisible else ChatInputUiState.EmojiVisible
+        rememberSettledKeyboardHeight()
+    }
+
+    internal fun rememberSettledKeyboardHeight() {
+        if (uiState == ChatInputUiState.KeyboardVisible && imeHeightPx >= MIN_VALID_KEYBOARD_HEIGHT_PX) {
+            stableKeyboardHeightPx = imeHeightPx
+        }
+    }
 
 	fun enterRecording() {
 		wasKeyboardOpenBeforeRecording = imeHeightPx > 0 || inputMode == ChatInputMode.Keyboard
@@ -184,8 +201,6 @@ class ChatInputController internal constructor(
 		if (inputMode == ChatInputMode.Keyboard && isTextFieldFocused) return
 
 		stableKeyboardHeightPx = heightPx
-		lastKeyboardSampleHeightPx = heightPx
-		consecutiveNearKeyboardSamples = 0
 		logState("syncPersistedKeyboardHeight($heightPx)")
 	}
 
@@ -193,7 +208,6 @@ class ChatInputController internal constructor(
 			imeHeightPx = heightPx.coerceAtLeast(0)
 			if (imeHeightPx > 0) {
 			imeWasOpenDuringCurrentSession = true
-			updateStableKeyboardHeight(imeHeightPx)
 			if (uiState == ChatInputUiState.SwitchingEmojiToKeyboard && imeHeightPx >= keyboardHandoffHeightPx) {
 				clearKeyboardHandoff()
 				uiState = ChatInputUiState.KeyboardVisible
@@ -206,8 +220,8 @@ class ChatInputController internal constructor(
 				ChatInputUiState.Recording -> Unit
 				ChatInputUiState.EmojiVisible -> {
 					if (!keepEmojiModeUntilImeHidden) {
-						if (imeHeightPx < max(stableKeyboardHeightPx, fallbackPanelHeightPx)) {
-							keyboardHandoffHeightPx = max(stableKeyboardHeightPx, fallbackPanelHeightPx)
+						if (imeHeightPx < preferredEmojiHeightPx) {
+							keyboardHandoffHeightPx = preferredEmojiHeightPx
 							uiState = ChatInputUiState.SwitchingEmojiToKeyboard
 						} else {
 							clearKeyboardHandoff()
@@ -226,7 +240,7 @@ class ChatInputController internal constructor(
 					ChatInputUiState.KeyboardVisible,
 					ChatInputUiState.KeyboardClosing -> true
 					ChatInputUiState.SwitchingEmojiToKeyboard ->
-						!isTextFieldFocused || imeWasOpenDuringCurrentSession
+						imeWasOpenDuringCurrentSession
 					else -> false
 				}
 			if (shouldClose) {
@@ -237,7 +251,6 @@ class ChatInputController internal constructor(
 					isTextFieldFocused &&
 					(uiState == ChatInputUiState.KeyboardVisible || uiState == ChatInputUiState.KeyboardClosing)
 				) {
-					resetKeyboardSampling()
 					clearKeyboardHandoff()
 					if (uiState != ChatInputUiState.KeyboardRequested) {
 						uiState = ChatInputUiState.KeyboardRequested
@@ -246,7 +259,6 @@ class ChatInputController internal constructor(
 					imeWasOpenDuringCurrentSession = false
 					logState("onImeHeightChanged(0) → keep_keyboard_requested")
 				} else {
-					resetKeyboardSampling()
 					clearKeyboardHandoff()
 					uiState = ChatInputUiState.Closed
 					imeWasOpenDuringCurrentSession = false
@@ -311,7 +323,7 @@ class ChatInputController internal constructor(
 		imeWasOpenDuringCurrentSession = false
 		when (uiState) {
 			ChatInputUiState.EmojiVisible -> {
-				keyboardHandoffHeightPx = max(stableKeyboardHeightPx, fallbackPanelHeightPx)
+				keyboardHandoffHeightPx = preferredEmojiHeightPx
 				uiState = ChatInputUiState.SwitchingEmojiToKeyboard
 			}
 			ChatInputUiState.KeyboardClosing -> {
@@ -374,7 +386,7 @@ class ChatInputController internal constructor(
 	fun onTextFieldFocusChanged(isFocused: Boolean) {
 		isTextFieldFocused = isFocused
 		if (isFocused && uiState == ChatInputUiState.EmojiVisible) {
-			keyboardHandoffHeightPx = max(stableKeyboardHeightPx, fallbackPanelHeightPx)
+			keyboardHandoffHeightPx = preferredEmojiHeightPx
 			imeWasOpenDuringCurrentSession = false
 			uiState = ChatInputUiState.SwitchingEmojiToKeyboard
 			logState("onTextFieldFocusChanged(isFocused=true) → emoji_to_keyboard_handoff")
@@ -445,41 +457,6 @@ class ChatInputController internal constructor(
 		} else {
 			this
 		}
-	}
-
-	private fun updateStableKeyboardHeight(heightPx: Int) {
-		if (heightPx < MIN_VALID_KEYBOARD_HEIGHT_PX) return
-
-		if (stableKeyboardHeightPx == 0) {
-			stableKeyboardHeightPx = heightPx
-			lastKeyboardSampleHeightPx = heightPx
-			consecutiveNearKeyboardSamples = 0
-			return
-		}
-
-		val isNearLastSample = lastKeyboardSampleHeightPx > 0 &&
-			abs(heightPx - lastKeyboardSampleHeightPx) <= STABLE_KEYBOARD_HEIGHT_DELTA_PX
-		consecutiveNearKeyboardSamples = if (isNearLastSample) {
-			consecutiveNearKeyboardSamples + 1
-		} else {
-			0
-		}
-		lastKeyboardSampleHeightPx = heightPx
-
-		val isNearStable = abs(heightPx - stableKeyboardHeightPx) <= STABLE_KEYBOARD_HEIGHT_DELTA_PX
-		val isReasonableShift = abs(heightPx - stableKeyboardHeightPx) <= STABLE_KEYBOARD_HEIGHT_LARGE_SHIFT_PX
-		val isStableCandidate = isNearStable ||
-			(isReasonableShift && consecutiveNearKeyboardSamples >= 1) ||
-			consecutiveNearKeyboardSamples >= 2
-
-		if (isStableCandidate) {
-			stableKeyboardHeightPx = heightPx
-		}
-	}
-
-	private fun resetKeyboardSampling() {
-		lastKeyboardSampleHeightPx = 0
-		consecutiveNearKeyboardSamples = 0
 	}
 
 	private fun clearKeyboardHandoff() {

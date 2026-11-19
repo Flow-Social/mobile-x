@@ -86,6 +86,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -142,6 +143,7 @@ private const val RecordCancelThresholdPx = 220f
 fun MessageInputField(
 	controller: ChatInputController,
 	onSendClick: () -> Unit,
+    onTextSourcePosition: (Offset) -> Unit = {},
 	sendButtonActive: Boolean,
 	isEditMode: Boolean = false,
 	showEmojiButton: Boolean = true,
@@ -523,7 +525,20 @@ fun MessageInputField(
 								contentAlignment = Alignment.CenterStart,
 								modifier = Modifier
 									.fillMaxWidth()
-									.onSizeChanged { size ->
+									.onGloballyPositioned { coordinates ->
+                                if (showTextField) {
+                                    val position = coordinates.positionInRoot()
+                                    val layout = textLayoutResult?.takeIf { it.lineCount > 0 }
+                                    val lineTop = layout?.getLineTop(0) ?: 0f
+                                    val lineBottom = layout?.getLineBottom(0) ?: coordinates.size.height.toFloat()
+                                    val lineLeft = layout?.getLineLeft(0) ?: 0f
+                                    onTextSourcePosition(Offset(
+                                        position.x + lineLeft,
+                                        position.y + (lineTop + lineBottom) / 2f - scrollOffsetPx,
+                                    ))
+                                }
+                            }
+                            .onSizeChanged { size ->
 										textFieldViewportHeightPx = size.height
 									}
 									.chatInputFadingEdge(

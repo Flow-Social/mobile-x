@@ -97,4 +97,6 @@
         <item quantity="many">%1$s лайков</item>
         <item quantity="other">%1$s лайка</item>
     </plurals>
+    <string name="chat_emoji_recent">Недавние</string>
+    <string name="chat_emoji_delete">Удалить символ</string>
 </resources>

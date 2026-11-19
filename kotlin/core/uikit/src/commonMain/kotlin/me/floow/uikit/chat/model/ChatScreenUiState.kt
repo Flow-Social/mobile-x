@@ -106,6 +106,8 @@ interface ChatScreenUiState {
 		val highlightRequest: ChatHighlightRequest? = null,
 		val scrollRequest: ChatScrollRequest? = null,
 		val unreadBoundaryMessageId: Long? = null,
+        val messageEntryTimes: Map<String, Long> = emptyMap(),
+        val messageEntryOrigins: Map<String, androidx.compose.ui.geometry.Offset> = emptyMap(),
 		val typingUserNames: List<String> = emptyList(),
 		val pinnedMessages: List<ChatMessage> = emptyList(),
 		val messageToEditId: Long? = null,

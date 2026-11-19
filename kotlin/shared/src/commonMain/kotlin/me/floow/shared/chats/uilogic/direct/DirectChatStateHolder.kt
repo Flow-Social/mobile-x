@@ -79,6 +79,7 @@ sealed interface DirectChatScreenState {
 		val peerLastSeenAtMillis: Long? = null,
 		val pinnedMessages: List<ChatMessageItemModel> = emptyList(),
 		val typingUserNames: List<String> = emptyList(),
+        val messageEntryTimes: Map<String, Long> = emptyMap(),
 		val conversationActivityState: ConversationActivityState = ConversationActivityState.None,
 	) : DirectChatScreenState
 }
@@ -787,15 +788,15 @@ class DirectChatStateHolder(
 		)
 	}
 
-	fun sendOrEdit() {
+	fun sendOrEdit(): String? {
 		val current = _state.value
 		val conversationId = when (current) {
 			is DirectChatScreenState.HasData -> current.conversationId
 			is DirectChatScreenState.NoMessages -> current.conversationId
-			else -> return
+			else -> return null
 		} ?: run {
 			_events.tryEmit(Event.ShowMessage("chat conversation id is missing"))
-			return
+			return null
 		}
 		val text = when (current) {
 			is DirectChatScreenState.HasData -> current.input.trim()
@@ -811,10 +812,10 @@ class DirectChatStateHolder(
 			is DirectChatScreenState.HasData -> current.header
 			is DirectChatScreenState.NoMessages -> current.header
 		}
-		if (text.isEmpty()) return
+		if (text.isEmpty()) return null
 
 		if (editingMessageId == null) {
-			sendOptimisticMessage(
+			val clientId = sendOptimisticMessage(
 				conversationId = conversationId,
 				header = header,
 				text = text,
@@ -822,11 +823,11 @@ class DirectChatStateHolder(
                 replyToMessageText = replyDraft?.preview,
             )
             followLatestAfterSend()
-            return
+            return clientId
 		}
 		if (originalEditingMessage == null) {
 			_events.tryEmit(Event.ShowMessage("message action failed"))
-			return
+			return null
 		}
 
 		inputController.stopOutgoingTyping(conversationId)
@@ -898,6 +899,7 @@ class DirectChatStateHolder(
 				_events.tryEmit(Event.ShowMessage(it.message ?: "message action failed"))
 			}
 		}
+        return null
 	}
 
 	private fun sendOptimisticMessage(
@@ -908,7 +910,7 @@ class DirectChatStateHolder(
 		replyToMessageText: String? = null,
 		existingMessageId: Long? = null,
 		clientMessageId: String? = null,
-	) {
+	): String {
 		val optimisticId = existingMessageId ?: timelineReducer.nextOptimisticMessageId()
 		val normalizedClientMessageId = clientMessageId?.trim()?.takeIf(String::isNotEmpty)
 			?: timelineReducer.nextClientMessageId(optimisticId)
@@ -931,13 +933,15 @@ class DirectChatStateHolder(
 			createdAtMillis = createdAtMillis,
 			deliveryState = ChatDeliveryState.SENDING,
 		)
-		inputController.stopOutgoingTyping(conversationId)
-		_state.update { state ->
-			when (state) {
-				is DirectChatScreenState.HasData -> {
-					val messages = timelineReducer.upsertMessage(state.messages, optimisticMessage, inputController.inFlightEdits)
+        val newEntry = existingMessageId == null && existingMessage == null
+        inputController.stopOutgoingTyping(conversationId)
+        _state.update { state ->
+            when (state) {
+                is DirectChatScreenState.HasData -> {
+                    val messages = timelineReducer.upsertMessage(state.messages, optimisticMessage, inputController.inFlightEdits)
 					state.copy(
 						messages = messages,
+                        messageEntryTimes = if (newEntry) state.messageEntryTimes.withEntry(optimisticMessage) else state.messageEntryTimes,
 						input = "",
 						replyDraft = null,
 						editingMessageId = null,
@@ -949,6 +953,7 @@ class DirectChatStateHolder(
 					conversationId = conversationId,
 					header = header,
 					messages = listOf(optimisticMessage),
+                    messageEntryTimes = if (newEntry) emptyMap<String, Long>().withEntry(optimisticMessage) else emptyMap(),
 					input = "",
 					replyDraft = null,
 					editingMessageId = null,
@@ -1042,6 +1047,7 @@ class DirectChatStateHolder(
 				pendingOutgoingClientMessageIds.remove(optimisticId)
 			}
 		}
+        return normalizedClientMessageId
 	}
 
 	fun loadMore() {
@@ -1383,6 +1389,10 @@ class DirectChatStateHolder(
 								)
 								current.copy(
 									messages = timelineReducer.applyPeerReadState(updated, nextPeerLastReadMessageId),
+                                    messageEntryTimes = if (!wasAlreadyInTimeline && event.animateEntry &&
+                                        !normalizedMessage.isOutgoing && normalizedMessage.id > windowEnd &&
+                                        !current.keepAnchorRequest && normalizedMessage.content is ChatMessageContent.Text
+                                    ) current.messageEntryTimes.withEntry(normalizedMessage) else current.messageEntryTimes,
 									scrollToBottomRequestToken = if (shouldAutoScrollToBottom) {
 										scrollAnchorController.nextScrollRequestToken()
 									} else {
@@ -1404,6 +1414,9 @@ class DirectChatStateHolder(
 								),
 								scrollToBottomRequestToken = scrollAnchorController.nextScrollRequestToken(),
 								scrollToBottomBadgeCount = 0,
+                                messageEntryTimes = if (event.animateEntry && event.message.content is ChatMessageContent.Text &&
+                                    !timelineReducer.isOutgoingMessage(event.message.senderUserId, current.header)
+                                ) emptyMap<String, Long>().withEntry(event.message) else emptyMap(),
 								peerLastReadMessageId = event.peerLastReadMessageId ?: 0L,
 								peerIsOnline = current.peerIsOnline,
 								peerLastSeenAtMillis = current.peerLastSeenAtMillis,
@@ -1660,4 +1673,11 @@ class DirectChatStateHolder(
             }
         }
     }
+}
+
+private fun Map<String, Long>.withEntry(message: ChatMessageItemModel): Map<String, Long> {
+    val key = message.clientMessageId?.let { "cmid_$it" } ?: "msg_${message.id}"
+    val now = me.floow.shared.chats.ui.currentChatEpochMillis()
+    return filterValues { now - it in 0..1_000L }.entries.toList().takeLast(15)
+        .associate { it.key to it.value } + (key to now)
 }

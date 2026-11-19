@@ -3,6 +3,9 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import kotlinx.coroutines.delay
 import androidx.compose.ui.platform.LocalDensity
 
 @Composable
@@ -14,7 +17,21 @@ fun rememberChatInputLayoutState(
 	val imeBottomPx = WindowInsets.ime.getBottom(density)
 	val actualImeHeightPx = (imeBottomPx - navigationBarBottomPx).coerceAtLeast(0)
 
-	controller.onImeHeightChanged(actualImeHeightPx)
+	SideEffect { controller.onImeHeightChanged(actualImeHeightPx) }
+    val switching = controller.isSwitchingEmojiToKeyboard
+    LaunchedEffect(controller, switching, actualImeHeightPx) {
+        if (actualImeHeightPx > 0) {
+            delay(150)
+            if (switching) controller.finishEmojiKeyboardHandoff()
+            else controller.rememberSettledKeyboardHeight()
+        }
+    }
+    LaunchedEffect(controller, switching, controller.keyboardRequestToken) {
+        if (switching) {
+            delay(750)
+            controller.finishEmojiKeyboardHandoff()
+        }
+    }
 
 	return actualImeHeightPx
 }

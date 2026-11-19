@@ -7,7 +7,11 @@ import io.ktor.websocket.Frame
 import io.ktor.websocket.WebSocketSession
 import io.ktor.websocket.readText
 import io.ktor.websocket.send
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -69,6 +73,7 @@ class PresenceRealtimeApiImpl(
 				}
 			}
 		}.getOrElse { throwable ->
+            if (throwable is CancellationException) throw throwable
 			logger.d("PresenceRealtimeApiImpl.openSession", "Failed to open websocket: ${throwable.message}")
 			return null
 		}
@@ -82,6 +87,7 @@ private class PresenceRealtimeSessionImpl(
 ) : PresenceRealtimeSession {
 	private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 	private val eventsChannel = Channel<PresenceRealtimeEvent>(capacity = Channel.BUFFERED)
+    private val pongs = Channel<Unit>(Channel.CONFLATED)
 
 	override val events: Flow<PresenceRealtimeEvent> = eventsChannel.receiveAsFlow()
 
@@ -90,9 +96,10 @@ private class PresenceRealtimeSessionImpl(
 			try {
 				for (frame in socketSession.incoming) {
 					if (frame !is Frame.Text) continue
-					parsePresenceEvent(frame.readText())?.let { event ->
-						eventsChannel.send(event)
-					}
+                    val packet = runCatching { JsonSerializer.parseToJsonElement(frame.readText()).jsonObject }.getOrNull()
+                        ?: continue
+                    if (packet.stringOrNull("type") == "pong") pongs.trySend(Unit)
+                    else parsePresenceEvent(packet)?.let { eventsChannel.send(it) }
 				}
 			} catch (throwable: Throwable) {
 				logger.d("PresenceRealtimeSessionImpl.events", "WebSocket stream error: ${throwable.message}")
@@ -101,6 +108,27 @@ private class PresenceRealtimeSessionImpl(
 				close()
 			}
 		}
+        scope.launch {
+            while (isActive) {
+                delay(25_000L)
+                pongs.tryReceive()
+                val healthy = withTimeoutOrNull(10_000L) {
+                    try {
+                        socketSession.send(Frame.Text("""{"type":"ping"}"""))
+                        pongs.receive()
+                        true
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        false
+                    }
+                } == true
+                if (!healthy) {
+                    close()
+                    break
+                }
+            }
+        }
 	}
 
 	override suspend fun subscribe(userIds: List<String>) {
@@ -112,8 +140,9 @@ private class PresenceRealtimeSessionImpl(
 	}
 
 	override suspend fun close() {
-		scope.cancel()
-		runCatching { socketSession.outgoing.close() }
+        eventsChannel.close()
+        socketSession.cancel()
+        scope.cancel()
 	}
 
 	private suspend fun sendCommand(type: String, userIds: List<String>) {
@@ -128,8 +157,7 @@ private class PresenceRealtimeSessionImpl(
 	}
 }
 
-private fun parsePresenceEvent(rawText: String): PresenceRealtimeEvent? {
-	val root = runCatching { JsonSerializer.parseToJsonElement(rawText).jsonObject }.getOrNull() ?: return null
+private fun parsePresenceEvent(root: JsonObject): PresenceRealtimeEvent? {
 	val type = root.stringOrNull("type") ?: return null
 	val serverTimestampMillis = root.longOrNullFlexible("server_timestamp") ?: currentTimeMillis()
 	return when (type) {

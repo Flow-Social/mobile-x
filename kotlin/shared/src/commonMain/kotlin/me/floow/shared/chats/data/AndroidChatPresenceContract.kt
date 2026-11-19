@@ -3,6 +3,7 @@ package me.floow.shared.chats.data
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 import me.floow.domain.data.repos.PresenceRepository
 import me.floow.shared.chats.model.ChatPresenceState
 import me.floow.shared.chats.model.ChatTypingState
@@ -15,7 +16,7 @@ class AndroidChatPresenceContract(
 	override val connectionState = MutableStateFlow<RealtimeConnectionState>(RealtimeConnectionState.Idle)
 
 	override fun setTargets(owner: String, userIds: List<String>) {
-		presenceRepository.setTargets(owner, userIds)
+		presenceRepository.setTargets(owner, userIds, priority = true)
 	}
 
 	override fun clearTargets(owner: String) {
@@ -28,8 +29,9 @@ class AndroidChatPresenceContract(
 			ChatPresenceState(
 				isOnline = presence?.isOnline == true,
 				lastSeenAtMillis = presence?.lastSeenAtMillis,
+                isKnown = presence != null,
 			)
-		}
+		}.distinctUntilChanged()
 	}
 
 	override fun observePeerTyping(peerUserId: String): Flow<ChatTypingState> {
