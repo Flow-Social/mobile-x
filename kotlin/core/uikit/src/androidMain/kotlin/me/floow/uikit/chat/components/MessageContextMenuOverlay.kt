@@ -291,7 +291,7 @@ private val ChatContextMenuAction.icon: ImageVector
 		ChatContextMenuAction.Select -> Icons.Outlined.ContentCopy
 	}
 
-private val ChatContextMenuAction.labelResId: Int
+internal val ChatContextMenuAction.labelResId: Int
 	get() = when (this) {
 		ChatContextMenuAction.Reply -> R.string.chat_menu_reply
 		ChatContextMenuAction.Pin -> R.string.chat_menu_pin

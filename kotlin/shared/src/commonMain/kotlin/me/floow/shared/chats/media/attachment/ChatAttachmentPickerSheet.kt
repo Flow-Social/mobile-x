@@ -111,6 +111,7 @@ fun ChatAttachmentPickerSheet(
         expandedSheetHeightFraction = 1f,
         respectStatusBar = false,
         avoidIme = false,
+        observeIme = false,
         minSheetHeight = 440.dp,
         sheetHeightFraction = 0.58f,
         modifier = modifier.fillMaxSize(),

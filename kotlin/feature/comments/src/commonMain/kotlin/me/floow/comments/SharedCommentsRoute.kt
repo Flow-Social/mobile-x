@@ -310,7 +310,7 @@ fun SharedCommentsRoute(
 			{ replyField?.replyId?.let(component::jumpToComment) }
 		},
 		dividerColor = config.dividerColor,
-		content = { contentModifier ->
+		content = { contentModifier, _ ->
 			when (state) {
 				is ChatScreenUiState.Loading -> Box(
 					modifier = contentModifier,
@@ -460,13 +460,14 @@ fun SharedCommentsRoute(
 				}
 			}
 		},
-		contextMenuOverlay = {
+		contextMenuOverlay = { viewport ->
 			val menuTargetMessage = contextMenuMessageId?.let(messagesById::get)
 			if (menuTargetMessage != null) {
 				MessageContextMenuOverlay(
 					actions = component.resolveContextMenuActions(menuTargetMessage),
 					anchorRect = contextMenuAnchorRect,
 					highlightRect = contextMenuHighlightRect,
+					messageViewport = viewport,
 					onActionClick = { action ->
 						when (action) {
 							ChatContextMenuAction.Reply -> component.addCurrentReply(menuTargetMessage)

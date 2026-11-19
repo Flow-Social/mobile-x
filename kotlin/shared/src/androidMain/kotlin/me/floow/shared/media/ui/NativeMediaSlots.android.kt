@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -99,10 +100,11 @@ actual fun NativeCameraRecordingPreview(
 @OptIn(UnstableApi::class)
 @Composable
 actual fun NativeVideoCirclePlayer(
+    messageKey: String,
     videoUrl: String,
     thumbnailUrl: String?,
     playbackUiState: VideoCirclePlaybackUiState,
-    isElevated: Boolean,
+    showMenuPreview: Boolean,
     onClick: (() -> Unit)?,
     onSeek: ((Float) -> Unit)?,
     onPlaybackEnded: (() -> Unit)?,
@@ -114,30 +116,30 @@ actual fun NativeVideoCirclePlayer(
     val manager = remember(context) { VideoCirclePlayerProvider.get(context) }
     val managerState by manager.state.collectAsState()
 
-    DisposableEffect(manager, onPlaybackEnded, videoUrl) {
-        val previousCallback = manager.onPlaybackEnded
-        manager.onPlaybackEnded = { endedKey ->
-            if (endedKey == videoUrl) {
-                onPlaybackEnded?.invoke()
+    val currentOnPlaybackEnded = androidx.compose.runtime.rememberUpdatedState(onPlaybackEnded)
+    val isSelected = playbackUiState.isPlaying || playbackUiState.isPaused
+    if (isSelected) {
+        DisposableEffect(manager, messageKey) {
+            val callback: (String) -> Unit = { endedKey ->
+                if (endedKey == messageKey) currentOnPlaybackEnded.value?.invoke()
             }
-            previousCallback?.invoke(endedKey)
-        }
-        onDispose {
-            if (manager.onPlaybackEnded == previousCallback) {
-                manager.onPlaybackEnded = null
+            manager.onPlaybackEnded = callback
+            onDispose {
+                if (manager.onPlaybackEnded === callback) manager.onPlaybackEnded = null
             }
         }
     }
 
     var isFirstFrameRendered by remember(videoUrl) { mutableStateOf(false) }
+    var menuFrame by remember(videoUrl, showMenuPreview) { mutableStateOf<ImageBitmap?>(null) }
 
-    LaunchedEffect(playbackUiState, videoUrl) {
+    LaunchedEffect(playbackUiState, messageKey, videoUrl) {
         when (playbackUiState) {
             VideoCirclePlaybackUiState.ActivePlaying -> {
                 if (videoUrl.isNotBlank()) {
                     manager.play(
                         VideoCirclePlaybackRequest(
-                            uiKey = videoUrl,
+                            uiKey = messageKey,
                             messageId = 0L,
                             source = videoUrl,
                             muted = false,
@@ -147,14 +149,14 @@ actual fun NativeVideoCirclePlayer(
                 }
             }
             VideoCirclePlaybackUiState.ActivePaused -> {
-                if (managerState.activeSource == videoUrl && managerState.status == VideoCirclePlaybackStatus.Playing) {
+                if (managerState.activeUiKey == messageKey) {
                     manager.pause()
                 }
             }
             VideoCirclePlaybackUiState.IdlePreview,
             VideoCirclePlaybackUiState.Uploading -> {
                 isFirstFrameRendered = false
-                if (managerState.activeSource == videoUrl && managerState.isUserActivated) {
+                if (managerState.activeUiKey == messageKey && managerState.isUserActivated) {
                     manager.pause()
                 }
             }
@@ -164,7 +166,7 @@ actual fun NativeVideoCirclePlayer(
     val isCurrentActive = (playbackUiState == VideoCirclePlaybackUiState.ActivePlaying ||
         playbackUiState == VideoCirclePlaybackUiState.ActivePaused) &&
         videoUrl.isNotBlank() &&
-        managerState.activeSource == videoUrl &&
+        managerState.activeUiKey == messageKey &&
         !isSourceError
 
     val progress = remember { mutableFloatStateOf(0f) }
@@ -279,14 +281,25 @@ actual fun NativeVideoCirclePlayer(
                 player = manager.player!!,
                 onSourceError = { isSourceError = true },
                 onRenderedFirstFrame = { isFirstFrameRendered = true },
+                showMenuPreview = showMenuPreview,
+                captureMenuPreview = showMenuPreview && isFirstFrameRendered,
+                onMenuPreview = { menuFrame = it },
                 modifier = Modifier.fillMaxSize(),
             )
         }
 
         // Thumbnail placeholder (rendered on top of video surface until first frame is actually decoded and rendered)
-        val showThumbnail = !isCurrentActive || !isFirstFrameRendered
+        val showThumbnail = showMenuPreview || !isCurrentActive || !isFirstFrameRendered
         if (showThumbnail) {
-            if (!thumbnailUrl.isNullOrBlank()) {
+            val snapshot = menuFrame
+            if (snapshot != null) {
+                Image(
+                    bitmap = snapshot,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else if (!thumbnailUrl.isNullOrBlank()) {
                 ProgressiveImage(
                     source = FlowImageSource.of(url = null, microThumb = thumbnailUrl),
                     contentDescription = "Video Thumbnail",
@@ -329,9 +342,6 @@ actual fun NativeVideoCirclePlayer(
                         isPaused = isPaused,
                         progress = progress.floatValue,
                         onSeekingChange = { isSeeking = it },
-                        consumeTapUp = true,
-                        onTogglePlayback = onClick,
-                        onLongPress = {},
                         onSeekProgress = { nextProg: Float ->
                             manager.seekToProgress(nextProg)
                             onSeek?.invoke(nextProg)

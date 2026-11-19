@@ -83,22 +83,17 @@ internal fun HighlightedMessageRow(
 internal fun SelectableMessageRow(
 	showSelector: Boolean,
 	selected: Boolean,
+	indicatorAlignment: Alignment,
 	interactionEnabled: Boolean = true,
 	modifier: Modifier = Modifier,
 	onClick: () -> Unit,
 	onLongClick: () -> Unit,
 	content: @Composable () -> Unit
 ) {
-	Row(modifier = modifier, verticalAlignment = Alignment.Top) {
-		if (showSelector) {
-			MessageSelectionIndicator(
-				selected = selected,
-				modifier = Modifier.padding(end = 10.dp, top = 4.dp)
-			)
-		}
+	Box(modifier = modifier) {
 		Box(
 			modifier = Modifier
-				.weight(1f)
+				.fillMaxWidth()
 				.then(
 					if (interactionEnabled) {
 						Modifier.combinedClickable(
@@ -113,6 +108,11 @@ internal fun SelectableMessageRow(
 				)
 		) {
 			content()
+		}
+		if (showSelector) {
+			Box(Modifier.matchParentSize(), contentAlignment = indicatorAlignment) {
+				MessageSelectionIndicator(selected = selected)
+			}
 		}
 	}
 }

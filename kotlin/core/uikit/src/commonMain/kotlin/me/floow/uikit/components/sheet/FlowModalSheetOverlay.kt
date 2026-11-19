@@ -87,6 +87,7 @@ fun FlowModalSheetOverlay(
     imeAnchorOffsetFromSheetTop: Dp? = null,
     smoothScrollExpand: Boolean = true,
     twoStageDismiss: Boolean = true,
+    observeIme: Boolean = true,
     content: @Composable FlowModalSheetScope.() -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -126,7 +127,7 @@ fun FlowModalSheetOverlay(
         val maxSheetHeight = with(density) { maxSheetHeightPx.toDp() }
         val effectiveMinSheetHeight = minSheetHeight.coerceAtMost(maxSheetHeight)
         val collapsedCardHeight = (maxHeight * sheetHeightFraction).coerceIn(effectiveMinSheetHeight, maxSheetHeight)
-        val imeBottomPx = WindowInsets.ime.getBottom(density)
+        val imeBottomPx = if (observeIme) WindowInsets.ime.getBottom(density) else 0
         val navigationBarBottomPx = WindowInsets.navigationBars.getBottom(density)
         val actualImeHeightPx = (imeBottomPx - navigationBarBottomPx).coerceAtLeast(0).toFloat()
         val expandedCardHeight = if (expandable) {

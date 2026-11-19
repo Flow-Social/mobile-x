@@ -2,6 +2,7 @@ package me.floow.shared.chats.media.attachment
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import me.floow.uikit.chat.common.ChatModalWindow
 
 @Composable
 fun ChatAttachmentPickerModal(
@@ -11,11 +12,13 @@ fun ChatAttachmentPickerModal(
     initialSelectedUris: List<String> = emptyList(),
     maxSelection: Int = 10,
 ) {
-    ChatAttachmentPickerSheet(
-        onDismissRequest = onDismissRequest,
-        onImagesSelected = onImagesSelected,
-        modifier = modifier,
-        initialSelectedUris = initialSelectedUris,
-        maxSelection = maxSelection,
-    )
+    ChatModalWindow(onDismissRequest = onDismissRequest) {
+        ChatAttachmentPickerSheet(
+            onDismissRequest = onDismissRequest,
+            onImagesSelected = onImagesSelected,
+            modifier = modifier,
+            initialSelectedUris = initialSelectedUris,
+            maxSelection = maxSelection,
+        )
+    }
 }

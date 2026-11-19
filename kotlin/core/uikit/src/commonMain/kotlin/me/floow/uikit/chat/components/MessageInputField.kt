@@ -23,6 +23,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
@@ -169,6 +170,8 @@ fun MessageInputField(
 	onImageDraftReorder: (List<String>) -> Unit = {},
 	onAttachClick: (() -> Unit)? = null,
 	modifier: Modifier = Modifier,
+	expanded: Boolean = false,
+	header: @Composable () -> Unit = {},
 ) {
 	val focusRequester = remember { FocusRequester() }
 	val focusManager = LocalFocusManager.current
@@ -412,391 +415,395 @@ fun MessageInputField(
 			)
 		}
 		val capsuleCornerRadius by animateDpAsState(
-			targetValue = if (isMultiLine) 20.dp else 26.dp,
+			targetValue = if (isMultiLine || expanded) 20.dp else 26.dp,
 			animationSpec = tween(150),
 			label = "capsule_radius"
 		)
 		val capsuleShape = RoundedCornerShape(capsuleCornerRadius)
 
 		// Capsule: Frame 2232
-		Box(
-			modifier = Modifier
-				.fillMaxWidth()
-				.then(
-					if (isAnyRecording || isVideoPreview) {
-						Modifier.height(50.dp)
-					} else {
-						Modifier.defaultMinSize(minHeight = 50.dp)
-					}
-				)
-				.onSizeChanged { size ->
-					capsuleHeightPx = size.height
-				}
-				.background(capsuleBg, capsuleShape)
-				.padding(
-					start = if (isAnyRecording) 7.dp else if (onAttachClick != null && !hasAnyDraft) 13.dp else 16.dp,
-					end = 7.dp,
-					top = 7.dp,
-					bottom = 7.dp,
-				),
-			contentAlignment = Alignment.BottomStart,
+		Column(
+			modifier = Modifier.fillMaxWidth().background(capsuleBg, capsuleShape),
 		) {
-			if (onAttachClick != null && !isAnyRecording && !hasAnyDraft) {
-				Box(
-					contentAlignment = Alignment.Center,
-					modifier = Modifier
-						.align(Alignment.BottomStart)
-						.padding(bottom = 4.dp)
-						.size(28.dp)
-						.clip(CircleShape)
-						.clickable(onClick = onAttachClick)
-						.testTag("chat_input_attach_button"),
-				) {
-					Icon(
-						painter = painterResource(Res.drawable.chat_clip_icon),
-						contentDescription = "Прикрепить",
-						tint = iconTint,
-						modifier = Modifier.size(28.dp),
-					)
-				}
-			}
-
-			// Center content area
+			header()
 			Box(
-				contentAlignment = Alignment.BottomStart,
 				modifier = Modifier
-					.align(Alignment.BottomStart)
 					.fillMaxWidth()
-					.padding(
-						start = if (onAttachClick != null && !isAnyRecording && !hasAnyDraft) 38.dp else 0.dp,
-						end = when {
-							isAnyRecording -> if (isAnyLocked) 54.dp else (RecordingInputButtonSize + 8.dp)
-							hasAnyDraft -> 40.dp
-							showEmojiButton -> 84.dp
-							else -> 46.dp
-						},
-					)
-					.testTag("chat_input_text_field"),
-			) {
-				val showTextField = voiceDraft == null && !isAnyRecording && !isVideoPreview
-				Box(
-					modifier = Modifier
-						.fillMaxWidth()
-						.graphicsLayer {
-							alpha = if (showTextField) 1f else 0f
-						},
-				) {
-					BasicTextField(
-						value = controller.textFieldValue,
-						onValueChange = controller::onTextFieldValueChange,
-						onTextLayout = { textLayoutResult = it },
-						textStyle = LocalTypography.current.titleMedium.copy(
-							fontSize = 18.sp,
-							lineHeight = 22.sp,
-							fontWeight = FontWeight.Normal,
-							color = inputTextColor,
-						),
-						maxLines = 6,
-						cursorBrush = SolidColor(if (showTextField) inputTextColor else Color.Transparent),
-						modifier = Modifier
-							.fillMaxWidth()
-							.heightIn(min = 22.dp)
-							.padding(top = 7.dp, bottom = 7.dp)
-							.nestedScroll(inputNestedScrollConnection)
-							.focusRequester(focusRequester)
-							.onFocusChanged { focusState ->
-								isFocused = focusState.isFocused
-								controller.onTextFieldFocusChanged(focusState.isFocused)
-							}
-							.semantics {
-								stateDescription = controller.inputMode.name
-							},
-						interactionSource = inputInteractionSource,
-					) { innerTextField ->
-						Box(
-							contentAlignment = Alignment.CenterStart,
-							modifier = Modifier
-								.fillMaxWidth()
-								.onSizeChanged { size ->
-									textFieldViewportHeightPx = size.height
-								}
-								.chatInputFadingEdge(
-									topAlpha = topFadeAlpha,
-									bottomAlpha = bottomFadeAlpha,
-									fadeHeight = 18.dp,
-								),
-						) {
-							if (showTextField && controller.textFieldValue.text.isEmpty()) {
-								Text(
-									text = "Сообщение",
-									color = placeholderColor,
-									style = LocalTypography.current.titleMedium.copy(
-										fontSize = 18.sp,
-										lineHeight = 22.sp,
-										fontWeight = FontWeight.Normal,
-									),
-								)
-							}
-							innerTextField()
+					.then(
+						if (isAnyRecording || isVideoPreview) {
+							Modifier.height(50.dp)
+						} else {
+							Modifier.defaultMinSize(minHeight = 50.dp)
 						}
+					)
+					.onSizeChanged { size ->
+						capsuleHeightPx = size.height
 					}
-				}
-
-				if (voiceDraft != null) {
-					Row(
-						verticalAlignment = Alignment.CenterVertically,
-						modifier = Modifier.fillMaxWidth().height(36.dp),
+					.padding(
+						start = if (isAnyRecording) 7.dp else if (onAttachClick != null && !hasAnyDraft) 13.dp else 16.dp,
+						end = 7.dp,
+						top = 7.dp,
+						bottom = 7.dp,
+					),
+				contentAlignment = Alignment.BottomStart,
+			) {
+				if (onAttachClick != null && !isAnyRecording && !hasAnyDraft) {
+					Box(
+						contentAlignment = Alignment.Center,
+						modifier = Modifier
+							.align(Alignment.BottomStart)
+							.padding(bottom = 4.dp)
+							.size(28.dp)
+							.clip(CircleShape)
+							.clickable(onClick = onAttachClick)
+							.testTag("chat_input_attach_button"),
 					) {
 						Icon(
-							imageVector = Icons.Outlined.Delete,
-							contentDescription = "Удалить черновик",
-							tint = MaterialTheme.colorScheme.error,
-							modifier = Modifier
-								.size(24.dp)
-								.clip(CircleShape)
-								.clickable(onClick = onVoiceDraftDelete)
+							painter = painterResource(Res.drawable.chat_clip_icon),
+							contentDescription = "Прикрепить",
+							tint = iconTint,
+							modifier = Modifier.size(28.dp),
 						)
+					}
+				}
 
-						Spacer(modifier = Modifier.width(10.dp))
-
-						Box(
+				// Center content area
+				Box(
+					contentAlignment = Alignment.BottomStart,
+					modifier = Modifier
+						.align(Alignment.BottomStart)
+						.fillMaxWidth()
+						.padding(
+							start = if (onAttachClick != null && !isAnyRecording && !hasAnyDraft) 38.dp else 0.dp,
+							end = when {
+								isAnyRecording -> if (isAnyLocked) 54.dp else (RecordingInputButtonSize + 8.dp)
+								hasAnyDraft -> 40.dp
+								showEmojiButton -> 84.dp
+								else -> 46.dp
+							},
+						)
+						.testTag("chat_input_text_field"),
+				) {
+					val showTextField = voiceDraft == null && !isAnyRecording && !isVideoPreview
+					Box(
+						modifier = Modifier
+							.fillMaxWidth()
+							.graphicsLayer {
+								alpha = if (showTextField) 1f else 0f
+							},
+					) {
+						BasicTextField(
+							value = controller.textFieldValue,
+							onValueChange = controller::onTextFieldValueChange,
+							onTextLayout = { textLayoutResult = it },
+							textStyle = LocalTypography.current.titleMedium.copy(
+								fontSize = 18.sp,
+								lineHeight = 22.sp,
+								fontWeight = FontWeight.Normal,
+								color = inputTextColor,
+							),
+							maxLines = 6,
+							cursorBrush = SolidColor(if (showTextField) inputTextColor else Color.Transparent),
 							modifier = Modifier
-								.size(32.dp)
-								.clip(CircleShape)
-								.background(sendButtonBg)
-								.clickable(onClick = onVoiceDraftPlayPause),
-							contentAlignment = Alignment.Center
+								.fillMaxWidth()
+								.heightIn(min = 22.dp)
+								.padding(top = 7.dp, bottom = 7.dp)
+								.nestedScroll(inputNestedScrollConnection)
+								.focusRequester(focusRequester)
+								.onFocusChanged { focusState ->
+									isFocused = focusState.isFocused
+									controller.onTextFieldFocusChanged(focusState.isFocused)
+								}
+								.semantics {
+									stateDescription = controller.inputMode.name
+								},
+							interactionSource = inputInteractionSource,
+						) { innerTextField ->
+							Box(
+								contentAlignment = Alignment.CenterStart,
+								modifier = Modifier
+									.fillMaxWidth()
+									.onSizeChanged { size ->
+										textFieldViewportHeightPx = size.height
+									}
+									.chatInputFadingEdge(
+										topAlpha = topFadeAlpha,
+										bottomAlpha = bottomFadeAlpha,
+										fadeHeight = 18.dp,
+									),
+							) {
+								if (showTextField && controller.textFieldValue.text.isEmpty()) {
+									Text(
+										text = "Сообщение",
+										color = placeholderColor,
+										style = LocalTypography.current.titleMedium.copy(
+											fontSize = 18.sp,
+											lineHeight = 22.sp,
+											fontWeight = FontWeight.Normal,
+										),
+									)
+								}
+								innerTextField()
+							}
+						}
+					}
+
+					if (voiceDraft != null) {
+						Row(
+							verticalAlignment = Alignment.CenterVertically,
+							modifier = Modifier.fillMaxWidth().height(36.dp),
 						) {
 							Icon(
-								imageVector = if (voiceDraft.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-								contentDescription = if (voiceDraft.isPlaying) "Пауза" else "Слушать",
-								tint = Color.White,
-								modifier = Modifier.size(18.dp)
+								imageVector = Icons.Outlined.Delete,
+								contentDescription = "Удалить черновик",
+								tint = MaterialTheme.colorScheme.error,
+								modifier = Modifier
+									.size(24.dp)
+									.clip(CircleShape)
+									.clickable(onClick = onVoiceDraftDelete)
+							)
+
+							Spacer(modifier = Modifier.width(10.dp))
+
+							Box(
+								modifier = Modifier
+									.size(32.dp)
+									.clip(CircleShape)
+									.background(sendButtonBg)
+									.clickable(onClick = onVoiceDraftPlayPause),
+								contentAlignment = Alignment.Center
+							) {
+								Icon(
+									imageVector = if (voiceDraft.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+									contentDescription = if (voiceDraft.isPlaying) "Пауза" else "Слушать",
+									tint = Color.White,
+									modifier = Modifier.size(18.dp)
+								)
+							}
+
+							Spacer(modifier = Modifier.width(10.dp))
+
+							val totalDuration = voiceDraft.durationMs.coerceAtLeast(1L)
+							val draftProgress = (voiceDraft.currentPositionMs.toFloat() / totalDuration).coerceIn(0f, 1f)
+							WaveformBars(
+								waveform = voiceDraft.waveform,
+								progress = draftProgress,
+								activeColor = sendButtonBg,
+								inactiveColor = (if (isDark) Color.White else Color.Black).copy(alpha = 0.25f),
+								onSeek = onVoiceDraftSeek,
+								modifier = Modifier
+									.weight(1f)
+									.height(24.dp)
+							)
+
+							Spacer(modifier = Modifier.width(8.dp))
+
+							val timeDisplay = if (voiceDraft.isPlaying) voiceDraft.currentPositionMs else voiceDraft.durationMs
+							Text(
+								text = formatDuration(timeDisplay),
+								style = LocalTypography.current.labelMedium.copy(
+									fontSize = 11.sp,
+									color = iconTint
+								)
 							)
 						}
-
-						Spacer(modifier = Modifier.width(10.dp))
-
-						val totalDuration = voiceDraft.durationMs.coerceAtLeast(1L)
-						val draftProgress = (voiceDraft.currentPositionMs.toFloat() / totalDuration).coerceIn(0f, 1f)
-						WaveformBars(
-							waveform = voiceDraft.waveform,
-							progress = draftProgress,
-							activeColor = sendButtonBg,
-							inactiveColor = (if (isDark) Color.White else Color.Black).copy(alpha = 0.25f),
-							onSeek = onVoiceDraftSeek,
-							modifier = Modifier
-								.weight(1f)
-								.height(24.dp)
-						)
-
-						Spacer(modifier = Modifier.width(8.dp))
-
-						val timeDisplay = if (voiceDraft.isPlaying) voiceDraft.currentPositionMs else voiceDraft.durationMs
-						Text(
-							text = formatDuration(timeDisplay),
-							style = LocalTypography.current.labelMedium.copy(
-								fontSize = 11.sp,
-								color = iconTint
-							)
+					} else if (isAnyRecording || isVideoPreview) {
+						val activeRecordingState = if (voiceRecordingState.isRecording) {
+							voiceRecordingState.toChatMediaRecordingState()
+						} else {
+							recordingState.toChatMediaRecordingState()
+						}
+						UnifiedRecordingCapsule(
+							state = activeRecordingState,
+							onCancelClick = onRecordSwipeLeft,
+							onStopClick = onRecordStopClick,
+							modifier = Modifier.height(36.dp),
 						)
 					}
-				} else if (isAnyRecording || isVideoPreview) {
-					val activeRecordingState = if (voiceRecordingState.isRecording) {
-						voiceRecordingState.toChatMediaRecordingState()
-					} else {
-						recordingState.toChatMediaRecordingState()
-					}
-					UnifiedRecordingCapsule(
-						state = activeRecordingState,
-						onCancelClick = onRecordSwipeLeft,
-						onStopClick = onRecordStopClick,
-						modifier = Modifier.height(36.dp),
-					)
 				}
-			}
 
-			// Emoji toggle button
-			if (showEmojiButton && !isAnyRecording && !hasAnyDraft) {
-				val isEmojiMode = controller.inputMode == ChatInputMode.Emoji
-				val toggleStateDescription = if (isEmojiMode) "keyboard" else "emoji"
+				// Emoji toggle button
+				if (showEmojiButton && !isAnyRecording && !hasAnyDraft) {
+					val isEmojiMode = controller.inputMode == ChatInputMode.Emoji
+					val toggleStateDescription = if (isEmojiMode) "keyboard" else "emoji"
 
+					Box(
+						contentAlignment = Alignment.Center,
+						modifier = Modifier
+							.align(Alignment.BottomEnd)
+							.padding(end = 46.dp, bottom = 4.dp)
+							.size(28.dp)
+							.clip(CircleShape)
+							.clickable {
+								haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+								controller.toggleEmoji()
+							}
+							.testTag("chat_input_toggle_button")
+							.semantics { stateDescription = toggleStateDescription },
+					) {
+						AnimatedContent(
+							targetState = isEmojiMode,
+							transitionSpec = {
+								val springSpec = spring<Float>(
+									dampingRatio = Spring.DampingRatioMediumBouncy,
+									stiffness = Spring.StiffnessMediumLow,
+								)
+								(scaleIn(initialScale = 0.55f, animationSpec = springSpec) + fadeIn(tween(140)))
+									.togetherWith(scaleOut(targetScale = 0.55f, animationSpec = tween(120)) + fadeOut(tween(120)))
+							},
+							label = "chat_input_emoji_toggle",
+						) { inEmoji ->
+							Icon(
+								painter = painterResource(
+									if (inEmoji) Res.drawable.chat_keyboard_icon else Res.drawable.chat_emoji_icon
+								),
+								contentDescription = toggleStateDescription,
+								tint = iconTint,
+								modifier = Modifier.size(24.dp),
+							)
+						}
+					}
+				}
+
+				// Send / Action button
 				Box(
 					contentAlignment = Alignment.Center,
 					modifier = Modifier
 						.align(Alignment.BottomEnd)
-						.padding(end = 46.dp, bottom = 4.dp)
-						.size(28.dp)
-						.clip(CircleShape)
-						.clickable {
-							haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-							controller.toggleEmoji()
+						.testTag(if (showRecordingButton) "chat_input_record_button" else "chat_input_send_button")
+						.size(36.dp)
+						.graphicsLayer {
+							if (isAnyRecording) {
+								translationX = if (isAnyLocked) snapRecordingButtonOffsetX else rawRecordingButtonOffsetX
+								translationY = if (isAnyLocked) snapRecordingButtonOffsetY else rawRecordingButtonOffsetY
+								scaleX = lockedButtonScale * micPulseScale
+								scaleY = lockedButtonScale * micPulseScale
+							} else {
+								scaleX = recordButtonScale
+								scaleY = recordButtonScale
+							}
 						}
-						.testTag("chat_input_toggle_button")
-						.semantics { stateDescription = toggleStateDescription },
-				) {
-					AnimatedContent(
-						targetState = isEmojiMode,
-						transitionSpec = {
-							val springSpec = spring<Float>(
-								dampingRatio = Spring.DampingRatioMediumBouncy,
-								stiffness = Spring.StiffnessMediumLow,
+						.then(
+							if (isAnyRecording) {
+								Modifier
+							} else {
+								Modifier
+									.clip(CircleShape)
+									.background(sendButtonBg)
+							}
+						)
+						.onGloballyPositioned { coordinates ->
+							onRecordButtonBoundsChanged(
+								if (isAnyRecording) coordinates.boundsInRoot() else null,
 							)
-							(scaleIn(initialScale = 0.55f, animationSpec = springSpec) + fadeIn(tween(140)))
-								.togetherWith(scaleOut(targetScale = 0.55f, animationSpec = tween(120)) + fadeOut(tween(120)))
-						},
-						label = "chat_input_emoji_toggle",
-					) { inEmoji ->
-						Icon(
-							painter = painterResource(
-								if (inEmoji) Res.drawable.chat_keyboard_icon else Res.drawable.chat_emoji_icon
-							),
-							contentDescription = toggleStateDescription,
-							tint = iconTint,
-							modifier = Modifier.size(24.dp),
-						)
-					}
-				}
-			}
-
-			// Send / Action button
-			Box(
-				contentAlignment = Alignment.Center,
-				modifier = Modifier
-					.align(Alignment.BottomEnd)
-					.testTag(if (showRecordingButton) "chat_input_record_button" else "chat_input_send_button")
-					.size(36.dp)
-					.graphicsLayer {
-						if (isAnyRecording) {
-							translationX = if (isAnyLocked) snapRecordingButtonOffsetX else rawRecordingButtonOffsetX
-							translationY = if (isAnyLocked) snapRecordingButtonOffsetY else rawRecordingButtonOffsetY
-							scaleX = lockedButtonScale * micPulseScale
-							scaleY = lockedButtonScale * micPulseScale
-						} else {
-							scaleX = recordButtonScale
-							scaleY = recordButtonScale
 						}
-					}
-					.then(
-						if (isAnyRecording) {
-							Modifier
-						} else {
-							Modifier
-								.clip(CircleShape)
-								.background(sendButtonBg)
-						}
-					)
-					.onGloballyPositioned { coordinates ->
-						onRecordButtonBoundsChanged(
-							if (isAnyRecording) coordinates.boundsInRoot() else null,
-						)
-					}
-					.then(
-						when {
-							hasVoiceDraft -> {
-								Modifier.clickable(onClick = onVoiceDraftSend)
-							}
-							isVideoPreview -> {
-								Modifier.clickable(onClick = onRecordSendClick)
-							}
-							isVoiceRecording && voiceRecordingState.isLocked -> {
-								Modifier.clickable(onClick = onVoiceDraftSend)
-							}
-							isRecordingActive && recordingState.isLocked -> {
-								Modifier.clickable(onClick = onRecordSendClick)
-							}
-							showRecord && !isAnyLocked -> {
-								Modifier.recordingButtonGesture(
-									cancelThresholdPx = recordCancelThresholdPx,
-									lockThresholdPx = recordLockThresholdPx,
-									touchSlop = viewConfiguration.touchSlop,
-									onTap = {
-										haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-										onRecordButtonModeToggle()
-									},
-									onPress = onRecordButtonPress,
-									onRelease = onRecordButtonRelease,
-									onSwipeUp = onRecordSwipeUp,
-									onSwipeLeft = onRecordSwipeLeft,
-									onDrag = onRecordDrag,
-									onPressStateChanged = { isRecordPressed = it },
-								)
-							}
-							else -> {
-								Modifier.clickable(
-									enabled = sendButtonActive || isEditMode,
-									onClick = {
-										when {
-											isRecordingActive || isVideoPreview -> onRecordSendClick()
-											sendButtonActive || isEditMode -> onSendClick()
+						.then(
+							when {
+								hasVoiceDraft -> {
+									Modifier.clickable(onClick = onVoiceDraftSend)
+								}
+								isVideoPreview -> {
+									Modifier.clickable(onClick = onRecordSendClick)
+								}
+								isVoiceRecording && voiceRecordingState.isLocked -> {
+									Modifier.clickable(onClick = onVoiceDraftSend)
+								}
+								isRecordingActive && recordingState.isLocked -> {
+									Modifier.clickable(onClick = onRecordSendClick)
+								}
+								showRecord && !isAnyLocked -> {
+									Modifier.recordingButtonGesture(
+										cancelThresholdPx = recordCancelThresholdPx,
+										lockThresholdPx = recordLockThresholdPx,
+										touchSlop = viewConfiguration.touchSlop,
+										onTap = {
+											haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+											onRecordButtonModeToggle()
+										},
+										onPress = onRecordButtonPress,
+										onRelease = onRecordButtonRelease,
+										onSwipeUp = onRecordSwipeUp,
+										onSwipeLeft = onRecordSwipeLeft,
+										onDrag = onRecordDrag,
+										onPressStateChanged = { isRecordPressed = it },
+									)
+								}
+								else -> {
+									Modifier.clickable(
+										enabled = sendButtonActive || isEditMode,
+										onClick = {
+											when {
+												isRecordingActive || isVideoPreview -> onRecordSendClick()
+												sendButtonActive || isEditMode -> onSendClick()
+											}
 										}
-									}
+									)
+								}
+							}
+						),
+				) {
+					when {
+						isAnyRecording -> {
+							RecordingButtonContent(
+								isLocked = isAnyLocked,
+								isRecording = (isRecordingActive && recordingState.isRecording) || isVoiceRecording,
+								recordingButtonColor = recordingButtonColor,
+								micCorePulseScale = micCorePulseScale,
+								micHaloPulseScale = micHaloPulseScale,
+								boostedAudioLevel = boostedAudioLevel,
+								sendIconScale = sendIconScale,
+							)
+						}
+						hasVoiceDraft -> {
+							Icon(
+								painter = painterResource(Res.drawable.chat_send_arrow),
+								tint = Color.White,
+								contentDescription = "Отправить голосовое",
+								modifier = Modifier.size(width = 14.dp, height = 17.dp),
+							)
+						}
+						isVideoPreview -> {
+							Icon(
+								painter = painterResource(Res.drawable.chat_send_arrow),
+								tint = Color.White,
+								contentDescription = "Отправить видео",
+								modifier = Modifier.size(width = 14.dp, height = 17.dp),
+							)
+						}
+						showRecord -> {
+							AnimatedContent(
+								targetState = recordButtonMode,
+								transitionSpec = {
+									val springSpec = spring<Float>(
+										dampingRatio = 0.72f,
+										stiffness = Spring.StiffnessMediumLow,
+									)
+									(scaleIn(initialScale = 0.5f, animationSpec = springSpec) + fadeIn(tween(150)))
+										.togetherWith(scaleOut(targetScale = 0.5f, animationSpec = tween(120)) + fadeOut(tween(120)))
+								},
+								label = "chat_record_button_mode_toggle",
+							) { mode ->
+								val isVoice = mode == ChatRecordButtonMode.Voice
+								Icon(
+									painter = painterResource(
+										if (isVoice) Res.drawable.chat_mic_icon else Res.drawable.chat_video_round_icon
+									),
+									tint = Color.White,
+									contentDescription = if (isVoice) "record voice" else "record video",
+									modifier = Modifier.size(22.dp),
 								)
 							}
 						}
-					),
-			) {
-				when {
-					isAnyRecording -> {
-						RecordingButtonContent(
-							isLocked = isAnyLocked,
-							isRecording = (isRecordingActive && recordingState.isRecording) || isVoiceRecording,
-							recordingButtonColor = recordingButtonColor,
-							micCorePulseScale = micCorePulseScale,
-							micHaloPulseScale = micHaloPulseScale,
-							boostedAudioLevel = boostedAudioLevel,
-							sendIconScale = sendIconScale,
-						)
-					}
-					hasVoiceDraft -> {
-						Icon(
-							painter = painterResource(Res.drawable.chat_send_arrow),
-							tint = Color.White,
-							contentDescription = "Отправить голосовое",
-							modifier = Modifier.size(width = 14.dp, height = 17.dp),
-						)
-					}
-					isVideoPreview -> {
-						Icon(
-							painter = painterResource(Res.drawable.chat_send_arrow),
-							tint = Color.White,
-							contentDescription = "Отправить видео",
-							modifier = Modifier.size(width = 14.dp, height = 17.dp),
-						)
-					}
-					showRecord -> {
-						AnimatedContent(
-							targetState = recordButtonMode,
-							transitionSpec = {
-								val springSpec = spring<Float>(
-									dampingRatio = 0.72f,
-									stiffness = Spring.StiffnessMediumLow,
-								)
-								(scaleIn(initialScale = 0.5f, animationSpec = springSpec) + fadeIn(tween(150)))
-									.togetherWith(scaleOut(targetScale = 0.5f, animationSpec = tween(120)) + fadeOut(tween(120)))
-							},
-							label = "chat_record_button_mode_toggle",
-						) { mode ->
-							val isVoice = mode == ChatRecordButtonMode.Voice
+						else -> {
 							Icon(
 								painter = painterResource(
-									if (isVoice) Res.drawable.chat_mic_icon else Res.drawable.chat_video_round_icon
+									if (isEditMode) Res.drawable.done_icon else Res.drawable.chat_send_arrow,
 								),
-								tint = Color.White,
-								contentDescription = if (isVoice) "record voice" else "record video",
-								modifier = Modifier.size(22.dp),
+								tint = Color.White.copy(alpha = if (sendButtonActive || isEditMode) 1f else 0.4f),
+								contentDescription = if (isEditMode) "Готово" else "Отправить",
+								modifier = Modifier.size(if (isEditMode) 18.dp else 17.dp),
 							)
 						}
-					}
-					else -> {
-						Icon(
-							painter = painterResource(
-								if (isEditMode) Res.drawable.done_icon else Res.drawable.chat_send_arrow,
-							),
-							tint = Color.White.copy(alpha = if (sendButtonActive || isEditMode) 1f else 0.4f),
-							contentDescription = if (isEditMode) "Готово" else "Отправить",
-							modifier = Modifier.size(if (isEditMode) 18.dp else 17.dp),
-						)
 					}
 				}
 			}

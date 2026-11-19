@@ -187,13 +187,6 @@ internal fun rememberChatMessagesPositioningState(
 		}
 	}
 
-	val lastMessage by remember(state.messages) {
-		derivedStateOf {
-			state.messages.lastOrNull()?.messages?.lastOrNull()
-		}
-	}
-	val lastMessageKey = lastMessage?.uiKey
-
 	val lazyListState = rememberSaveable(stableSessionKey, saver = LazyListState.Saver) {
 		LazyListState(
 			firstVisibleItemIndex = initialViewport?.itemIndex ?: 0,
@@ -479,8 +472,6 @@ internal fun rememberChatMessagesPositioningState(
 	val latestIncomingUiKeys by rememberUpdatedState(incomingUiKeys)
 	val latestMessageIdByKey by rememberUpdatedState(messageIdByKey)
 
-	val isSelectionMode = state.selectionState.isSelectionMode
-	var selectionAnchorSnapshot by remember(state.chatInterlocutorId) { mutableStateOf<Pair<Int, Int>?>(null) }
 	var olderMessagesPrefetchWindowSize by remember(stableSessionKey) {
 		mutableStateOf(DEFAULT_OLDER_MESSAGES_PREFETCH_WINDOW)
 	}
@@ -518,17 +509,6 @@ internal fun rememberChatMessagesPositioningState(
 				AnchorRestorePhase.Jumping,
 				AnchorRestorePhase.Settling
 			)
-		}
-	}
-
-	LaunchedEffect(isSelectionMode) {
-		if (isSelectionMode) onContextMenuDismissRequest()
-		selectionAnchorSnapshot = lazyListState.firstVisibleItemIndex to lazyListState.firstVisibleItemScrollOffset
-		withFrameNanos { }
-		selectionAnchorSnapshot?.let { (index, offset) ->
-			runProgrammaticScroll {
-				lazyListState.scrollToItem(index = index, scrollOffset = offset)
-			}
 		}
 	}
 
@@ -726,7 +706,10 @@ internal fun rememberChatMessagesPositioningState(
 			!suppressAutoFollowAfterRestore &&
 			!isAnchorRestoreInProgress &&
 			!hasPendingJumpTarget
-		if (shouldAutoFollowBottom) {
+		val explicitRequest = scrollRequest?.requestToken
+		val awaitingExplicitScroll = explicitRequest != null && explicitRequest > 0L &&
+			explicitRequest != lastHandledScrollRequestToken
+		if (shouldAutoFollowBottom && !awaitingExplicitScroll) {
 			scrollToBottomInternal(animate = false)
 		}
 	}
@@ -949,20 +932,11 @@ internal fun rememberChatMessagesPositioningState(
 		onHighlightDismissed?.invoke()
 	}
 
-	LaunchedEffect(scrollRequest?.requestToken) {
+	LaunchedEffect(scrollRequest?.requestToken, hasListLayout, isAnchorRestoreInProgress) {
 		val requestToken = scrollRequest?.requestToken ?: return@LaunchedEffect
 		if (requestToken <= 0L || requestToken == lastHandledScrollRequestToken) return@LaunchedEffect
 		if (!hasListLayout || isAnchorRestoreInProgress) return@LaunchedEffect
 		lastHandledScrollRequestToken = requestToken
-		followBottom = true
-		scrollToBottomInternal(animate = false)
-	}
-
-	LaunchedEffect(lastMessageKey, isAtBottom, hasListLayout, isAnchorRestoreInProgress, suppressAutoFollowAfterRestore) {
-		if (!hasListLayout || isAnchorRestoreInProgress || lastMessageKey == null) return@LaunchedEffect
-		if (activeAnchorRestoreRequest != null) return@LaunchedEffect
-		if (suppressAutoFollowAfterRestore) return@LaunchedEffect
-		if (!isAtBottom) return@LaunchedEffect
 		followBottom = true
 		scrollToBottomInternal(animate = false)
 	}
@@ -1095,7 +1069,6 @@ internal fun ChatMessagesList(
 	resolveContextMenuActions: (ChatMessage) -> List<ChatContextMenuAction>,
 	onContextMenuOpenRequest: (ChatMessage, Rect?, Rect?, me.floow.uikit.chat.common.ElevatedMessageData?) -> Unit,
 	onContextMenuDismissRequest: () -> Unit,
-	elevatedDataByMessageKey: MutableMap<String, me.floow.uikit.chat.common.ElevatedMessageData>? = null,
 	videoCircleContent: @Composable (VideoCircleOutMessage, Boolean, () -> Unit) -> Unit,
 	voiceContent: @Composable (VoiceMessage, Boolean, () -> Unit) -> Unit,
 	imageContent: @Composable (
@@ -1203,7 +1176,6 @@ internal fun ChatMessagesList(
 						resolveContextMenuActions = resolveContextMenuActions,
 						onContextMenuOpenRequest = onContextMenuOpenRequest,
 						onContextMenuDismissRequest = onContextMenuDismissRequest,
-						elevatedDataByMessageKey = elevatedDataByMessageKey,
 						videoCircleContent = videoCircleContent,
 						voiceContent = voiceContent,
 						imageContent = imageContent

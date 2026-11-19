@@ -1,136 +1,54 @@
 package me.floow.uikit.chat.common
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutLinearInEasing
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.Stable
+import androidx.compose.animation.core.AnimationVector1D
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.structuralEqualityPolicy
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.unit.IntSize
 
-@Stable
-class MessageContextMenuState {
-    var activeItem by mutableStateOf<ElevatedMessageData?>(null)
-        private set
-
-    val progress = Animatable(0f)
-
-    val isVisible: Boolean
-        get() = activeItem != null
-
-    suspend fun show(item: ElevatedMessageData) {
-        activeItem = item
-        progress.snapTo(0f)
-        progress.animateTo(
-            targetValue = 1f,
-            animationSpec = spring(
-                dampingRatio = 0.68f,
-                stiffness = 420f,
-            )
-        )
-    }
-
-    suspend fun dismiss() {
-        if (activeItem == null) return
-        progress.animateTo(
-            targetValue = 0f,
-            animationSpec = tween(
-                durationMillis = 180,
-                easing = FastOutLinearInEasing,
-            )
-        )
-        activeItem = null
-    }
-}
-
 data class ElevatedMessageData(
-    val messageId: Long,
-    val uiKey: String,
-    val isMine: Boolean,
-    val isVideoNote: Boolean,
-    val layer: GraphicsLayer,
-    val rootPosition: Offset,
-    val size: IntSize,
-    val videoCircleBoundsInRoot: Rect? = null,
-    val startScale: Float = 1f,
-    val tapOffset: Offset? = null,
-)
-
-@Composable
-fun rememberMessageContextMenuState(): MessageContextMenuState {
-    return remember { MessageContextMenuState() }
+	val messageId: Long,
+	val sourceBounds: Rect,
+	val progress: Animatable<Float, AnimationVector1D>,
+	val tapOffset: Offset?,
+	val foregroundLayer: GraphicsLayer?,
+) {
+	internal var foregroundEnabled by mutableStateOf(false)
+	private val foregroundVisible by derivedStateOf(structuralEqualityPolicy()) {
+		foregroundEnabled && progress.value > 0f
+	}
+	internal val isInForeground: Boolean
+		get() = foregroundVisible &&
+			foregroundLayer?.size?.let { it != IntSize.Zero } == true
 }
 
-/**
- * Вычисляет вертикальный сдвиг (targetOffsetY), чтобы сообщение + меню
- * гарантированно поместились на экране с учетом safe area.
- * Для нативного видеокружка на iOS возвращается 0f, так как нативный плеер в LazyColumn не сдвигается.
- *
- * Алгоритм (Telegram iOS parity):
- * Шаг А: если меню влезает снизу с зазором 8.dp и отступом от низа -> shiftY = 0f.
- * Шаг Б: если снизу не влезает, но влезает сверху с зазором 8.dp и отступом от верха -> shiftY = 0f.
- * Шаг В: сдвигать только если не влезает ни снизу, ни сверху, ровно на минимальную дельту.
- */
-fun calculateAutoShiftY(
-    isVideoNote: Boolean,
-    itemTop: Float,
-    itemHeight: Float,
-    screenHeight: Float,
-    topSafeInset: Float,
-    bottomSafeInset: Float,
-    reactionsBarHeightPx: Float,
-    menuHeightPx: Float,
-    verticalGapPx: Float,
-): Float {
-    if (isVideoNote || itemHeight >= screenHeight * 0.45f) return 0f
-
-    val itemBottom = itemTop + itemHeight
-    val minTop = topSafeInset
-    val maxBottom = screenHeight.minus(bottomSafeInset)
-
-    val menuBottomIfBelow = itemBottom + verticalGapPx + menuHeightPx
-    if (menuBottomIfBelow <= maxBottom) return 0f
-
-    val menuTopIfAbove = itemTop.minus(verticalGapPx).minus(menuHeightPx)
-    if (menuTopIfAbove >= minTop) return 0f
-
-    val maxAllowedShiftUp = (itemTop.minus(minTop)).coerceAtLeast(0f)
-    val shiftUpNeeded = (menuBottomIfBelow.minus(maxBottom)).coerceAtMost(maxAllowedShiftUp)
-    val remainingOverflowBelow = menuBottomIfBelow.minus(shiftUpNeeded).minus(maxBottom)
-    if (remainingOverflowBelow <= 0f) {
-        return shiftUpNeeded.unaryMinus()
-    }
-
-    val maxAllowedShiftDown = (maxBottom.minus(itemBottom)).coerceAtLeast(0f)
-    val shiftDownNeeded = (minTop.minus(menuTopIfAbove)).coerceAtMost(maxAllowedShiftDown)
-    return shiftDownNeeded
+internal fun fitMessageMenuForeground(
+	source: Rect,
+	viewport: Rect,
+	liftPx: Float,
+	marginPx: Float,
+): Rect? {
+	if (source.isEmpty) return null
+	val usableWidth = viewport.width - marginPx * 2
+	val usableHeight = viewport.height - marginPx * 2
+	if (usableWidth <= 0 || usableHeight <= 0) return null
+	val scale = minOf(1.025f, usableWidth / source.width, usableHeight / source.height)
+	val width = (source.width * scale).coerceAtMost(usableWidth)
+	val height = (source.height * scale).coerceAtMost(usableHeight)
+	val minX = viewport.left + marginPx
+	val minY = viewport.top + marginPx
+	return Rect(
+		offset = Offset(
+			x = (source.center.x - width / 2).coerceIn(minX, (viewport.right - marginPx - width).coerceAtLeast(minX)),
+			y = (source.center.y - height / 2 - liftPx).coerceIn(minY, (viewport.bottom - marginPx - height).coerceAtLeast(minY)),
+		),
+		size = Size(width, height),
+	)
 }
-
-fun calculateAutoShiftY(
-    isVideoNote: Boolean,
-    itemTop: Float,
-    itemHeight: Int,
-    screenHeight: Float,
-    topSafeInset: Float,
-    bottomSafeInset: Float,
-    reactionsBarHeightPx: Float,
-    menuHeightPx: Float,
-    verticalGapPx: Float,
-): Float = calculateAutoShiftY(
-    isVideoNote = isVideoNote,
-    itemTop = itemTop,
-    itemHeight = itemHeight.toFloat(),
-    screenHeight = screenHeight,
-    topSafeInset = topSafeInset,
-    bottomSafeInset = bottomSafeInset,
-    reactionsBarHeightPx = reactionsBarHeightPx,
-    menuHeightPx = menuHeightPx,
-    verticalGapPx = verticalGapPx,
-)

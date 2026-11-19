@@ -150,7 +150,7 @@ data class VideoCircleOutMessage(
 	val uploadStatus: VideoCircleUploadStatus = VideoCircleUploadStatus.Pending,
 ) : ChatMessage {
 	/** Returns the best available playable source (remote preferred, falls back to local). */
-	val playableSource: String? get() = remoteVideoUrl ?: localVideoPath
+	val playableSource: String? get() = remoteVideoUrl?.takeIf(String::isNotBlank) ?: localVideoPath
 }
 
 @Immutable

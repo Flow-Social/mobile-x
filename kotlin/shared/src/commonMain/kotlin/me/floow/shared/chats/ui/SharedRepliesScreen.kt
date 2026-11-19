@@ -76,7 +76,7 @@ fun SharedRepliesScreen(
 			showEmojiButton = false,
 			headerAvatarPainter = repliesAvatarPainter,
 			dividerColor = config.dividerColor,
-			content = { contentModifier ->
+			content = { contentModifier, _ ->
 			when (uiState) {
 				is me.floow.uikit.chat.model.ChatScreenUiState.Loading -> Box(
 					modifier = contentModifier,

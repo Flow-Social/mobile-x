@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.layout.onSizeChanged
 import me.floow.uikit.chat.input.ChatInputController
 import me.floow.uikit.chat.input.ChatInputMode
 
@@ -26,6 +27,7 @@ fun ChatBottomHost(
 	actualImeHeightPx: Int,
 	modifier: Modifier = Modifier,
 	isRecording: Boolean = false,
+	onComposerHeightChanged: (Int) -> Unit = {},
 	composer: @Composable ColumnScope.() -> Unit,
 	emojiPanel: @Composable BoxScope.() -> Unit,
 ) {
@@ -71,7 +73,7 @@ fun ChatBottomHost(
 			.then(backgroundModifier)
 			.navigationBarsPadding(),
 	) {
-		Column(modifier = Modifier.fillMaxWidth()) {
+		Column(modifier = Modifier.fillMaxWidth().onSizeChanged { onComposerHeightChanged(it.height) }) {
 			composer()
 		}
 

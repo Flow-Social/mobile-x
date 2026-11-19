@@ -22,6 +22,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.FlowPreview
 import me.floow.uikit.chat.model.ChatContextMenuAction
@@ -94,11 +95,11 @@ fun HasDataState(
 	resolveContextMenuActions: (ChatMessage) -> List<ChatContextMenuAction>,
 	onContextMenuOpenRequest: (ChatMessage, Rect?, Rect?, me.floow.uikit.chat.common.ElevatedMessageData?) -> Unit,
 	onContextMenuDismissRequest: () -> Unit,
-	elevatedDataByMessageKey: MutableMap<String, me.floow.uikit.chat.common.ElevatedMessageData>? = null,
 	rowBoundsByMessageKey: MutableMap<String, Rect>,
 	bubbleBoundsByMessageKey: MutableMap<String, Rect>,
 	onLoadMore: () -> Unit,
 	config: ChatScreenConfig,
+	composerBottomInset: Dp? = null,
 	messageListScrollEnabled: Boolean = true,
 	videoCircleContent: @Composable (VideoCircleOutMessage, Boolean, () -> Unit) -> Unit = { _, _, _ -> },
 	voiceContent: @Composable (VoiceMessage, Boolean, () -> Unit) -> Unit = { _, _, _ -> },
@@ -137,9 +138,10 @@ fun HasDataState(
 
 	val density = LocalDensity.current
 	val navBarsBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-	val listBottomPadding = 101.dp + navBarsBottom
+	val listBottomPadding = composerBottomInset?.plus(12.dp) ?: (101.dp + navBarsBottom)
 	val imeBottomPx = WindowInsets.ime.getBottom(density)
-	val scrollButtonBottomPadding = if (imeBottomPx > 0) 74.dp else (navBarsBottom + 74.dp)
+	val scrollButtonBottomPadding = composerBottomInset?.plus(12.dp)
+		?: if (imeBottomPx > 0) 74.dp else (navBarsBottom + 74.dp)
 
 	val positioningState = rememberChatMessagesPositioningState(
 		state = state,
@@ -196,7 +198,6 @@ fun HasDataState(
 				resolveContextMenuActions = resolveContextMenuActions,
 				onContextMenuOpenRequest = onContextMenuOpenRequest,
 				onContextMenuDismissRequest = onContextMenuDismissRequest,
-				elevatedDataByMessageKey = elevatedDataByMessageKey,
 				videoCircleContent = videoCircleContent,
 				voiceContent = voiceContent,
 				imageContent = imageContent,

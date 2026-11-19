@@ -244,19 +244,20 @@ fun seekRingRadius(
     return (diameter / 2f).coerceAtLeast(1f)
 }
 
+@Composable
 fun Modifier.videoCircleSeekGesture(
     isProgressVisible: Boolean,
     isPaused: Boolean,
     progress: Float,
     onSeekingChange: (Boolean) -> Unit,
-    consumeTapUp: Boolean = true,
-    onTogglePlayback: () -> Unit,
-    onLongPress: () -> Unit,
     onSeekProgress: (Float) -> Unit,
 ): Modifier {
     if (!isProgressVisible) return this
 
-    return pointerInput(isProgressVisible, isPaused, progress) {
+    val currentProgress by rememberUpdatedState(progress)
+    val updateSeeking by rememberUpdatedState(onSeekingChange)
+    val seekTo by rememberUpdatedState(onSeekProgress)
+    return pointerInput(isPaused) {
         awaitEachGesture {
             val down = awaitFirstDown(
                 requireUnconsumed = false,
@@ -266,7 +267,7 @@ fun Modifier.videoCircleSeekGesture(
             val startedOnKnob = isSeekKnobTouch(
                 position = down.position,
                 size = size,
-                progress = progress,
+                progress = currentProgress,
                 density = this@pointerInput.density,
                 isPaused = isPaused,
             )
@@ -285,11 +286,11 @@ fun Modifier.videoCircleSeekGesture(
 
             // Strictly touching seek ring or knob -> consume down to lock gesture
             down.consume()
-            onSeekingChange(true)
+            updateSeeking(true)
             try {
                 if (startedOnRing) {
                     val nextProgress = progressFromTouch(down.position, size)
-                    onSeekProgress(nextProgress)
+                    seekTo(nextProgress)
                 }
 
                 while (true) {
@@ -299,10 +300,10 @@ fun Modifier.videoCircleSeekGesture(
 
                     change.consume()
                     val nextProgress = progressFromTouch(change.position, size)
-                    onSeekProgress(nextProgress)
+                    seekTo(nextProgress)
                 }
             } finally {
-                onSeekingChange(false)
+                updateSeeking(false)
             }
         }
     }

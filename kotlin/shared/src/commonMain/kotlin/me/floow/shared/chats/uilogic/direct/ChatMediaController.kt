@@ -8,6 +8,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -94,12 +96,12 @@ class ChatMediaController(
 	}
 
 	fun resolveVideoCircleUiState(
+		active: ActiveVideoCirclePlayback,
 		uiKey: String,
 		isUploading: Boolean,
 		isFailed: Boolean,
 	): VideoCirclePlaybackUiState {
 		if (isUploading || isFailed) return VideoCirclePlaybackUiState.Uploading
-		val active = _activeVideoCircle.value
 		if (active.uiKey == uiKey) {
 			return if (active.isPaused) VideoCirclePlaybackUiState.ActivePaused else VideoCirclePlaybackUiState.ActivePlaying
 		}
@@ -109,9 +111,9 @@ class ChatMediaController(
 	init {
 		mediaOutboxEngine?.tasks?.let { tasksFlow ->
 			scope.launch {
-				tasksFlow.collect { tasks ->
-					onMediaOutboxTasksChanged(tasks)
-				}
+				tasksFlow.map { tasks ->
+					tasks.filterValues { it.status == MediaOutboxStatus.Sent || it.status == MediaOutboxStatus.Failed }
+				}.distinctUntilChanged().collect(::onMediaOutboxTasksChanged)
 			}
 		}
 	}
@@ -1078,7 +1080,6 @@ class ChatMediaController(
 					val updatedMessages = timelineReducer.upsertMessage(state.messages, resolvedMessage)
 					state.copy(
 						messages = timelineReducer.applyPeerReadState(updatedMessages, state.peerLastReadMessageId),
-						scrollToBottomRequestToken = nextScrollRequestToken(),
 					)
 				}
 				else -> state

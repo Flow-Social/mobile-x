@@ -1,5 +1,12 @@
 package me.floow.uikit.chat.common
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -15,13 +22,23 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.structuralEqualityPolicy
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import me.floow.uikit.chat.components.ChatBottomHost
 import me.floow.uikit.chat.components.ChatDraftImageStrip
@@ -78,7 +95,7 @@ fun ChatScreenBody(
 	onVoiceDraftSeek: (Float) -> Unit = {},
 	onVoiceDraftDelete: () -> Unit = {},
 	onVoiceDraftSend: () -> Unit = {},
-	voiceRecordingState: me.floow.uikit.chat.model.VoiceRecordingInputState = me.floow.uikit.chat.model.VoiceRecordingInputState(),
+	voiceRecordingState: () -> me.floow.uikit.chat.model.VoiceRecordingInputState = { me.floow.uikit.chat.model.VoiceRecordingInputState() },
 	imageDrafts: List<ChatDraftImage> = emptyList(),
 	onImageDraftRemove: (String) -> Unit = {},
 	onImageDraftReorder: (List<String>) -> Unit = {},
@@ -95,12 +112,15 @@ fun ChatScreenBody(
 	bodyContentModifier: Modifier = Modifier,
 	snackbarHost: @Composable (() -> Unit)? = null,
 	pinnedMessages: @Composable (() -> Unit)? = null,
-	content: @Composable (Modifier) -> Unit,
+	content: @Composable (Modifier, Dp) -> Unit,
 	screenOverlay: @Composable ((Modifier) -> Unit)? = null,
 	emojiPanel: @Composable BoxScope.() -> Unit = {},
-	contextMenuOverlay: @Composable () -> Unit = {},
+	contextMenuOverlay: @Composable (Rect?) -> Unit = {},
 ) {
 	val density = LocalDensity.current
+	val isVoiceRecording by remember(voiceRecordingState) {
+		derivedStateOf(structuralEqualityPolicy()) { voiceRecordingState().isRecording }
+	}
 	val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
 	val chatBg = if (isDark) Color(0xFF121217) else Color(0xFFF6F6F6)
 
@@ -126,6 +146,17 @@ fun ChatScreenBody(
 	} else {
 		0.dp
 	}
+	val showComposer = showInputBar && !isSelectionMode
+	var composerHeightPx by remember(showInputBar) { mutableIntStateOf(0) }
+	val composerHeight = if (showInputBar) {
+		with(density) { composerHeightPx.toDp() }
+	} else {
+		0.dp
+	}
+	val timelineBottomInset = (navBarsBottomDp + bottomSpacerHeightDp + composerHeight - contentBottomLiftDp)
+		.coerceAtLeast(0.dp)
+	val replyHeader = composerReplyTitle?.takeUnless(String::isBlank)?.let { it to composerReplySubtitle.orEmpty() }
+	var timelineBounds by remember { mutableStateOf<Rect?>(null) }
 
 	Box(
 		modifier = modifier
@@ -181,7 +212,9 @@ fun ChatScreenBody(
 				Modifier
 					.fillMaxWidth()
 					.weight(1f)
-					.background(chatBg),
+					.background(chatBg)
+					.onGloballyPositioned { timelineBounds = it.boundsInRoot() },
+				timelineBottomInset,
 			)
 		}
 
@@ -189,24 +222,19 @@ fun ChatScreenBody(
 			Modifier.fillMaxSize(),
 		)
 
-		if (showInputBar && !isSelectionMode) {
+		AnimatedVisibility(
+			visible = showComposer,
+			modifier = Modifier.align(Alignment.BottomCenter),
+			enter = fadeIn(tween(150)),
+			exit = fadeOut(tween(120)),
+		) {
 			ChatBottomHost(
 				controller = inputController,
 				actualImeHeightPx = actualImeHeightPx,
-				isRecording = recordingState.isActive || voiceRecordingState.isRecording,
-				modifier = Modifier
-					.align(Alignment.BottomCenter)
-					.fillMaxWidth(),
+				isRecording = recordingState.isActive || isVoiceRecording,
+				onComposerHeightChanged = { if (showComposer) composerHeightPx = it },
+				modifier = Modifier.fillMaxWidth(),
 				composer = {
-					if (!composerReplyTitle.isNullOrBlank() || !composerReplySubtitle.isNullOrBlank()) {
-						ChatCurrentReply(
-							title = composerReplyTitle.orEmpty(),
-							subtitle = composerReplySubtitle.orEmpty(),
-							onClose = onComposerReplyClose ?: {},
-							onClick = onComposerReplyClick,
-							modifier = Modifier.fillMaxWidth(),
-						)
-					}
 					if (imageDrafts.isNotEmpty()) {
 						ChatDraftImageStrip(
 							images = imageDrafts,
@@ -246,12 +274,35 @@ fun ChatScreenBody(
 						onVoiceDraftSeek = onVoiceDraftSeek,
 						onVoiceDraftDelete = onVoiceDraftDelete,
 						onVoiceDraftSend = onVoiceDraftSend,
-						voiceRecordingState = voiceRecordingState,
+						voiceRecordingState = voiceRecordingState(),
 						imageDrafts = imageDrafts,
 						onImageDraftRemove = onImageDraftRemove,
 						onImageDraftReorder = onImageDraftReorder,
 						onAttachClick = onAttachClick,
 						modifier = Modifier.fillMaxWidth(),
+						expanded = replyHeader != null,
+						header = {
+							AnimatedContent(
+								targetState = replyHeader,
+								contentKey = { it != null },
+								transitionSpec = {
+									(fadeIn(tween(160)) togetherWith fadeOut(tween(110)))
+										.using(SizeTransform { _, _ -> tween(190) })
+								},
+								label = "chat_composer_reply",
+							) { reply ->
+								if (reply != null) {
+									ChatCurrentReply(
+										title = reply.first,
+										subtitle = reply.second,
+										onClose = onComposerReplyClose ?: {},
+										onClick = onComposerReplyClick,
+										isEditMode = isEditMode,
+										modifier = Modifier.fillMaxWidth(),
+									)
+								}
+							}
+						},
 					)
 				},
 				emojiPanel = emojiPanel,
@@ -259,7 +310,8 @@ fun ChatScreenBody(
 		}
 
 		snackbarHost?.invoke()
+		contextMenuOverlay(timelineBounds?.let { bounds ->
+			bounds.copy(bottom = (bounds.bottom - with(density) { timelineBottomInset.toPx() }).coerceAtLeast(bounds.top))
+		})
 	}
-
-	contextMenuOverlay()
 }

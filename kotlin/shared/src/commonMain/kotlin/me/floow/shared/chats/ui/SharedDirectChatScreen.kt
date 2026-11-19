@@ -26,6 +26,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.structuralEqualityPolicy
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -42,6 +43,7 @@ import me.floow.shared.chats.model.withSavedMessagesSemantics
 import me.floow.shared.chats.uilogic.direct.DirectChatScreenState
 import me.floow.uikit.chat.common.ChatScreenBody
 import me.floow.uikit.chat.common.MessageContextMenuOverlay
+import me.floow.uikit.chat.input.ChatInputMode
 import me.floow.uikit.chat.components.FlowPinnedMessagesBar
 import me.floow.uikit.chat.input.ChatInputController
 import me.floow.uikit.chat.input.rememberChatInputController
@@ -57,7 +59,7 @@ import me.floow.uikit.chat.model.VideoRecordingState
 import me.floow.uikit.chat.model.resolveReplyTargetId
 import me.floow.uikit.chat.states.ChatMessagesSkeleton
 import me.floow.uikit.chat.states.HasDataState
-import me.floow.uikit.chat.states.LocalActiveContextMenuMessageId
+import me.floow.uikit.chat.states.LocalContextMenuElevation
 import me.floow.uikit.util.overlayHorizontalSwipeZone
 import org.jetbrains.compose.resources.painterResource
 
@@ -94,7 +96,6 @@ internal fun SharedDirectChatScreen(
 	contextMenuAnchorRect: Rect?,
 	contextMenuHighlightRect: Rect?,
 	contextMenuElevatedData: me.floow.uikit.chat.common.ElevatedMessageData? = null,
-	isContextMenuCircle: Boolean = false,
 	isContextMenuOutgoing: Boolean? = null,
 	onDismissContextMenu: () -> Unit,
 	onContextMenuActionClick: (ChatContextMenuAction) -> Unit,
@@ -146,7 +147,7 @@ internal fun SharedDirectChatScreen(
 	onVoiceDraftSeek: (Float) -> Unit = {},
 	onVoiceDraftDelete: () -> Unit = {},
 	onVoiceDraftSend: () -> Unit = {},
-	voiceRecordingState: me.floow.uikit.chat.model.VoiceRecordingInputState = me.floow.uikit.chat.model.VoiceRecordingInputState(),
+	voiceRecordingState: () -> me.floow.uikit.chat.model.VoiceRecordingInputState = { me.floow.uikit.chat.model.VoiceRecordingInputState() },
 	imageDrafts: List<ChatDraftImage> = emptyList(),
 	onImageDraftRemove: (String) -> Unit = {},
 	onImageDraftReorder: (List<String>) -> Unit = {},
@@ -186,9 +187,15 @@ internal fun SharedDirectChatScreen(
 		persistenceKey = (uiState as? ChatScreenUiState.HasData)?.timelineSessionToken,
 	)
 	val actualImeHeightPx = rememberChatInputLayoutState(controller = inputController)
-	val recordingOverlayBottomInsetPx by remember(inputController, actualImeHeightPx, recordingState.mode, voiceRecordingState.isRecording) {
+	val isVoiceRecording by remember(voiceRecordingState) {
+		derivedStateOf(structuralEqualityPolicy()) { voiceRecordingState().isRecording }
+	}
+	val placeMenuAboveKeyboard = remember(activeContextMenuMessageId) {
+		activeContextMenuMessageId != null && actualImeHeightPx > 0
+	}
+	val recordingOverlayBottomInsetPx by remember(inputController, actualImeHeightPx, recordingState.mode, isVoiceRecording) {
 		derivedStateOf {
-			if (recordingState.mode == VideoRecordingMode.Idle && !voiceRecordingState.isRecording) {
+			if (recordingState.mode == VideoRecordingMode.Idle && !isVoiceRecording) {
 				0
 			} else {
 				maxOf(actualImeHeightPx, inputController.keyboardLayoutHeightPx)
@@ -239,9 +246,9 @@ internal fun SharedDirectChatScreen(
 	}
 
 	var lastVoiceRecording by remember { mutableStateOf(false) }
-	LaunchedEffect(voiceRecordingState.isRecording) {
+	LaunchedEffect(isVoiceRecording) {
 		val wasRecording = lastVoiceRecording
-		val isRecording = voiceRecordingState.isRecording
+		val isRecording = isVoiceRecording
 		if (isRecording && !wasRecording) {
 			inputController.enterRecording()
 		} else if (!isRecording && wasRecording) {
@@ -250,9 +257,16 @@ internal fun SharedDirectChatScreen(
 		lastVoiceRecording = isRecording
 	}
 
-	LaunchedEffect(replyField?.replyId) {
-		if (replyField != null && !selectionState.isSelectionMode) {
+	LaunchedEffect(replyField?.replyId, hasDataState?.messageToEditId) {
+		if ((replyField != null || hasDataState?.messageToEditId != null) && !selectionState.isSelectionMode) {
 			inputController.openKeyboard()
+		}
+	}
+	LaunchedEffect(selectionState.isSelectionMode) {
+		if (selectionState.isSelectionMode &&
+			(inputController.inputMode == ChatInputMode.Keyboard || inputController.inputMode == ChatInputMode.Emoji)
+		) {
+			inputController.closeInput()
 		}
 	}
 
@@ -333,7 +347,7 @@ internal fun SharedDirectChatScreen(
 	}
 
 	CompositionLocalProvider(
-		LocalActiveContextMenuMessageId provides activeContextMenuMessageId,
+		LocalContextMenuElevation provides contextMenuElevatedData,
 	) {
 		ChatScreenBody(
 			title = header.title,
@@ -385,7 +399,7 @@ internal fun SharedDirectChatScreen(
 		imageDrafts = imageDrafts,
 		onImageDraftRemove = onImageDraftRemove,
 		onImageDraftReorder = onImageDraftReorder,
-		onAttachClick = onAttachClick,
+		onAttachClick = if (hasDataState?.messageToEditId == null) onAttachClick else null,
 		composerReplyTitle = when {
 			hasDataState?.messageToEditId != null -> strings.composerEditing
 			replyField != null -> sharedComposerReplyingToLabel(replyField.replyAuthorName)
@@ -418,7 +432,7 @@ internal fun SharedDirectChatScreen(
 		emojiPanel = {
 			emojiPanel(inputController)
 		},
-		content = { contentModifier ->
+		content = { contentModifier, composerBottomInset ->
 			when (uiState) {
 				is ChatScreenUiState.Loading -> ChatMessagesSkeleton(
 					showIncomingAvatarSpace = config.interactionPolicy.showAuthorHeaderForInMessages,
@@ -478,6 +492,7 @@ internal fun SharedDirectChatScreen(
 						bubbleBoundsByMessageKey = bubbleBoundsByMessageKey,
 						onLoadMore = onLoadMore,
 						config = config,
+						composerBottomInset = composerBottomInset,
 						messageListScrollEnabled = !videoCircleInteractionActive,
 						videoCircleContent = videoCircleContent,
 						voiceContent = voiceContent,
@@ -500,10 +515,11 @@ internal fun SharedDirectChatScreen(
 					videoCircleFlightOverlay(overlayModifier)
 				}
 			}
-			voiceRecordingState.isRecording -> {
+			isVoiceRecording -> {
 				{ overlayModifier ->
+					val voiceState = voiceRecordingState()
 					val lockThreshold = if (recordingState.lockThresholdPx > 0f) recordingState.lockThresholdPx else 180f
-					val lockProgress = ((-voiceRecordingState.dragOffsetY) / lockThreshold).coerceIn(0f, 1f)
+					val lockProgress = ((-voiceState.dragOffsetY) / lockThreshold).coerceIn(0f, 1f)
 					val density = LocalDensity.current
 					val bottomInsetDp = with(density) { recordingOverlayBottomInsetPx.toDp() }
 					Box(
@@ -517,7 +533,7 @@ internal fun SharedDirectChatScreen(
 							contentAlignment = Alignment.Center,
 						) {
 							RecordingLockPill(
-								isLocked = voiceRecordingState.isLocked,
+								isLocked = voiceState.isLocked,
 								lockProgress = lockProgress,
 								onPauseClick = onRecordStopClick,
 							)
@@ -527,16 +543,17 @@ internal fun SharedDirectChatScreen(
 			}
 			else -> null
 		},
-		contextMenuOverlay = {
+		contextMenuOverlay = { viewport ->
 			MessageContextMenuOverlay(
 				actions = contextMenuActions,
 				anchorRect = contextMenuAnchorRect,
 				highlightRect = contextMenuHighlightRect,
 				elevatedData = contextMenuElevatedData,
-				isCircle = isContextMenuCircle,
 				isOutgoing = isContextMenuOutgoing,
 				onActionClick = onContextMenuActionClick,
 				onDismissRequest = onDismissContextMenu,
+				aboveKeyboard = placeMenuAboveKeyboard,
+				messageViewport = viewport,
 			)
 		},
 		modifier = modifier

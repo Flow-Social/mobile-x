@@ -147,17 +147,18 @@ private val ActiveCircleSize = 252.dp
 @OptIn(ExperimentalForeignApi::class, androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 actual fun NativeVideoCirclePlayer(
+    messageKey: String,
     videoUrl: String,
     thumbnailUrl: String?,
     playbackUiState: me.floow.uikit.chat.model.VideoCirclePlaybackUiState,
-    isElevated: Boolean,
+    showMenuPreview: Boolean,
     onClick: (() -> Unit)?,
     onSeek: ((Float) -> Unit)?,
     onPlaybackEnded: (() -> Unit)?,
     modifier: Modifier
 ) {
-    val progress = androidx.compose.runtime.remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
-    var activePlayer by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<AVPlayer?>(null) }
+    val progress = androidx.compose.runtime.remember(messageKey) { androidx.compose.runtime.mutableFloatStateOf(0f) }
+    var activePlayer by androidx.compose.runtime.remember(messageKey) { androidx.compose.runtime.mutableStateOf<AVPlayer?>(null) }
 
     val isPlaying = playbackUiState.isPlaying
     val isPaused = playbackUiState.isPaused
@@ -259,6 +260,7 @@ actual fun NativeVideoCirclePlayer(
                     container
                 },
                 update = { container ->
+                    container.alpha = if (showMenuPreview) 0.0 else 1.0
                     if (isPlaying) {
                         container.player?.play()
                     } else {
@@ -266,9 +268,11 @@ actual fun NativeVideoCirclePlayer(
                     }
                 },
                 modifier = Modifier.fillMaxSize(),
-                properties = UIKitInteropProperties(
-                    placedAsOverlay = isElevated,
-                )
+                onRelease = { container ->
+                    if (activePlayer == container.player) activePlayer = null
+                    container.release()
+                },
+                properties = UIKitInteropProperties(interactionMode = null),
             )
         }
 
@@ -298,9 +302,6 @@ actual fun NativeVideoCirclePlayer(
                         isPaused = isPaused,
                         progress = progress.floatValue,
                         onSeekingChange = {},
-                        consumeTapUp = true,
-                        onTogglePlayback = onClick,
-                        onLongPress = {},
                         onSeekProgress = { nextProg ->
                             activePlayer?.let { p ->
                                 val currentItem = p.currentItem ?: return@let

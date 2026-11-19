@@ -228,6 +228,9 @@ private fun List<ChatMessageItemModel>.toDatedChatMessages(): List<DatedChatMess
 		}
 }
 
+internal fun ChatMessageItemModel.imageCaption(): String =
+	text.takeUnless { it == "Фотография" }.orEmpty()
+
 private fun List<ChatMessage>.groupAlbumMessages(): List<ChatMessage> {
 	if (isEmpty()) return emptyList()
 
@@ -333,7 +336,7 @@ private fun ChatMessageItemModel.toChatMessage(): ChatMessage {
 			id = id,
 			uiKey = clientMessageId?.let { "cmid_$it" } ?: "msg_$id",
 			clientMessageId = clientMessageId,
-			messageText = text.takeIf { it != "Фотография" }.orEmpty(),
+			messageText = imageCaption(),
 			createdAtMillis = createdAtMillis,
 			isOutgoing = isOutgoing,
 			isPinned = isPinned,

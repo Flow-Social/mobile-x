@@ -16,6 +16,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.structuralEqualityPolicy
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
@@ -63,6 +64,7 @@ import me.floow.shared.chats.media.attachment.ChatAttachmentPickerModal
 import me.floow.shared.media.ui.NativeCameraRecordingPreview
 import me.floow.shared.media.ui.NativeVideoCirclePlayer
 import me.floow.shared.media.voice.createVoicePlayer
+import me.floow.shared.media.voice.VoicePlaybackState
 import me.floow.uikit.chat.components.ChatAlbumBubble
 import me.floow.uikit.chat.components.resolveViewerImageSource
 import me.floow.uikit.chat.components.VideoRecordingOverlay
@@ -164,7 +166,7 @@ fun SharedDirectChatRoute(
 	val scope = rememberCoroutineScope()
 	val snackbarHostState = remember { SnackbarHostState() }
 	val voicePlayer = remember { createVoicePlayer() }
-	val voicePlaybackState by voicePlayer.state.collectAsState()
+	val voicePlayback = voicePlayer.state.collectAsState()
 	val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
 	DisposableEffect(voicePlayer) {
 		onDispose {
@@ -313,10 +315,22 @@ fun SharedDirectChatRoute(
 		currentMessages.associateBy(ChatMessageItemModel::id)
 	}
 	val contextMenuMessage = activeContextMenuMessageId?.let(messagesById::get)
+	fun editTarget(message: ChatMessageItemModel): ChatMessageItemModel? {
+		if (!message.isOutgoing || message.isDeleted || message.id <= 0L) return null
+		if (message.content is ChatMessageContent.Text) return message
+		val image = message.content as? ChatMessageContent.Image ?: return null
+		if (message.imageCaption().isNotBlank()) return message
+		val albumId = image.groupId?.takeIf(String::isNotBlank) ?: return null
+		return currentMessages.firstOrNull {
+			it.isOutgoing && !it.isDeleted && it.id > 0L &&
+				(it.content as? ChatMessageContent.Image)?.groupId == albumId &&
+				it.imageCaption().isNotBlank()
+		}
+	}
+	val editingMessage = (state as? DirectChatScreenState.HasData)?.editingMessageId != null
 	val contextMenuMessageKey = remember(contextMenuMessage) {
 		contextMenuMessage?.uiMessageKey()
 	}
-	val isContextMenuCircle = contextMenuMessage?.content is ChatMessageContent.VideoCircle
 	val isContextMenuOutgoing = contextMenuMessage?.isOutgoing
 	val liveContextMenuAnchorRect by remember(
 		contextMenuMessage,
@@ -387,8 +401,8 @@ fun SharedDirectChatRoute(
 			copyText = selectedCopyText,
 		)
 	}
-	val contextMenuActions = remember(contextMenuMessage) {
-		contextMenuMessage?.let(::resolveContextMenuActions).orEmpty()
+	val contextMenuActions = remember(contextMenuMessage, currentMessages) {
+		contextMenuMessage?.let { resolveContextMenuActions(it, canEdit = editTarget(it) != null) }.orEmpty()
 	}
 	fun clearContextMenuState() {
 		activeContextMenuMessageId = null
@@ -633,14 +647,18 @@ fun SharedDirectChatRoute(
 	}
 
 	var internalVoiceRecordingState by remember { mutableStateOf(me.floow.uikit.chat.model.VoiceRecordingInputState()) }
-	val effectiveVoiceRecordingState = if (voiceRecordingState.isRecording || voiceRecordingState.isLocked) {
-		voiceRecordingState
-	} else {
-		internalVoiceRecordingState
+	val effectiveVoiceRecordingState = remember(voiceRecordingState) {
+		{
+			if (voiceRecordingState.isRecording || voiceRecordingState.isLocked) voiceRecordingState
+			else internalVoiceRecordingState
+		}
+	}
+	val isInternalVoiceRecording by remember {
+		derivedStateOf(structuralEqualityPolicy()) { internalVoiceRecordingState.isRecording }
 	}
 
-	LaunchedEffect(internalVoiceRecordingState.isRecording) {
-		if (internalVoiceRecordingState.isRecording) {
+	LaunchedEffect(isInternalVoiceRecording) {
+		if (isInternalVoiceRecording) {
 			val startTime = currentChatEpochMillis()
 			while (internalVoiceRecordingState.isRecording) {
 				kotlinx.coroutines.delay(80)
@@ -809,14 +827,22 @@ fun SharedDirectChatRoute(
 	}
 
 	val effectiveVoiceContent: @Composable (me.floow.uikit.chat.model.VoiceMessage, Boolean, () -> Unit) -> Unit = voiceContent ?: { message, isSelectionMode, onLongClick ->
-		val isThisMessageActive = voicePlaybackState.activeMessageId == message.id || voicePlaybackState.activeUiKey == message.uiKey
+		val playback by remember(voicePlayback, message.id, message.uiKey) {
+			derivedStateOf(structuralEqualityPolicy()) {
+				val active = voicePlayback.value
+				if (active.activeMessageId == message.id || active.activeUiKey == message.uiKey) active
+				else VoicePlaybackState(speed = active.speed)
+			}
+		}
 		val clientMessageId = message.clientMessageId
-		val voiceTask = clientMessageId?.let { outboxTasks[it] }
+		val uploadProgress by remember(clientMessageId) {
+			derivedStateOf(structuralEqualityPolicy()) { clientMessageId?.let { outboxTasks[it]?.progress } }
+		}
 		VoiceMessageBubble(
 			message = message,
-			isPlaying = isThisMessageActive && voicePlaybackState.isPlaying,
-			currentPositionMs = if (isThisMessageActive) voicePlaybackState.currentPositionMs else 0L,
-			speed = voicePlaybackState.speed,
+			isPlaying = playback.isPlaying,
+			currentPositionMs = playback.currentPositionMs,
+			speed = playback.speed,
 			onPlayPauseClick = {
 				val src = message.playableSource.orEmpty()
 				voicePlayer.play(
@@ -831,32 +857,33 @@ fun SharedDirectChatRoute(
 				voicePlayer.seekTo(pos)
 			},
 			onToggleSpeed = { voicePlayer.toggleSpeed() },
-			isBuffering = isThisMessageActive && voicePlaybackState.isBuffering,
-			uploadProgress = voiceTask?.progress,
+			isBuffering = playback.isBuffering,
+			uploadProgress = uploadProgress,
 			onCancelUpload = clientMessageId?.let { id -> { stateHolder.cancelLocalVoice(id) } },
 			onRetryClick = { clientMessageId?.let { stateHolder.retryMediaMessage(it) } },
 		)
 	}
 
-	val activeVideoCircle by stateHolder.mediaController.activeVideoCircle.collectAsState()
+	val activeVideoCircle = stateHolder.mediaController.activeVideoCircle.collectAsState()
 
-	val effectiveVideoCircleContent: @Composable (VideoCircleOutMessage, Boolean, () -> Unit) -> Unit = videoCircleContent ?: { message, isSelectionMode, onLongClick ->
+	val effectiveVideoCircleContent: @Composable (VideoCircleOutMessage, Boolean, () -> Unit) -> Unit = videoCircleContent ?: { message, isSelectionMode, _ ->
 		val clientMessageId = message.clientMessageId
 		val circleTask = clientMessageId?.let { outboxTasks[it] }
 		val isUploading = message.uploadStatus == VideoCircleUploadStatus.Uploading || message.uploadStatus == VideoCircleUploadStatus.Pending
 		val isFailed = message.uploadStatus == VideoCircleUploadStatus.Failed
-		val playbackUiState = stateHolder.mediaController.resolveVideoCircleUiState(
-			uiKey = message.uiKey,
-			isUploading = isUploading,
-			isFailed = isFailed,
-		)
+		val playbackUiState by remember(activeVideoCircle, message.uiKey, isUploading, isFailed) {
+			derivedStateOf(structuralEqualityPolicy()) {
+				stateHolder.mediaController.resolveVideoCircleUiState(
+					active = activeVideoCircle.value,
+					uiKey = message.uiKey,
+					isUploading = isUploading,
+					isFailed = isFailed,
+				)
+			}
+		}
 		val flightKey = activeFlightState?.messageUiKey
 		val isThisMessageInFlight = (flightKey == message.uiKey || (clientMessageId != null && flightKey == "cmid_$clientMessageId")) && !isFlightLanded
-		// Плеер для открытого сообщения остается видимым (alpha = 1f), поверх затемнения scrim.
-		// Скрываем плеер только если сообщение в полете или открыто меню другого сообщения.
-		val isThisMessageElevated = activeContextMenuMessageId == message.id
-		val isVideoCircle = message is VideoCircleOutMessage || (message as? VideoCircleOutMessage) != null || message::class.simpleName?.contains("VideoCircle", ignoreCase = true) == true
-		val flightBubbleAlpha = if (!isVideoCircle && (isThisMessageInFlight || isThisMessageElevated)) 0f else 1f
+		val flightBubbleAlpha = if (isThisMessageInFlight) 0f else 1f
 		val bubbleSize by animateDpAsState(
 			targetValue = if (playbackUiState.isExpanded) 252.dp else 228.dp,
 			animationSpec = tween(durationMillis = 180),
@@ -870,14 +897,15 @@ fun SharedDirectChatRoute(
 			contentAlignment = Alignment.Center,
 		) {
 			NativeVideoCirclePlayer(
+				messageKey = message.uiKey,
 				videoUrl = message.playableSource.orEmpty(),
 				thumbnailUrl = message.thumbnailPath ?: message.remoteThumbnailUrl,
 				playbackUiState = playbackUiState,
-				isElevated = isThisMessageElevated,
+				showMenuPreview = activeContextMenuMessageId == message.id,
 				onClick = {
 					if (isSelectionMode) {
-						onLongClick()
-					} else {
+						toggleMessageSelection(message.id)
+					} else if (!isUploading && !isFailed && !message.playableSource.isNullOrBlank()) {
 						stateHolder.mediaController.toggleVideoCircle(message.uiKey, message.id)
 					}
 				},
@@ -885,7 +913,9 @@ fun SharedDirectChatRoute(
 					stateHolder.mediaController.updateVideoCircleProgress(nextProg)
 				},
 				onPlaybackEnded = {
-					stateHolder.mediaController.clearActiveVideoCircle()
+					if (activeVideoCircle.value.uiKey == message.uiKey) {
+						stateHolder.mediaController.clearActiveVideoCircle()
+					}
 				},
 				modifier = Modifier.fillMaxSize(),
 			)
@@ -1051,13 +1081,13 @@ fun SharedDirectChatRoute(
 		activeContextMenuMessageId = activeContextMenuMessageId,
 		contextMenuActions = contextMenuActions,
 		resolveContextMenuActions = { messageId ->
-			messagesById[messageId]?.let(::resolveContextMenuActions).orEmpty()
+			messagesById[messageId]?.let { resolveContextMenuActions(it, canEdit = editTarget(it) != null) }.orEmpty()
 		},
 		jumpRequest = jumpRequest,
 		onBackClick = onBackClick,
 		onHeaderClick = onHeaderClick,
 		onInputChange = stateHolder::updateInput,
-		onSendClick = if (effectiveImageDrafts.isNotEmpty()) effectiveImageDraftSend else stateHolder::sendOrEdit,
+		onSendClick = if (!editingMessage && effectiveImageDrafts.isNotEmpty()) effectiveImageDraftSend else stateHolder::sendOrEdit,
 		onReplyClick = stateHolder::addReply,
 		onClearReplyClick = stateHolder::clearReply,
 		onEditClick = stateHolder::startEditing,
@@ -1081,7 +1111,7 @@ fun SharedDirectChatRoute(
 		},
 		onMessageLongClick = { messageId ->
 			clearContextMenuState()
-			toggleMessageSelection(messageId)
+			if (selectedMessageIds.isEmpty()) toggleMessageSelection(messageId)
 		},
 		onReplyPreviewClick = stateHolder::jumpToMessage,
 		onContextMenuOpen = { messageId, anchorRect, highlightRect, elevatedData ->
@@ -1093,7 +1123,6 @@ fun SharedDirectChatRoute(
 		contextMenuAnchorRect = liveContextMenuAnchorRect,
 		contextMenuHighlightRect = liveContextMenuHighlightRect,
 		contextMenuElevatedData = contextMenuElevatedData,
-		isContextMenuCircle = isContextMenuCircle,
 		isContextMenuOutgoing = isContextMenuOutgoing,
 		onDismissContextMenu = ::clearContextMenuState,
 		onContextMenuActionClick = { action ->
@@ -1112,7 +1141,7 @@ fun SharedDirectChatRoute(
 						snackbarHostState.showSnackbar(strings.copied)
 					}
 				}
-				ChatContextMenuAction.Edit -> stateHolder.startEditing(message.id)
+				ChatContextMenuAction.Edit -> editTarget(message)?.let { stateHolder.startEditing(it.id) }
 				ChatContextMenuAction.Select -> toggleMessageSelection(message.id)
 				ChatContextMenuAction.Delete -> pendingDeleteMessageId = message.id
 				ChatContextMenuAction.Retry -> {
@@ -1195,7 +1224,8 @@ fun SharedDirectChatRoute(
 		voiceDraft = effectiveVoiceDraft,
 		onVoiceDraftPlayPause = {
 			val draft = effectiveVoiceDraft ?: return@SharedDirectChatScreen
-			if (voicePlaybackState.isPlaying && voicePlaybackState.activeUiKey == "draft") {
+			val playback = voicePlayback.value
+			if (playback.isPlaying && playback.activeUiKey == "draft") {
 				voicePlayer.pause()
 			} else {
 				voicePlayer.play(
@@ -1244,7 +1274,7 @@ fun SharedDirectChatRoute(
 				modifier = overlayModifier,
 			)
 		},
-		imageDrafts = effectiveImageDrafts,
+		imageDrafts = if (editingMessage) emptyList() else effectiveImageDrafts,
 		onImageDraftRemove = effectiveImageDraftRemove,
 		onImageDraftReorder = effectiveImageDraftReorder,
 		rowBoundsByMessageKey = rowBoundsByMessageKey,
@@ -1401,7 +1431,7 @@ private fun ChatMessageItemModel.uiMessageKey(): String {
 	}
 }
 
-private fun resolveContextMenuActions(message: ChatMessageItemModel): List<ChatContextMenuAction> {
+private fun resolveContextMenuActions(message: ChatMessageItemModel, canEdit: Boolean): List<ChatContextMenuAction> {
 	val hasServerId = message.id > 0L
 	val isPendingOutgoing = message.isOutgoing && !hasServerId && !message.clientMessageId.isNullOrBlank()
 	return buildList {
@@ -1417,7 +1447,7 @@ private fun resolveContextMenuActions(message: ChatMessageItemModel): List<ChatC
 			add(ChatContextMenuAction.CopyText)
 		}
 		if (message.isOutgoing && !message.isDeleted && hasServerId) {
-			if (message.content is ChatMessageContent.Text) {
+			if (canEdit) {
 				add(ChatContextMenuAction.Edit)
 			}
 			add(ChatContextMenuAction.Delete)

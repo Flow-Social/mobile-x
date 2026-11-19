@@ -792,7 +792,6 @@ class DirectChatStateHolder(
 							state.copy(
 								messages = timelineReducer.applyPeerReadState(updatedMessages, state.peerLastReadMessageId),
 								sending = false,
-								scrollToBottomRequestToken = scrollAnchorController.nextScrollRequestToken(),
 							)
 						}
 						is DirectChatScreenState.NoMessages -> DirectChatScreenState.HasData(
@@ -817,7 +816,7 @@ class DirectChatStateHolder(
 							}
 							state.copy(
 								messages = timelineReducer.applyPeerReadState(rolledBackMessages, state.peerLastReadMessageId),
-								input = originalEditingMessage.text,
+								input = text,
 								sending = false,
 								editingMessageId = originalEditingMessage.id,
 							)

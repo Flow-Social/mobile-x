@@ -21,10 +21,11 @@ expect fun NativeCameraRecordingPreview(
  */
 @Composable
 expect fun NativeVideoCirclePlayer(
+    messageKey: String,
     videoUrl: String,
     thumbnailUrl: String? = null,
     playbackUiState: VideoCirclePlaybackUiState = VideoCirclePlaybackUiState.IdlePreview,
-    isElevated: Boolean = false,
+    showMenuPreview: Boolean = false,
     onClick: (() -> Unit)? = null,
     onSeek: ((Float) -> Unit)? = null,
     onPlaybackEnded: (() -> Unit)? = null,
