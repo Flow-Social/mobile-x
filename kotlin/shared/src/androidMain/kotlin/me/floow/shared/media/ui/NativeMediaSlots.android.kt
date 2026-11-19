@@ -101,6 +101,7 @@ internal actual fun NativeVideoCirclePlayer(
     thumbnailUrl: String?,
     playbackUiState: VideoCirclePlaybackUiState,
     showMenuPreview: Boolean,
+    showVideoSurface: Boolean,
     onClick: (() -> Unit)?,
     progress: () -> Float,
     onSeek: (Float) -> Unit,
@@ -119,8 +120,8 @@ internal actual fun NativeVideoCirclePlayer(
 
     var isFirstFrameRendered by remember(videoUrl) { mutableStateOf(false) }
     var menuFrame by remember(videoUrl, showMenuPreview) { mutableStateOf<ImageBitmap?>(null) }
-    LaunchedEffect(isCurrentActive) {
-        if (!isCurrentActive) isFirstFrameRendered = false
+    LaunchedEffect(isCurrentActive, showVideoSurface) {
+        if (!isCurrentActive || !showVideoSurface) isFirstFrameRendered = false
     }
 
     // Telegram: pause progress animates 220ms in, 150ms out
@@ -206,7 +207,7 @@ internal actual fun NativeVideoCirclePlayer(
         contentAlignment = Alignment.Center,
     ) {
         // Hardware-accelerated ExoPlayer video playback via CircleVideoSurface (rendered underneath)
-        if (isCurrentActive && manager.player != null) {
+        if (isCurrentActive && showVideoSurface && manager.player != null) {
             CircleVideoSurface(
                 player = manager.player!!,
                 onSourceError = { isSourceError = true },
@@ -219,7 +220,7 @@ internal actual fun NativeVideoCirclePlayer(
         }
 
         // Thumbnail placeholder (rendered on top of video surface until first frame is actually decoded and rendered)
-        val showThumbnail = showMenuPreview || !isCurrentActive || !isFirstFrameRendered
+        val showThumbnail = showMenuPreview || !showVideoSurface || !isCurrentActive || !isFirstFrameRendered
         if (showThumbnail) {
             val snapshot = menuFrame
             if (snapshot != null) {

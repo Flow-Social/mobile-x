@@ -68,6 +68,7 @@
     <string name="chat_playback_play">Воспроизвести</string>
     <string name="chat_playback_pause">Пауза</string>
     <string name="chat_playback_close">Закрыть плеер</string>
+    <string name="chat_playback_stop">Остановить воспроизведение</string>
     <string name="chat_playback_speed">Скорость: %1$s</string>
     <string name="chat_copy_selected">Скопировать выбранное</string>
     <string name="chat_selection_delete">Удалить выбранное</string>

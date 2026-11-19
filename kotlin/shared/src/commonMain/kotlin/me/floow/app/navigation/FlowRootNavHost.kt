@@ -60,6 +60,7 @@ import me.floow.domain.values.ProfileName
 import me.floow.domain.values.ProfileUsername
 import me.floow.shared.chats.ui.SharedDirectChatRoute
 import me.floow.shared.chats.ui.ChatPlaybackTarget
+import me.floow.shared.chats.ui.FloatingChatVideo
 import me.floow.shared.chats.ui.LocalChatPlayback
 import me.floow.shared.chats.ui.SharedChatPlaybackBar
 import me.floow.shared.chats.ui.rememberChatPlaybackSession
@@ -347,6 +348,7 @@ private fun FlowRootNavigation(
                 MainTabsScreen(
                     isTopScreen = !isSubscreenOpen,
                     chatPlaybackBar = { SharedChatPlaybackBar(::openPlaybackMessage) },
+                    floatingChatVideo = { FloatingChatVideo(::openPlaybackMessage) },
                     onNavigateToPost = { postId ->
                         pushOverlay(
                             FlowSubscreen.PostDetail(
@@ -583,6 +585,7 @@ private fun SubscreenContent(
             val isSaved = subscreen.isSavedMessages || subscreen.conversationId == 100L || subscreen.peerUserId == "saved" || subscreen.peerUserId == "self"
             SharedDirectChatRoute(
                 stateHolder = directChatStateHolder,
+                showVideoSurface = isTopScreen,
                 onOpenPlaybackMessage = onOpenPlaybackMessage,
                 initialRequest = DirectChatInitialRequest(
                     conversationId = subscreen.conversationId.takeIf { it > 0L },

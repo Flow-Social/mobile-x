@@ -41,6 +41,7 @@ internal expect fun NativeVideoCirclePlayer(
     thumbnailUrl: String? = null,
     playbackUiState: VideoCirclePlaybackUiState = VideoCirclePlaybackUiState.IdlePreview,
     showMenuPreview: Boolean = false,
+    showVideoSurface: Boolean = true,
     onClick: (() -> Unit)? = null,
     progress: () -> Float,
     onSeek: (Float) -> Unit,

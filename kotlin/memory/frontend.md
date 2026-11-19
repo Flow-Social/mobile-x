@@ -31,6 +31,8 @@
 - `:app` — точка входа `MainActivity.kt`, корневая навигация `FlowNavHost.kt`.
 
 ### 2.2. Архитектурные правила и конвенции
+- Голосовые и видеокружки используют одну `ChatPlaybackSession` на корне навигации. Диалог и плавающий кружок во «Всех чатах» подключают видеоповерхность к уже запущенному плееру. Фоновый звук и системные команды обслуживают Android `FlowChatPlaybackService` и iOS Now Playing; системный PiP не используется.
+
 1. **Clean Architecture + MVI / StateHolder**:
    - Бизнес-логика экранов инкапсулирована в `StateHolder` (например, `DirectChatStateHolder`).
    - Все `StateHolder` регистрируются в Koin как `factory` и в Compose **ОБЯЗАТЕЛЬНО** внедряются через:

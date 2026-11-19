@@ -14,7 +14,8 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import platform.AVFAudio.AVAudioSession
 import platform.AVFAudio.AVAudioSessionCategoryPlayback
-import platform.AVFAudio.AVAudioSessionCategoryOptionDefaultToSpeaker
+import platform.AVFAudio.AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation
+import platform.AVFAudio.setActive
 import platform.AVFoundation.*
 import platform.CoreMedia.*
 import platform.Foundation.NSURL
@@ -75,11 +76,8 @@ class IosVoicePlayer(
             }
 
             val session = AVAudioSession.sharedInstance()
-            session.setCategory(
-                category = AVAudioSessionCategoryPlayback,
-                withOptions = AVAudioSessionCategoryOptionDefaultToSpeaker,
-                error = null,
-            )
+            session.setCategory(AVAudioSessionCategoryPlayback, error = null)
+            session.setActive(true, error = null)
 
             val playerItem = AVPlayerItem(uRL = url)
             endObserver = platform.Foundation.NSNotificationCenter.defaultCenter.addObserverForName(
@@ -119,6 +117,7 @@ class IosVoicePlayer(
     }
 
     override fun resume() {
+        if (avPlayer != null) AVAudioSession.sharedInstance().setActive(true, error = null)
         avPlayer?.let { player ->
             player.play()
             if (_state.value.speed != 1.0f) {
@@ -166,7 +165,10 @@ class IosVoicePlayer(
             platform.Foundation.NSNotificationCenter.defaultCenter.removeObserver(it)
         }
         endObserver = null
-        avPlayer?.pause()
+        avPlayer?.let {
+            it.pause()
+            AVAudioSession.sharedInstance().setActive(false, withOptions = AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation, error = null)
+        }
         avPlayer = null
         currentSource = null
         _state.update {

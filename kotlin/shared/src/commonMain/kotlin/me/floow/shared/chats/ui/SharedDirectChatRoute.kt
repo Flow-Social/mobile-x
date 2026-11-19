@@ -98,6 +98,7 @@ internal fun SharedDirectChatRoute(
 	stateHolder: DirectChatStateHolder,
 	initialRequest: DirectChatInitialRequest,
 	onOpenPlaybackMessage: (ChatPlaybackTarget) -> Unit,
+	showVideoSurface: Boolean = true,
 	onBackClick: () -> Unit,
 	onShowMessage: (String) -> Unit,
 	onCopyText: (String) -> Unit = {},
@@ -918,6 +919,7 @@ internal fun SharedDirectChatRoute(
 				thumbnailUrl = message.thumbnailPath ?: message.remoteThumbnailUrl,
 				playbackUiState = playbackUiState,
 				showMenuPreview = activeContextMenuMessageId == message.id,
+				showVideoSurface = showVideoSurface && playbackSession.foreground,
 				onClick = {
 					if (isSelectionMode) {
 						toggleMessageSelection(message.id)

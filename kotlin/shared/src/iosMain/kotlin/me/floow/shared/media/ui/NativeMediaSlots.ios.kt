@@ -137,6 +137,7 @@ internal actual fun NativeVideoCirclePlayer(
     thumbnailUrl: String?,
     playbackUiState: me.floow.uikit.chat.model.VideoCirclePlaybackUiState,
     showMenuPreview: Boolean,
+    showVideoSurface: Boolean,
     onClick: (() -> Unit)?,
     progress: () -> Float,
     onSeek: (Float) -> Unit,
@@ -146,7 +147,7 @@ internal actual fun NativeVideoCirclePlayer(
     val isPaused = playbackUiState.isPaused
     val isProgressVisible = playbackUiState.isProgressVisible
     val playbackProgress = if (isProgressVisible) progress() else 0f
-    val player = if (isProgressVisible) playback.playerFor(messageKey) else null
+    val player = if (isProgressVisible && showVideoSurface) playback.playerFor(messageKey) else null
 
     val pauseProgress by androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (isPaused) 1f else 0f,

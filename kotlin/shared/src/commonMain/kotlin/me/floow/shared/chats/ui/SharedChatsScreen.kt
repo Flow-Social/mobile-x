@@ -73,6 +73,7 @@ fun SharedChatsScreen(
 	onLoadMore: () -> Unit = {},
 	modifier: Modifier = Modifier,
 	playbackBar: @Composable () -> Unit = {},
+	floatingVideo: @Composable () -> Unit = {},
 ) {
 	val outgoingPrefix = stringResource(Res.string.chats_outgoing_prefix)
 	var actionDialogTarget by remember { mutableStateOf<ChatListItemModel?>(null) }
@@ -360,6 +361,7 @@ fun SharedChatsScreen(
 				}
 			}
 			playbackBar()
+			floatingVideo()
 		}
 	}
 }

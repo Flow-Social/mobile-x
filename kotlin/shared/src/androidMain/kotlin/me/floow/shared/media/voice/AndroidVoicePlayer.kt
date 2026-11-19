@@ -30,6 +30,7 @@ class AndroidVoicePlayer(
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main),
 ) : VoicePlayer {
     private var exoPlayer: ExoPlayer? = null
+    internal val nativePlayer: ExoPlayer? get() = exoPlayer
     private var progressJob: Job? = null
     private var currentSource: String? = null
 

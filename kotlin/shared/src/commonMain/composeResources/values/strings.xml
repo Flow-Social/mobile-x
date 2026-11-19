@@ -68,6 +68,7 @@
     <string name="chat_playback_play">Play</string>
     <string name="chat_playback_pause">Pause</string>
     <string name="chat_playback_close">Close player</string>
+    <string name="chat_playback_stop">Stop playback</string>
     <string name="chat_playback_speed">Playback speed: %1$s</string>
     <string name="chat_copy_selected">Copy selected messages</string>
     <string name="chat_selection_delete">Delete selected messages</string>

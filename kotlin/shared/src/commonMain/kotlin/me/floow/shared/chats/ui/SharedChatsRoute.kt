@@ -15,6 +15,7 @@ fun SharedChatsRoute(
 	onChatClick: (ChatListItemModel) -> Unit,
 	modifier: Modifier = Modifier,
 	playbackBar: @Composable () -> Unit = {},
+	floatingVideo: @Composable () -> Unit = {},
 ) {
 	val state by stateHolder.state.collectAsState()
 
@@ -27,5 +28,6 @@ fun SharedChatsRoute(
 		onLoadMore = stateHolder::loadMore,
 		modifier = modifier,
 		playbackBar = playbackBar,
+		floatingVideo = floatingVideo,
 	)
 }

@@ -10,6 +10,8 @@ import androidx.compose.runtime.setValue
 import kotlinx.cinterop.ExperimentalForeignApi
 import platform.AVFAudio.AVAudioSession
 import platform.AVFAudio.AVAudioSessionCategoryPlayback
+import platform.AVFAudio.AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation
+import platform.AVFAudio.setActive
 import platform.AVFoundation.*
 import platform.CoreMedia.CMTimeGetSeconds
 import platform.CoreMedia.CMTimeMakeWithSeconds
@@ -30,6 +32,7 @@ internal actual class NativeVideoCirclePlayback(private val onPlaybackEnded: (St
     actual fun play(uiKey: String, messageId: Long, source: String, speed: Float) {
         val preparedPlayer = player?.takeIf { activeKey == uiKey && activeSource == source }
         if (preparedPlayer != null) {
+            AVAudioSession.sharedInstance().setActive(true, error = null)
             preparedPlayer.rate = speed
             return
         }
@@ -42,8 +45,10 @@ internal actual class NativeVideoCirclePlayback(private val onPlaybackEnded: (St
             return
         }
         AVAudioSession.sharedInstance().setCategory(AVAudioSessionCategoryPlayback, error = null)
+        AVAudioSession.sharedInstance().setActive(true, error = null)
         val item = AVPlayerItem(uRL = url)
         val newPlayer = AVPlayer(playerItem = item)
+        newPlayer.audiovisualBackgroundPlaybackPolicy = AVPlayerAudiovisualBackgroundPlaybackPolicyContinuesIfPossible
         player = newPlayer
         activeKey = uiKey
         activeSource = source
@@ -65,7 +70,10 @@ internal actual class NativeVideoCirclePlayback(private val onPlaybackEnded: (St
     actual fun stop() {
         observers.forEach { NSNotificationCenter.defaultCenter.removeObserver(it) }
         observers = emptyList()
-        player?.pause()
+        player?.let {
+            it.pause()
+            AVAudioSession.sharedInstance().setActive(false, withOptions = AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation, error = null)
+        }
         player = null
         activeKey = null
         activeSource = null
@@ -86,6 +94,8 @@ internal actual class NativeVideoCirclePlayback(private val onPlaybackEnded: (St
 
     private fun duration(player: AVPlayer): Double? =
         player.currentItem?.let { CMTimeGetSeconds(it.duration) }?.takeIf { it.isFinite() && it > 0.0 }
+
+    internal fun durationMillis(): Long = player?.let { duration(it) }?.let { (it * 1000).toLong() } ?: 0L
 }
 
 @Composable

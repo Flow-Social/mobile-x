@@ -60,6 +60,8 @@ internal class ChatPlaybackSession(
         private set
     var videoProgress by mutableFloatStateOf(0f)
         private set
+    var foreground by mutableStateOf(true)
+        internal set
 
     fun playVoice(next: ChatPlaybackTarget, source: String, durationMs: Long) {
         if (isVideo) stop()
@@ -82,15 +84,20 @@ internal class ChatPlaybackSession(
     private var videoSource: String? = null
 
     fun toggle() {
+        setPlaying(if (isVideo) videoPaused else voice.state.value.let { !it.isPlaying && !it.isBuffering })
+    }
+
+    fun setPlaying(playing: Boolean) {
+        if (target == null) return
         if (isVideo) {
             val current = target ?: return
             val source = videoSource ?: return
-            videoPaused = !videoPaused
+            if (videoPaused == !playing) return
+            videoPaused = !playing
             if (videoPaused) video.pause()
             else video.play(current.uiKey, current.message.id, source, videoSpeed)
         } else {
-            val current = voice.state.value
-            if (current.isPlaying || current.isBuffering) voice.pause() else voice.resume()
+            if (playing) voice.resume() else voice.pause()
         }
     }
 
@@ -156,8 +163,13 @@ internal fun rememberChatPlaybackSession(): ChatPlaybackSession {
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(playback, lifecycle) {
         session = playback
+        playback.foreground = lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) playback.stop()
+            when (event) {
+                Lifecycle.Event.ON_START -> playback.foreground = true
+                Lifecycle.Event.ON_STOP -> playback.foreground = false
+                else -> Unit
+            }
         }
         lifecycle.addObserver(observer)
         onDispose {
@@ -166,8 +178,9 @@ internal fun rememberChatPlaybackSession(): ChatPlaybackSession {
         }
     }
     DisposableEffect(voice) { onDispose { voice.release() } }
+    PlatformChatPlaybackControls(playback)
 
-    val playingVideo = playback.isVideo && !playback.videoPaused
+    val playingVideo = playback.foreground && playback.isVideo && !playback.videoPaused
     LaunchedEffect(playback, playingVideo) {
         if (playingVideo) {
             while (isActive) {
@@ -178,6 +191,9 @@ internal fun rememberChatPlaybackSession(): ChatPlaybackSession {
     }
     return playback
 }
+
+@Composable
+internal expect fun PlatformChatPlaybackControls(playback: ChatPlaybackSession)
 
 @Composable
 internal fun SharedChatPlaybackBar(onOpenMessage: (ChatPlaybackTarget) -> Unit) {
