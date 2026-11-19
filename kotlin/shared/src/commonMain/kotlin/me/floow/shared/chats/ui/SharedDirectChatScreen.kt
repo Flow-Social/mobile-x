@@ -90,9 +90,12 @@ internal fun SharedDirectChatScreen(
 	onMessageClick: (Long) -> Unit,
 	onMessageLongClick: (Long) -> Unit,
 	onReplyPreviewClick: (Long) -> Unit,
-	onContextMenuOpen: (Long, Rect?, Rect?) -> Unit,
+	onContextMenuOpen: (Long, Rect?, Rect?, me.floow.uikit.chat.common.ElevatedMessageData?) -> Unit,
 	contextMenuAnchorRect: Rect?,
 	contextMenuHighlightRect: Rect?,
+	contextMenuElevatedData: me.floow.uikit.chat.common.ElevatedMessageData? = null,
+	isContextMenuCircle: Boolean = false,
+	isContextMenuOutgoing: Boolean? = null,
 	onDismissContextMenu: () -> Unit,
 	onContextMenuActionClick: (ChatContextMenuAction) -> Unit,
 	pendingDeleteMessageId: Long?,
@@ -467,8 +470,8 @@ internal fun SharedDirectChatScreen(
 						resolveContextMenuActions = { message ->
 							resolveContextMenuActions(message.id)
 						},
-						onContextMenuOpenRequest = { message, anchorRect, highlightRect ->
-							onContextMenuOpen(message.id, anchorRect, highlightRect)
+						onContextMenuOpenRequest = { message, anchorRect, highlightRect, elevatedData ->
+							onContextMenuOpen(message.id, anchorRect, highlightRect, elevatedData)
 						},
 						onContextMenuDismissRequest = onDismissContextMenu,
 						rowBoundsByMessageKey = rowBoundsByMessageKey,
@@ -529,6 +532,9 @@ internal fun SharedDirectChatScreen(
 				actions = contextMenuActions,
 				anchorRect = contextMenuAnchorRect,
 				highlightRect = contextMenuHighlightRect,
+				elevatedData = contextMenuElevatedData,
+				isCircle = isContextMenuCircle,
+				isOutgoing = isContextMenuOutgoing,
 				onActionClick = onContextMenuActionClick,
 				onDismissRequest = onDismissContextMenu,
 			)

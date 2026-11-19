@@ -9,7 +9,8 @@ enum class ChatContextMenuAction {
 	CopyText,
 	Edit,
 	Delete,
-	Retry
+	Retry,
+	Select
 }
 
 @Immutable

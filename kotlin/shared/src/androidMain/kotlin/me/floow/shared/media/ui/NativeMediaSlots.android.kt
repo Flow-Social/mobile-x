@@ -102,6 +102,7 @@ actual fun NativeVideoCirclePlayer(
     videoUrl: String,
     thumbnailUrl: String?,
     playbackUiState: VideoCirclePlaybackUiState,
+    isElevated: Boolean,
     onClick: (() -> Unit)?,
     onSeek: ((Float) -> Unit)?,
     onPlaybackEnded: (() -> Unit)?,

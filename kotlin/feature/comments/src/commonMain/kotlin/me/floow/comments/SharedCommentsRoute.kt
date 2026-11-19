@@ -428,7 +428,7 @@ fun SharedCommentsRoute(
 						onAnchorRestoreTimedOut = {},
 						suspendInitialPlacement = hasInitialTarget && !isInitialTargetResolved,
 						resolveContextMenuActions = component::resolveContextMenuActions,
-						onContextMenuOpenRequest = { message, anchorRect, highlightRect ->
+						onContextMenuOpenRequest = { message, anchorRect, highlightRect, _ ->
 							contextMenuMessageId = message.id
 							contextMenuAnchorRect = anchorRect
 							contextMenuHighlightRect = highlightRect
@@ -479,7 +479,8 @@ fun SharedCommentsRoute(
 							ChatContextMenuAction.Delete -> component.deleteComment(menuTargetMessage.id)
 							ChatContextMenuAction.Pin,
 							ChatContextMenuAction.Unpin,
-							ChatContextMenuAction.Retry -> Unit
+							ChatContextMenuAction.Retry,
+							ChatContextMenuAction.Select -> Unit
 						}
 						contextMenuMessageId = null
 						contextMenuAnchorRect = null

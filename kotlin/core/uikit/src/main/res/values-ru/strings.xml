@@ -46,6 +46,7 @@
     <string name="chat_error_description">Попробуйте снова.</string>
     <string name="chat_retry_action">Повторить</string>
     <string name="chat_menu_retry">Повторить</string>
+    <string name="chat_menu_select">Выбрать</string>
     <string name="chat_no_messages_generic">Пока нет сообщений</string>
     <string name="chat_selection_close">Закрыть выбор</string>
     <string name="chat_selection_copy">Скопировать выбранное</string>

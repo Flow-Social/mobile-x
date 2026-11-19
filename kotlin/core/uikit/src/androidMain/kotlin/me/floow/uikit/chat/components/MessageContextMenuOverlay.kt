@@ -288,6 +288,7 @@ private val ChatContextMenuAction.icon: ImageVector
 		ChatContextMenuAction.Edit -> Icons.Outlined.Edit
 		ChatContextMenuAction.Delete -> Icons.Outlined.DeleteOutline
 		ChatContextMenuAction.Retry -> Icons.Outlined.Edit // Fallback icon, actual rendering replaced above
+		ChatContextMenuAction.Select -> Icons.Outlined.ContentCopy
 	}
 
 private val ChatContextMenuAction.labelResId: Int
@@ -299,6 +300,7 @@ private val ChatContextMenuAction.labelResId: Int
 		ChatContextMenuAction.Edit -> R.string.chat_menu_edit
 		ChatContextMenuAction.Delete -> R.string.chat_menu_delete
 		ChatContextMenuAction.Retry -> R.string.chat_menu_retry
+		ChatContextMenuAction.Select -> R.string.chat_menu_select
 	}
 
 private fun shouldShowDividerAfter(index: Int, actions: List<ChatContextMenuAction>): Boolean {

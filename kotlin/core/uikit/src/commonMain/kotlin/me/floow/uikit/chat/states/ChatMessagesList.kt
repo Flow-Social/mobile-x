@@ -1093,8 +1093,9 @@ internal fun ChatMessagesList(
 	onPostImageClick: (PostPreviewMessage, Int, Rect?, Painter?) -> Unit,
 	onPostImageBoundsChanged: ((PostPreviewMessage, Int, Rect, Painter?) -> Unit)?,
 	resolveContextMenuActions: (ChatMessage) -> List<ChatContextMenuAction>,
-	onContextMenuOpenRequest: (ChatMessage, Rect?, Rect?) -> Unit,
+	onContextMenuOpenRequest: (ChatMessage, Rect?, Rect?, me.floow.uikit.chat.common.ElevatedMessageData?) -> Unit,
 	onContextMenuDismissRequest: () -> Unit,
+	elevatedDataByMessageKey: MutableMap<String, me.floow.uikit.chat.common.ElevatedMessageData>? = null,
 	videoCircleContent: @Composable (VideoCircleOutMessage, Boolean, () -> Unit) -> Unit,
 	voiceContent: @Composable (VoiceMessage, Boolean, () -> Unit) -> Unit,
 	imageContent: @Composable (
@@ -1202,6 +1203,7 @@ internal fun ChatMessagesList(
 						resolveContextMenuActions = resolveContextMenuActions,
 						onContextMenuOpenRequest = onContextMenuOpenRequest,
 						onContextMenuDismissRequest = onContextMenuDismissRequest,
+						elevatedDataByMessageKey = elevatedDataByMessageKey,
 						videoCircleContent = videoCircleContent,
 						voiceContent = voiceContent,
 						imageContent = imageContent

@@ -1,12 +1,17 @@
 package me.floow.uikit.chat.states
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,20 +33,35 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.rememberGraphicsLayer
+import kotlin.math.roundToInt
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.zIndex
+import me.floow.uikit.chat.common.ElevatedMessageData
 import me.floow.uikit.chat.components.ChatAlbumBubble
 import me.floow.uikit.chat.components.ChatMessageTimestamp
 import me.floow.uikit.chat.components.ChatTailVector
@@ -103,8 +123,9 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 	onPostImageClick: (PostPreviewMessage, Int, Rect?, Painter?) -> Unit,
 	onPostImageBoundsChanged: ((PostPreviewMessage, Int, Rect, Painter?) -> Unit)?,
 	resolveContextMenuActions: (ChatMessage) -> List<ChatContextMenuAction>,
-	onContextMenuOpenRequest: (ChatMessage, Rect?, Rect?) -> Unit,
+	onContextMenuOpenRequest: (ChatMessage, Rect?, Rect?, ElevatedMessageData?) -> Unit,
 	onContextMenuDismissRequest: () -> Unit,
+	elevatedDataByMessageKey: MutableMap<String, ElevatedMessageData>? = null,
 	videoCircleContent: @Composable (VideoCircleOutMessage, Boolean, () -> Unit) -> Unit,
 	voiceContent: @Composable (VoiceMessage, Boolean, () -> Unit) -> Unit,
 	imageContent: @Composable (
@@ -123,14 +144,10 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 	val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
 
 	val isContextMenuActive = LocalActiveContextMenuMessageId.current == message.id
-	val popProgress by animateFloatAsState(
-		targetValue = if (isContextMenuActive) 1f else 0f,
-		animationSpec = spring(
-			dampingRatio = Spring.DampingRatioMediumBouncy,
-			stiffness = Spring.StiffnessMediumLow,
-		),
-		label = "BubblePopProgress",
-	)
+	val isElevated = isContextMenuActive
+	val itemLayer = rememberGraphicsLayer()
+	var rootPos by remember { mutableStateOf(Offset.Zero) }
+	var itemSize by remember { mutableStateOf(IntSize.Zero) }
 
 	val isFirstInGroup = layoutState?.isFirstInCluster ?: true
 	val isLastInGroup = layoutState?.isLastInCluster ?: true
@@ -145,12 +162,15 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 		unreadBoundaryMessageId == message.id
 
 	val isPostPreview = message is PostPreviewMessage
-	val isVideoCircle = message is VideoCircleOutMessage
+	val isVideoCircle = message is VideoCircleOutMessage ||
+		(message as? VideoCircleOutMessage) != null ||
+		message::class.simpleName?.contains("VideoCircle", ignoreCase = true) == true
 	val isVoice = message is VoiceMessage
 	val isImage = message is ImageMessage
+	val isMediaMessage = isImage || isVideoCircle || isVoice || (message is PostPreviewMessage && message.imageVariants.isNotEmpty())
 	val isOut = message is PrimaryOutMessage || message is ReplyOutMessage ||
 		(message is ImageMessage && message.isOutgoing) ||
-		(message is VideoCircleOutMessage && message.isOutgoing) ||
+		((message as? VideoCircleOutMessage)?.isOutgoing == true) ||
 		(message is VoiceMessage && message.isOutgoing)
 
 	val showUnreadDot = isOut &&
@@ -174,10 +194,40 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 		Modifier
 	}
 
-	val bubbleShape = if (isVideoCircle) CircleShape else RoundedCornerShape(20.dp)
-	val bubbleScale = 1f + 0.04f * popProgress
+	val haptic = LocalHapticFeedback.current
+	val scope = rememberCoroutineScope()
+	val pressScaleAnimatable = remember { Animatable(1f) }
+	val pressScale = pressScaleAnimatable.value
+	var currentTapRootOffset by remember { mutableStateOf<Offset?>(null) }
+
+	val elevatedData = remember(message.id, message.uiKey, isOut, isVideoCircle, itemLayer, rootPos, itemSize) {
+		ElevatedMessageData(
+			messageId = message.id,
+			uiKey = message.uiKey,
+			isMine = isOut,
+			isVideoNote = isVideoCircle,
+			layer = itemLayer,
+			rootPosition = rootPos,
+			size = itemSize,
+			videoCircleBoundsInRoot = if (isVideoCircle) Rect(rootPos, androidx.compose.ui.geometry.Size(itemSize.width.toFloat(), itemSize.height.toFloat())) else null,
+			startScale = 1f,
+			tapOffset = null,
+		)
+	}
+
+	elevatedDataByMessageKey?.let { registry ->
+		registry[message.uiKey] = elevatedData
+		registry["msg_${message.id}"] = elevatedData
+		registry[message.id.toString()] = elevatedData
+		message.clientMessageId?.takeIf(String::isNotBlank)?.let { cmid ->
+			registry["cmid_$cmid"] = elevatedData
+		}
+	}
+
 	val contextMenuHighlightModifier = Modifier
 		.onGloballyPositioned { coordinates ->
+			rootPos = coordinates.positionInRoot()
+			itemSize = coordinates.size
 			if (!isScrollBusy || isVideoCircle) {
 				val bounds = coordinates.boundsInRoot()
 				bubbleBoundsByMessageKey[message.uiKey] = bounds
@@ -188,14 +238,152 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 				}
 			}
 		}
-		.graphicsLayer {
-			scaleX = bubbleScale
-			scaleY = bubbleScale
-			shadowElevation = (12f * popProgress).dp.toPx()
-			shape = bubbleShape
-			clip = false
+		.drawWithContent {
+			itemLayer.record {
+				this@drawWithContent.drawContent()
+			}
+			if (!isElevated || isVideoCircle) {
+				withTransform({
+					scale(
+						pressScaleAnimatable.value,
+						pressScaleAnimatable.value,
+						pivot = Offset(size.width / 2f, size.height / 2f),
+					)
+				}) {
+					drawLayer(itemLayer)
+				}
+			}
 		}
-		.zIndex(if (isContextMenuActive) 50f else 0f)
+
+	var rowRootPosition by remember { mutableStateOf(Offset.Zero) }
+
+	val rowGestureModifier = Modifier
+		.onGloballyPositioned { coords ->
+			rowRootPosition = coords.positionInRoot()
+		}
+		.pointerInput(message.id, isSelectionMode) {
+			if (isSelectionMode) {
+				detectTapGestures(
+					onTap = { onToggleSelection(message.id) }
+				)
+				return@pointerInput
+			}
+
+			awaitEachGesture {
+				val down = awaitFirstDown(requireUnconsumed = false)
+				val timeMark = kotlin.time.TimeSource.Monotonic.markNow()
+				var currentLocalPos = down.position
+				val touchSlop = viewConfiguration.touchSlop
+				var longPressTriggered = false
+
+				// Запускаем корутину 4-фазного жеста
+				val phaseJob = scope.launch {
+					// Фаза 1 (0..120 мс): нулевая реакция, бабл неподвижен
+					delay(120L)
+
+					// Фаза 2 (120..320 мс): плавное сжатие бабла до 0.95f
+					pressScaleAnimatable.animateTo(
+						targetValue = 0.95f,
+						animationSpec = tween(durationMillis = 200, easing = LinearEasing),
+					)
+
+					// Фаза 3 (320 мс): тактильный отклик, пружинный отскок 1.02f -> 1.0f
+					longPressTriggered = true
+					haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+
+					launch {
+						pressScaleAnimatable.animateTo(
+							targetValue = 1.02f,
+							animationSpec = spring(
+								dampingRatio = 0.72f,
+								stiffness = 450f,
+							),
+						)
+						pressScaleAnimatable.animateTo(
+							targetValue = 1.0f,
+							animationSpec = spring(
+								dampingRatio = 0.72f,
+								stiffness = 450f,
+							),
+						)
+					}
+
+					// Лонгтап в любом месте строки переводит чат в режим множественного выделения с чекбоксом!
+					onToggleSelection(message.id)
+				}
+
+				while (true) {
+					val event = awaitPointerEvent()
+					val change = event.changes.firstOrNull { it.id == down.id } ?: break
+					currentLocalPos = change.position
+
+					val distance = (change.position - down.position).getDistance()
+					if (distance > touchSlop) {
+						// Превышение touchSlop -> отмена жеста, даем скроллить
+						phaseJob.cancel()
+						if (!longPressTriggered) {
+							scope.launch {
+								pressScaleAnimatable.animateTo(
+									targetValue = 1f,
+									animationSpec = spring(
+										dampingRatio = 0.8f,
+										stiffness = 600f,
+									),
+								)
+							}
+						}
+						break
+					}
+
+					if (!change.pressed) {
+						// Палец отпущен
+						phaseJob.cancel()
+						val elapsed = timeMark.elapsedNow().inWholeMilliseconds
+						if (!longPressTriggered) {
+							scope.launch {
+								pressScaleAnimatable.animateTo(
+									targetValue = 1f,
+									animationSpec = spring(
+										dampingRatio = 0.8f,
+										stiffness = 600f,
+									),
+								)
+							}
+							// Короткий тап: если событие не было поглощено дочерним кликаблом (фоткой, кнопкой плей, ссылкой)
+							if (!change.isConsumed && elapsed < 320L && distance <= touchSlop) {
+								change.consume()
+								val tapRoot = rowRootPosition + currentLocalPos
+								currentTapRootOffset = tapRoot
+								val highlight = bubbleBoundsByMessageKey[message.uiKey]
+									?: bubbleBoundsByMessageKey["msg_${message.id}"]
+									?: bubbleBoundsByMessageKey[message.id.toString()]
+									?: message.clientMessageId?.let { bubbleBoundsByMessageKey["cmid_$it"] }
+
+								if (resolveContextMenuActions(message).isNotEmpty()) {
+									val startScaleSnapshot = pressScaleAnimatable.value.coerceIn(0.9f, 1.0f)
+									val effectiveRootPos = highlight?.topLeft ?: if (rootPos != Offset.Zero) rootPos else rowRootPosition
+									val effectiveSize = highlight?.let { IntSize(it.width.roundToInt(), it.height.roundToInt()) } ?: if (itemSize != IntSize.Zero) itemSize else IntSize(rowBoundsByMessageKey[message.uiKey]?.width?.roundToInt() ?: 0, rowBoundsByMessageKey[message.uiKey]?.height?.roundToInt() ?: 0)
+									onContextMenuOpenRequest(
+										message,
+										highlight ?: rowBoundsByMessageKey[message.uiKey],
+										highlight,
+										elevatedData.copy(
+											rootPosition = effectiveRootPos,
+											size = effectiveSize,
+											isVideoNote = isVideoCircle,
+											startScale = startScaleSnapshot,
+											tapOffset = tapRoot,
+										),
+									)
+								}
+								onChatBubbleClick(message)
+							}
+						}
+						break
+					}
+				}
+			}
+		}
 
 	val incomingBubbleModifier = if (showMessageAction) {
 		Modifier
@@ -207,8 +395,7 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 
 	Column(
 		modifier = modifier
-			.fillMaxWidth()
-			.zIndex(if (isContextMenuActive) 50f else 0f),
+			.fillMaxWidth(),
 	) {
 		if (shouldShowUnreadBoundaryBeforeMessage) {
 			UnreadBoundaryRow(
@@ -225,7 +412,7 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 			SelectableMessageRow(
 				showSelector = isSelectionMode,
 				selected = isSelected,
-				interactionEnabled = true,
+				interactionEnabled = false,
 				modifier = Modifier
 					.fillMaxWidth()
 					.animateItem(fadeInSpec = null, placementSpec = null, fadeOutSpec = null)
@@ -236,34 +423,10 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 							rowHeightPx = size.height
 						)
 					}
-					.padding(horizontal = 16.dp),
-				onClick = {
-					when (resolveMessageTapOutcome(isSelectionMode)) {
-						ChatMessageTapOutcome.ToggleSelection -> onToggleSelection(message.id)
-						ChatMessageTapOutcome.OpenContextMenu -> {
-							if (resolveContextMenuActions(message).isNotEmpty()) {
-								val highlight = bubbleBoundsByMessageKey[message.uiKey]
-									?: bubbleBoundsByMessageKey["msg_${message.id}"]
-									?: bubbleBoundsByMessageKey[message.id.toString()]
-									?: message.clientMessageId?.let { bubbleBoundsByMessageKey["cmid_$it"] }
-								onContextMenuOpenRequest(
-									message,
-									highlight ?: rowBoundsByMessageKey[message.uiKey],
-									highlight
-								)
-							}
-							onChatBubbleClick(message)
-						}
-					}
-				},
-				onLongClick = {
-					if (isSelectionMode) {
-						onToggleSelection(message.id)
-					} else {
-						onContextMenuDismissRequest()
-						onChatBubbleLongClick(message)
-					}
-				}
+					.padding(horizontal = 16.dp)
+					.then(rowGestureModifier),
+				onClick = {},
+				onLongClick = {}
 			) {
 				if (isPostPreview) {
 					val preview = message as PostPreviewMessage
@@ -388,41 +551,27 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 					) {
 						Row(
 							modifier = Modifier.fillMaxWidth(),
-							horizontalArrangement = if (message.isOutgoing) {
+							horizontalArrangement = if (isOut) {
 								Arrangement.End
 							} else {
 								Arrangement.Start
 							},
 						) {
 							Box(modifier = contextMenuHighlightModifier) {
-								videoCircleContent(
-									message as VideoCircleOutMessage,
-									isSelectionMode,
-									{
-										if (isSelectionMode) {
+								(message as? VideoCircleOutMessage)?.let { circleMsg ->
+									videoCircleContent(
+										circleMsg,
+										isSelectionMode,
+										{
+											haptic.performHapticFeedback(HapticFeedbackType.LongPress)
 											onToggleSelection(message.id)
-										} else {
-											val highlight = bubbleBoundsByMessageKey[message.uiKey]
-												?: bubbleBoundsByMessageKey["msg_${message.id}"]
-												?: bubbleBoundsByMessageKey[message.id.toString()]
-												?: message.clientMessageId?.let { bubbleBoundsByMessageKey["cmid_$it"] }
-											if (resolveContextMenuActions(message).isNotEmpty()) {
-												onContextMenuOpenRequest(
-													message,
-													highlight ?: rowBoundsByMessageKey[message.uiKey],
-													highlight
-												)
-											} else {
-												onContextMenuDismissRequest()
-												onChatBubbleLongClick(message)
-											}
-										}
-									},
-								)
+										},
+									)
+								}
 								if (showTimestamp) {
 									ChatMessageTimestamp(
 										message = message,
-										isOutgoing = message.isOutgoing,
+										isOutgoing = isOut,
 										showUnreadDot = showUnreadDot,
 										isOverlay = true,
 										modifier = Modifier
@@ -453,24 +602,8 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 										message as VoiceMessage,
 										isSelectionMode,
 										{
-											if (isSelectionMode) {
-												onToggleSelection(message.id)
-											} else {
-												val highlight = bubbleBoundsByMessageKey[message.uiKey]
-													?: bubbleBoundsByMessageKey["msg_${message.id}"]
-													?: bubbleBoundsByMessageKey[message.id.toString()]
-													?: message.clientMessageId?.let { bubbleBoundsByMessageKey["cmid_$it"] }
-												if (resolveContextMenuActions(message).isNotEmpty()) {
-													onContextMenuOpenRequest(
-														message,
-														highlight ?: rowBoundsByMessageKey[message.uiKey],
-														highlight
-													)
-												} else {
-													onContextMenuDismissRequest()
-													onChatBubbleLongClick(message)
-												}
-											}
+											haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+											onToggleSelection(message.id)
 										}
 									)
 									if (showTail) {
@@ -534,8 +667,9 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 										selectedMessageIds,
 										onToggleSelection,
 										{
-											when (resolveMessageTapOutcome(isSelectionMode)) {
+											when (resolveMessageTapOutcome(isSelectionMode, isMediaMessage)) {
 												ChatMessageTapOutcome.ToggleSelection -> onToggleSelection(message.id)
+												ChatMessageTapOutcome.HandleMedia -> onChatBubbleClick(message)
 												ChatMessageTapOutcome.OpenContextMenu -> {
 													if (resolveContextMenuActions(message).isNotEmpty()) {
 														val highlight = bubbleBoundsByMessageKey[message.uiKey]
@@ -545,7 +679,8 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 														onContextMenuOpenRequest(
 															message,
 															highlight ?: rowBoundsByMessageKey[message.uiKey],
-															highlight
+															highlight,
+															elevatedData.copy(startScale = pressScaleAnimatable.value.coerceIn(0.9f, 1.0f)),
 														)
 													}
 													onChatBubbleClick(message)
@@ -553,12 +688,8 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 											}
 										},
 										{
-											if (isSelectionMode) {
-												onToggleSelection(message.id)
-											} else {
-												onContextMenuDismissRequest()
-												onChatBubbleLongClick(message)
-											}
+											haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+											onToggleSelection(message.id)
 										},
 										{ clientMessageId -> onImageRetry?.invoke(clientMessageId) },
 										{ clientMessageId -> onImageCancel?.invoke(clientMessageId) }

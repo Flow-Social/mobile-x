@@ -20,6 +20,7 @@ fun ChatMessage.resolveDefaultContextMenuActions(
 			}
 		}
 		add(ChatContextMenuAction.CopyText)
+		add(ChatContextMenuAction.Select)
 		if (isPending && deliveryStatus == ChatMessageDeliveryStatus.FAILED) {
 			add(ChatContextMenuAction.Retry)
 		}

@@ -126,7 +126,7 @@ fun SharedRepliesScreen(
 							onAnchorRestoreSettled = onAnchorRestoreSettled,
 						onAnchorRestoreTimedOut = {},
 						resolveContextMenuActions = { emptyList() },
-						onContextMenuOpenRequest = { _, _, _ -> },
+						onContextMenuOpenRequest = { _, _, _, _ -> },
 						onContextMenuDismissRequest = {},
 						rowBoundsByMessageKey = rowBoundsByMessageKey,
 						bubbleBoundsByMessageKey = bubbleBoundsByMessageKey,

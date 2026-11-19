@@ -29,7 +29,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.interop.UIKitView
+import androidx.compose.ui.viewinterop.UIKitView
+import androidx.compose.ui.viewinterop.UIKitInteropProperties
 import coil3.compose.AsyncImage
 import me.floow.uikit.components.media.FlowImageSource
 import me.floow.uikit.components.media.ProgressiveImage
@@ -143,12 +144,13 @@ private class IosVideoCircleContainerView : UIView(frame = platform.CoreGraphics
 private val InactiveCircleSize = 228.dp
 private val ActiveCircleSize = 252.dp
 
-@OptIn(ExperimentalForeignApi::class)
+@OptIn(ExperimentalForeignApi::class, androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 actual fun NativeVideoCirclePlayer(
     videoUrl: String,
     thumbnailUrl: String?,
     playbackUiState: me.floow.uikit.chat.model.VideoCirclePlaybackUiState,
+    isElevated: Boolean,
     onClick: (() -> Unit)?,
     onSeek: ((Float) -> Unit)?,
     onPlaybackEnded: (() -> Unit)?,
@@ -263,11 +265,10 @@ actual fun NativeVideoCirclePlayer(
                         container.player?.pause()
                     }
                 },
-                onRelease = { container ->
-                    container.release()
-                    activePlayer = null
-                },
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
+                properties = UIKitInteropProperties(
+                    placedAsOverlay = isElevated,
+                )
             )
         }
 

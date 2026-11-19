@@ -9,5 +9,6 @@
     <string name="chat_menu_edit">Редактировать</string>
     <string name="chat_menu_delete">Удалить</string>
     <string name="chat_menu_retry">Повторить</string>
+    <string name="chat_menu_select">Выбрать</string>
     <string name="chat_recording_cancel">ОТМЕНА</string>
 </resources>

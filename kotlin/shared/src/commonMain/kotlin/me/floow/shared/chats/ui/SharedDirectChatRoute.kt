@@ -179,6 +179,7 @@ fun SharedDirectChatRoute(
 	var activeContextMenuMessageId by remember(stateHolder) { mutableStateOf<Long?>(null) }
 	var contextMenuFallbackAnchorRect by remember(stateHolder) { mutableStateOf<Rect?>(null) }
 	var contextMenuFallbackHighlightRect by remember(stateHolder) { mutableStateOf<Rect?>(null) }
+	var contextMenuElevatedData by remember(stateHolder) { mutableStateOf<me.floow.uikit.chat.common.ElevatedMessageData?>(null) }
 	var selectedMessageIds by remember(stateHolder) { mutableStateOf<Set<Long>>(emptySet()) }
 	var pendingDeleteMessageId by remember(stateHolder) { mutableStateOf<Long?>(null) }
 	var isDeleteSelectionConfirmationVisible by remember(stateHolder) { mutableStateOf(false) }
@@ -315,6 +316,8 @@ fun SharedDirectChatRoute(
 	val contextMenuMessageKey = remember(contextMenuMessage) {
 		contextMenuMessage?.uiMessageKey()
 	}
+	val isContextMenuCircle = contextMenuMessage?.content is ChatMessageContent.VideoCircle
+	val isContextMenuOutgoing = contextMenuMessage?.isOutgoing
 	val liveContextMenuAnchorRect by remember(
 		contextMenuMessage,
 		contextMenuMessageKey,
@@ -391,6 +394,7 @@ fun SharedDirectChatRoute(
 		activeContextMenuMessageId = null
 		contextMenuFallbackAnchorRect = null
 		contextMenuFallbackHighlightRect = null
+		contextMenuElevatedData = null
 	}
 	fun clearSelectionUiState() {
 		selectedMessageIds = emptySet()
@@ -848,7 +852,11 @@ fun SharedDirectChatRoute(
 		)
 		val flightKey = activeFlightState?.messageUiKey
 		val isThisMessageInFlight = (flightKey == message.uiKey || (clientMessageId != null && flightKey == "cmid_$clientMessageId")) && !isFlightLanded
-		val flightBubbleAlpha = if (isThisMessageInFlight) 0f else 1f
+		// Плеер для открытого сообщения остается видимым (alpha = 1f), поверх затемнения scrim.
+		// Скрываем плеер только если сообщение в полете или открыто меню другого сообщения.
+		val isThisMessageElevated = activeContextMenuMessageId == message.id
+		val isVideoCircle = message is VideoCircleOutMessage || (message as? VideoCircleOutMessage) != null || message::class.simpleName?.contains("VideoCircle", ignoreCase = true) == true
+		val flightBubbleAlpha = if (!isVideoCircle && (isThisMessageInFlight || isThisMessageElevated)) 0f else 1f
 		val bubbleSize by animateDpAsState(
 			targetValue = if (playbackUiState.isExpanded) 252.dp else 228.dp,
 			animationSpec = tween(durationMillis = 180),
@@ -865,6 +873,7 @@ fun SharedDirectChatRoute(
 				videoUrl = message.playableSource.orEmpty(),
 				thumbnailUrl = message.thumbnailPath ?: message.remoteThumbnailUrl,
 				playbackUiState = playbackUiState,
+				isElevated = isThisMessageElevated,
 				onClick = {
 					if (isSelectionMode) {
 						onLongClick()
@@ -1075,13 +1084,17 @@ fun SharedDirectChatRoute(
 			toggleMessageSelection(messageId)
 		},
 		onReplyPreviewClick = stateHolder::jumpToMessage,
-		onContextMenuOpen = { messageId, anchorRect, highlightRect ->
+		onContextMenuOpen = { messageId, anchorRect, highlightRect, elevatedData ->
 			activeContextMenuMessageId = messageId
 			contextMenuFallbackAnchorRect = anchorRect
 			contextMenuFallbackHighlightRect = highlightRect
+			contextMenuElevatedData = elevatedData
 		},
 		contextMenuAnchorRect = liveContextMenuAnchorRect,
 		contextMenuHighlightRect = liveContextMenuHighlightRect,
+		contextMenuElevatedData = contextMenuElevatedData,
+		isContextMenuCircle = isContextMenuCircle,
+		isContextMenuOutgoing = isContextMenuOutgoing,
 		onDismissContextMenu = ::clearContextMenuState,
 		onContextMenuActionClick = { action ->
 			val message = contextMenuMessage ?: return@SharedDirectChatScreen
@@ -1100,6 +1113,7 @@ fun SharedDirectChatRoute(
 					}
 				}
 				ChatContextMenuAction.Edit -> stateHolder.startEditing(message.id)
+				ChatContextMenuAction.Select -> toggleMessageSelection(message.id)
 				ChatContextMenuAction.Delete -> pendingDeleteMessageId = message.id
 				ChatContextMenuAction.Retry -> {
 					if (message.deliveryState == ChatDeliveryState.FAILED) {

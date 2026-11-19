@@ -24,6 +24,7 @@ expect fun NativeVideoCirclePlayer(
     videoUrl: String,
     thumbnailUrl: String? = null,
     playbackUiState: VideoCirclePlaybackUiState = VideoCirclePlaybackUiState.IdlePreview,
+    isElevated: Boolean = false,
     onClick: (() -> Unit)? = null,
     onSeek: ((Float) -> Unit)? = null,
     onPlaybackEnded: (() -> Unit)? = null,

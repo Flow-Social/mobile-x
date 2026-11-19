@@ -9,5 +9,6 @@
     <string name="chat_menu_edit">Edit</string>
     <string name="chat_menu_delete">Delete</string>
     <string name="chat_menu_retry">Retry</string>
+    <string name="chat_menu_select">Select</string>
     <string name="chat_recording_cancel">CANCEL</string>
 </resources>

@@ -2,15 +2,17 @@ package me.floow.uikit.chat.model
 
 enum class ChatMessageTapOutcome {
 	OpenContextMenu,
-	ToggleSelection
+	ToggleSelection,
+	HandleMedia
 }
 
 fun resolveMessageTapOutcome(
-	isSelectionMode: Boolean
-): ChatMessageTapOutcome = if (isSelectionMode) {
-	ChatMessageTapOutcome.ToggleSelection
-} else {
-	ChatMessageTapOutcome.OpenContextMenu
+	isSelectionMode: Boolean,
+	isMedia: Boolean = false
+): ChatMessageTapOutcome = when {
+	isSelectionMode -> ChatMessageTapOutcome.ToggleSelection
+	isMedia -> ChatMessageTapOutcome.HandleMedia
+	else -> ChatMessageTapOutcome.OpenContextMenu
 }
 
 fun resolveReplyTargetId(message: ChatMessage): Long {
