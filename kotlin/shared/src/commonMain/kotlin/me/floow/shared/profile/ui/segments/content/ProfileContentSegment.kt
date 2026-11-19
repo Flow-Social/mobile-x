@@ -137,6 +137,7 @@ private fun ProfilePostsSkeletonGrid(modifier: Modifier = Modifier) {
         contentPadding = ProfilePostsGridContentPadding,
         horizontalArrangement = Arrangement.spacedBy(ProfilePostsGridItemSpacing),
         verticalArrangement = Arrangement.spacedBy(ProfilePostsGridItemSpacing),
+        userScrollEnabled = false,
         modifier = modifier.fillMaxWidth(),
     ) {
         items(

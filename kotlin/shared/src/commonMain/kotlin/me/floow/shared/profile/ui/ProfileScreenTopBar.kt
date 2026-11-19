@@ -19,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.State
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,7 +49,7 @@ fun ProfileScreenTopBar(
     onSettingsClick: () -> Unit = {},
     onBackClick: () -> Unit,
     heroBackgroundPainter: Painter,
-    heroBoundsInWindow: Rect?,
+    heroBoundsInWindow: State<Rect?>,
     modifier: Modifier = Modifier
 ) {
     val titleText = username ?: stringResource(Res.string.no_username_topbar_title)
@@ -87,7 +88,7 @@ fun ProfileScreenTopBar(
                 ) {
                     BlurGlassButton(
                         painter = heroBackgroundPainter,
-                        backgroundBoundsInWindow = heroBoundsInWindow,
+                        backgroundBoundsInWindow = heroBoundsInWindow.value,
                         shape = RoundedCornerShape(20.dp),
                         blurRadius = 2.dp,
                         refractionScale = 1.01f,
