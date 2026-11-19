@@ -4,6 +4,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import me.floow.uikit.chat.model.VideoCirclePlaybackUiState
 
+internal expect class NativeVideoCirclePlayback {
+    fun play(uiKey: String, messageId: Long, source: String, speed: Float)
+    fun pause()
+    fun stop()
+    fun seekToProgress(progress: Float)
+    fun progress(): Float
+}
+
+@Composable
+internal expect fun rememberNativeVideoCirclePlayback(
+    onPlaybackEnded: (String) -> Unit,
+    onPlaybackPaused: (String) -> Unit,
+): NativeVideoCirclePlayback
+
 /**
  * Native camera preview slot for video circle recording.
  * On Android, renders CameraX TextureView/PreviewView.
@@ -20,14 +34,15 @@ expect fun NativeCameraRecordingPreview(
  * Renders hardware-accelerated video in a 1:1 circular aspect ratio.
  */
 @Composable
-expect fun NativeVideoCirclePlayer(
+internal expect fun NativeVideoCirclePlayer(
+    playback: NativeVideoCirclePlayback,
     messageKey: String,
     videoUrl: String,
     thumbnailUrl: String? = null,
     playbackUiState: VideoCirclePlaybackUiState = VideoCirclePlaybackUiState.IdlePreview,
     showMenuPreview: Boolean = false,
     onClick: (() -> Unit)? = null,
-    onSeek: ((Float) -> Unit)? = null,
-    onPlaybackEnded: (() -> Unit)? = null,
+    progress: () -> Float,
+    onSeek: (Float) -> Unit,
     modifier: Modifier = Modifier
 )

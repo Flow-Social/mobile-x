@@ -1069,7 +1069,7 @@ internal fun ChatMessagesList(
 	resolveContextMenuActions: (ChatMessage) -> List<ChatContextMenuAction>,
 	onContextMenuOpenRequest: (ChatMessage, Rect?, Rect?, me.floow.uikit.chat.common.ElevatedMessageData?) -> Unit,
 	onContextMenuDismissRequest: () -> Unit,
-	videoCircleContent: @Composable (VideoCircleOutMessage, Boolean, () -> Unit) -> Unit,
+	videoCircleContent: @Composable (VideoCircleOutMessage, Boolean, Dp, () -> Unit) -> Unit,
 	voiceContent: @Composable (VoiceMessage, Boolean, () -> Unit) -> Unit,
 	imageContent: @Composable (
 		message: ImageMessage,

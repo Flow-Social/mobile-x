@@ -111,6 +111,7 @@ fun ChatScreenBody(
 	modifier: Modifier = Modifier,
 	bodyContentModifier: Modifier = Modifier,
 	snackbarHost: @Composable (() -> Unit)? = null,
+	playbackBar: @Composable () -> Unit = {},
 	pinnedMessages: @Composable (() -> Unit)? = null,
 	content: @Composable (Modifier, Dp) -> Unit,
 	screenOverlay: @Composable ((Modifier) -> Unit)? = null,
@@ -208,14 +209,16 @@ fun ChatScreenBody(
 				}
 			}
 			pinnedMessages?.invoke()
-			content(
-				Modifier
+			Box(
+				modifier = Modifier
 					.fillMaxWidth()
 					.weight(1f)
 					.background(chatBg)
 					.onGloballyPositioned { timelineBounds = it.boundsInRoot() },
-				timelineBottomInset,
-			)
+			) {
+				content(Modifier.fillMaxSize(), timelineBottomInset)
+				if (!isSelectionMode) playbackBar()
+			}
 		}
 
 		screenOverlay?.invoke(

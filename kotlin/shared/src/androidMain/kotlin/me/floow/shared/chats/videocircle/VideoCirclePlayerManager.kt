@@ -38,7 +38,7 @@ class VideoCirclePlayerManager(
     var onPlaybackEnded: ((String) -> Unit)? = null
 
     private val appContext = context.applicationContext
-    private val mediaSourceFactory = DefaultMediaSourceFactory(cacheProvider.dataSourceFactory())
+    private val mediaSourceFactory by lazy { DefaultMediaSourceFactory(cacheProvider.dataSourceFactory()) }
     private val _state = MutableStateFlow(VideoCirclePlaybackState())
 
     private var activePlayer: ExoPlayer? = null
@@ -52,7 +52,7 @@ class VideoCirclePlayerManager(
     override fun play(request: VideoCirclePlaybackRequest) {
         if (request.source.isBlank()) return
         val player = ensureActivePlayer()
-        val sourceChanged = activePreparedSource != request.source
+        val sourceChanged = activePreparedSource != request.source || _state.value.activeUiKey != request.uiKey
         if (sourceChanged) {
             player.setMediaItem(MediaItem.fromUri(request.source.toMediaUri()))
             activePreparedSource = request.source
@@ -70,7 +70,7 @@ class VideoCirclePlayerManager(
         if (!request.muted) {
             audioFocus?.request()
         }
-        setPlaybackRateIfAvailable(player, if (request.muted) MutedAutoplaySpeed else 1f)
+        setPlaybackRateIfAvailable(player, if (request.muted) MutedAutoplaySpeed else request.speed)
         player.playWhenReady = true
 
         _state.value = VideoCirclePlaybackState(
@@ -200,12 +200,14 @@ class VideoCirclePlayerManager(
 
                     override fun onPlayerError(error: PlaybackException) {
                         if (this@apply !== activePlayer) return
+                        val failedUiKey = _state.value.activeUiKey
                         _state.update {
                             it.copy(
                                 status = VideoCirclePlaybackStatus.Error,
                                 positionMs = currentPosition.coerceAtLeast(0L),
                             )
                         }
+                        failedUiKey?.let { onPlaybackEnded?.invoke(it) }
                     }
                 })
             }

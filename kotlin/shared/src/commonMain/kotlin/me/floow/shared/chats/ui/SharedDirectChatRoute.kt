@@ -51,6 +51,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import me.floow.shared.chats.uilogic.direct.VideoRecordingStateHolder
 import me.floow.shared.chats.media.ChatMediaPermissionType
@@ -78,6 +79,7 @@ import me.floow.uikit.chat.model.MediaTransferUiState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
 import me.floow.uikit.chat.model.VideoCircleUploadStatus
+import me.floow.uikit.chat.model.VideoCirclePlaybackUiState
 import me.floow.uikit.chat.model.VideoRecordingMode
 import me.floow.uikit.chat.model.VideoRecordingState
 import me.floow.uikit.components.media.viewer2.FullscreenImageViewerAction
@@ -92,9 +94,10 @@ import me.floow.uikit.components.media.viewer2.rememberFullscreenImageViewerStat
 import me.floow.uikit.components.media.viewer2.viewerSourceRevealProgress
 
 @Composable
-fun SharedDirectChatRoute(
+internal fun SharedDirectChatRoute(
 	stateHolder: DirectChatStateHolder,
 	initialRequest: DirectChatInitialRequest,
+	onOpenPlaybackMessage: (ChatPlaybackTarget) -> Unit,
 	onBackClick: () -> Unit,
 	onShowMessage: (String) -> Unit,
 	onCopyText: (String) -> Unit = {},
@@ -129,7 +132,7 @@ fun SharedDirectChatRoute(
 	onRecordSendClick: (() -> Unit)? = null,
 	onViewportSnapshotChanged: (ChatViewportSnapshot) -> Unit = {},
 	videoCircleInteractionActive: Boolean = false,
-	videoCircleContent: (@Composable (me.floow.uikit.chat.model.VideoCircleOutMessage, Boolean, () -> Unit) -> Unit)? = null,
+	videoCircleContent: (@Composable (me.floow.uikit.chat.model.VideoCircleOutMessage, Boolean, Dp, () -> Unit) -> Unit)? = null,
 	voiceContent: (@Composable (me.floow.uikit.chat.model.VoiceMessage, Boolean, () -> Unit) -> Unit)? = null,
 	imageContent: (@Composable (
 		message: me.floow.uikit.chat.model.ImageMessage,
@@ -165,14 +168,12 @@ fun SharedDirectChatRoute(
 	val strings = rememberSharedChatStrings()
 	val scope = rememberCoroutineScope()
 	val snackbarHostState = remember { SnackbarHostState() }
-	val voicePlayer = remember { createVoicePlayer() }
+	val playbackSession = LocalChatPlayback.current
+	val voicePlayer = playbackSession.voice
 	val voicePlayback = voicePlayer.state.collectAsState()
+	val draftPlayer = remember { createVoicePlayer() }
 	val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
-	DisposableEffect(voicePlayer) {
-		onDispose {
-			voicePlayer.release()
-		}
-	}
+	DisposableEffect(draftPlayer) { onDispose { draftPlayer.release() } }
 	val rowBoundsByMessageKey = remember(stateHolder) { androidx.compose.runtime.mutableStateMapOf<String, Rect>() }
 	val effectiveBubbleBoundsByMessageKey = remember(stateHolder) {
 		bubbleBoundsByMessageKey
@@ -314,6 +315,17 @@ fun SharedDirectChatRoute(
 	val messagesById = remember(currentMessages) {
 		currentMessages.associateBy(ChatMessageItemModel::id)
 	}
+	val playbackConversationId = (state as? DirectChatScreenState.HasData)?.conversationId?.takeIf { it > 0L }
+		?: initialRequest.conversationId?.takeIf { it > 0L }
+
+	fun playbackTarget(messageId: Long, uiKey: String): ChatPlaybackTarget? =
+		messagesById[messageId]?.let { message ->
+			ChatPlaybackTarget(
+				playbackConversationId, initialRequest.peerUserId, initialRequest.peerDisplayName,
+				initialRequest.peerAvatarUrl, initialRequest.isSavedMessages, message, uiKey,
+			)
+		}
+
 	val contextMenuMessage = activeContextMenuMessageId?.let(messagesById::get)
 	fun editTarget(message: ChatMessageItemModel): ChatMessageItemModel? {
 		if (!message.isOutgoing || message.isDeleted || message.id <= 0L) return null
@@ -679,7 +691,8 @@ fun SharedDirectChatRoute(
 	val effectiveRecordButtonPress = onRecordButtonPress ?: {
 		if (effectiveRecordButtonMode == ChatRecordButtonMode.Voice) {
 			if (checkMediaPermission(ChatMediaPermissionType.VOICE)) {
-				voicePlayer.pause()
+				playbackSession.stop()
+				draftPlayer.stop()
 				val started = platformVoiceRecorder?.startRecording(
 					onAudioLevel = { level ->
 						internalVoiceRecordingState = internalVoiceRecordingState.copy(audioLevel = level)
@@ -711,6 +724,8 @@ fun SharedDirectChatRoute(
 			}
 		} else {
 			if (checkMediaPermission(ChatMediaPermissionType.VIDEO)) {
+				playbackSession.stop()
+				draftPlayer.stop()
 				internalRecordingStateHolder.onRecordButtonPress()
 			}
 		}
@@ -827,10 +842,12 @@ fun SharedDirectChatRoute(
 	}
 
 	val effectiveVoiceContent: @Composable (me.floow.uikit.chat.model.VoiceMessage, Boolean, () -> Unit) -> Unit = voiceContent ?: { message, isSelectionMode, onLongClick ->
-		val playback by remember(voicePlayback, message.id, message.uiKey) {
+		val playback by remember(voicePlayback, message.id, message.uiKey, playbackConversationId, initialRequest.peerUserId) {
 			derivedStateOf(structuralEqualityPolicy()) {
 				val active = voicePlayback.value
-				if (active.activeMessageId == message.id || active.activeUiKey == message.uiKey) active
+				if (playbackSession.target?.belongsTo(playbackConversationId, initialRequest.peerUserId) == true &&
+					(active.activeMessageId == message.id || active.activeUiKey == message.uiKey)
+				) active
 				else VoicePlaybackState(speed = active.speed)
 			}
 		}
@@ -845,16 +862,14 @@ fun SharedDirectChatRoute(
 			speed = playback.speed,
 			onPlayPauseClick = {
 				val src = message.playableSource.orEmpty()
-				voicePlayer.play(
-					messageId = message.id,
-					urlOrPath = src,
-					uiKey = message.uiKey,
-					durationMs = message.durationMs,
-				)
+				if (src.isBlank()) return@VoiceMessageBubble
+				val target = playbackTarget(message.id, message.uiKey) ?: return@VoiceMessageBubble
+				draftPlayer.stop()
+				playbackSession.playVoice(target, src, message.durationMs)
 			},
 			onSeek = { fraction ->
 				val pos = (fraction * message.durationMs).toLong()
-				voicePlayer.seekTo(pos)
+				if (playback.activeUiKey == message.uiKey) voicePlayer.seekTo(pos)
 			},
 			onToggleSpeed = { voicePlayer.toggleSpeed() },
 			isBuffering = playback.isBuffering,
@@ -864,28 +879,28 @@ fun SharedDirectChatRoute(
 		)
 	}
 
-	val activeVideoCircle = stateHolder.mediaController.activeVideoCircle.collectAsState()
-
-	val effectiveVideoCircleContent: @Composable (VideoCircleOutMessage, Boolean, () -> Unit) -> Unit = videoCircleContent ?: { message, isSelectionMode, _ ->
+	val effectiveVideoCircleContent: @Composable (VideoCircleOutMessage, Boolean, Dp, () -> Unit) -> Unit = videoCircleContent ?: { message, isSelectionMode, maxWidth, _ ->
 		val clientMessageId = message.clientMessageId
 		val circleTask = clientMessageId?.let { outboxTasks[it] }
 		val isUploading = message.uploadStatus == VideoCircleUploadStatus.Uploading || message.uploadStatus == VideoCircleUploadStatus.Pending
 		val isFailed = message.uploadStatus == VideoCircleUploadStatus.Failed
-		val playbackUiState by remember(activeVideoCircle, message.uiKey, isUploading, isFailed) {
+		val playbackUiState by remember(message.uiKey, isUploading, isFailed, playbackConversationId, initialRequest.peerUserId) {
 			derivedStateOf(structuralEqualityPolicy()) {
-				stateHolder.mediaController.resolveVideoCircleUiState(
-					active = activeVideoCircle.value,
-					uiKey = message.uiKey,
-					isUploading = isUploading,
-					isFailed = isFailed,
-				)
+				val target = playbackSession.target
+				when {
+					isUploading || isFailed -> VideoCirclePlaybackUiState.Uploading
+					!playbackSession.isVideo || target?.uiKey != message.uiKey ||
+						!target.belongsTo(playbackConversationId, initialRequest.peerUserId) -> VideoCirclePlaybackUiState.IdlePreview
+					playbackSession.videoPaused -> VideoCirclePlaybackUiState.ActivePaused
+					else -> VideoCirclePlaybackUiState.ActivePlaying
+				}
 			}
 		}
 		val flightKey = activeFlightState?.messageUiKey
 		val isThisMessageInFlight = (flightKey == message.uiKey || (clientMessageId != null && flightKey == "cmid_$clientMessageId")) && !isFlightLanded
 		val flightBubbleAlpha = if (isThisMessageInFlight) 0f else 1f
 		val bubbleSize by animateDpAsState(
-			targetValue = if (playbackUiState.isExpanded) 252.dp else 228.dp,
+			targetValue = if (playbackUiState.isExpanded) maxWidth else minOf(228.dp, maxWidth),
 			animationSpec = tween(durationMillis = 180),
 			label = "video_circle_bubble_size",
 		)
@@ -897,6 +912,7 @@ fun SharedDirectChatRoute(
 			contentAlignment = Alignment.Center,
 		) {
 			NativeVideoCirclePlayer(
+				playback = playbackSession.video,
 				messageKey = message.uiKey,
 				videoUrl = message.playableSource.orEmpty(),
 				thumbnailUrl = message.thumbnailPath ?: message.remoteThumbnailUrl,
@@ -906,17 +922,15 @@ fun SharedDirectChatRoute(
 					if (isSelectionMode) {
 						toggleMessageSelection(message.id)
 					} else if (!isUploading && !isFailed && !message.playableSource.isNullOrBlank()) {
-						stateHolder.mediaController.toggleVideoCircle(message.uiKey, message.id)
+						val target = playbackTarget(message.id, message.uiKey)
+						if (target != null) {
+							draftPlayer.stop()
+							playbackSession.playVideo(target, message.playableSource.orEmpty())
+						}
 					}
 				},
-				onSeek = { nextProg ->
-					stateHolder.mediaController.updateVideoCircleProgress(nextProg)
-				},
-				onPlaybackEnded = {
-					if (activeVideoCircle.value.uiKey == message.uiKey) {
-						stateHolder.mediaController.clearActiveVideoCircle()
-					}
-				},
+				progress = { playbackSession.videoProgress },
+				onSeek = playbackSession::seekVideo,
 				modifier = Modifier.fillMaxSize(),
 			)
 			if (isUploading) {
@@ -1190,6 +1204,16 @@ fun SharedDirectChatRoute(
 		},
 		onPinnedMessageClick = stateHolder::jumpToMessage,
 		snackbarHostState = snackbarHostState,
+		playbackBar = {
+			SharedChatPlaybackBar { target ->
+				if (target.belongsTo(playbackConversationId, initialRequest.peerUserId)) {
+					val currentId = currentMessages.firstOrNull { it.uiMessageKey() == target.uiKey }?.id
+					stateHolder.jumpToMessage(currentId ?: target.message.id)
+				} else {
+					onOpenPlaybackMessage(target)
+				}
+			}
+		},
 		onReplyCreatedFeedback = onReplyCreatedFeedback,
 		emojiPanel = emojiPanel,
 		videoRecordingOverlay = effectiveVideoRecordingOverlay,
@@ -1224,11 +1248,12 @@ fun SharedDirectChatRoute(
 		voiceDraft = effectiveVoiceDraft,
 		onVoiceDraftPlayPause = {
 			val draft = effectiveVoiceDraft ?: return@SharedDirectChatScreen
-			val playback = voicePlayback.value
+			val playback = draftPlayer.state.value
 			if (playback.isPlaying && playback.activeUiKey == "draft") {
-				voicePlayer.pause()
+				draftPlayer.pause()
 			} else {
-				voicePlayer.play(
+				playbackSession.stop()
+				draftPlayer.play(
 					messageId = -1L,
 					urlOrPath = draft.localAudioPath,
 					uiKey = "draft",
@@ -1239,15 +1264,17 @@ fun SharedDirectChatRoute(
 		onVoiceDraftSeek = { fraction ->
 			val draft = effectiveVoiceDraft ?: return@SharedDirectChatScreen
 			val pos = (fraction * draft.durationMs).toLong()
-			voicePlayer.seekTo(pos)
+			draftPlayer.seekTo(pos)
 		},
 		onVoiceDraftDelete = {
+			draftPlayer.stop()
 			currentDraftClip?.let { runCatching { platformVoiceRecorder?.cancelRecording() } }
 			currentDraftClip = null
 			internalVoiceDraft = null
 			me.floow.shared.chats.media.ChatMediaDraftStore.clear(chatDraftKey)
 		},
 		onVoiceDraftSend = {
+			draftPlayer.stop()
 			val clip = currentDraftClip
 			if (clip != null) {
 				currentDraftClip = null

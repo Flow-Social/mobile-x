@@ -34,6 +34,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import flow.shared.generated.resources.Res
 import flow.shared.generated.resources.bookmark_icon
@@ -111,6 +112,7 @@ internal fun SharedDirectChatScreen(
 	onDeleteSelectionClick: () -> Unit,
 	onPinnedMessageClick: (Long) -> Unit,
 	snackbarHostState: SnackbarHostState,
+	playbackBar: @Composable () -> Unit = {},
 	onReplyCreatedFeedback: () -> Unit = {},
 	emojiPanel: @Composable (ChatInputController) -> Unit = {},
 	videoRecordingOverlay: @Composable (Int, Rect?, Modifier) -> Unit = { _, _, _ -> },
@@ -125,7 +127,7 @@ internal fun SharedDirectChatScreen(
 	onRecordStopClick: () -> Unit = {},
 	onRecordSendClick: () -> Unit = onRecordStopClick,
 	videoCircleInteractionActive: Boolean = false,
-	videoCircleContent: @Composable (me.floow.uikit.chat.model.VideoCircleOutMessage, Boolean, () -> Unit) -> Unit = { _, _, _ -> },
+	videoCircleContent: @Composable (me.floow.uikit.chat.model.VideoCircleOutMessage, Boolean, Dp, () -> Unit) -> Unit = { _, _, _, _ -> },
 	voiceContent: @Composable (me.floow.uikit.chat.model.VoiceMessage, Boolean, () -> Unit) -> Unit = { _, _, _ -> },
 	imageContent: @Composable (
 		message: me.floow.uikit.chat.model.ImageMessage,
@@ -414,6 +416,7 @@ internal fun SharedDirectChatScreen(
 		headerAvatarPainter = savedMessagesAvatarPainter,
 		dividerColor = config.dividerColor,
 		snackbarHost = { SnackbarHost(snackbarHostState) },
+		playbackBar = playbackBar,
 		pinnedMessages = if (hasDataState != null && hasDataState.pinnedMessages.isNotEmpty()) {
 			{
 				FlowPinnedMessagesBar(

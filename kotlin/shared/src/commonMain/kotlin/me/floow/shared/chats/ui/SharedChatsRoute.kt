@@ -14,6 +14,7 @@ fun SharedChatsRoute(
 	onSearchClick: () -> Unit,
 	onChatClick: (ChatListItemModel) -> Unit,
 	modifier: Modifier = Modifier,
+	playbackBar: @Composable () -> Unit = {},
 ) {
 	val state by stateHolder.state.collectAsState()
 
@@ -25,5 +26,6 @@ fun SharedChatsRoute(
 		onDeleteConversation = stateHolder::deleteConversation,
 		onLoadMore = stateHolder::loadMore,
 		modifier = modifier,
+		playbackBar = playbackBar,
 	)
 }

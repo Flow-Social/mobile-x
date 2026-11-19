@@ -44,15 +44,9 @@ class AndroidVoicePlayer(
                 }
                 Player.STATE_ENDED -> {
                     stopProgressPolling()
-                    _state.update {
-                        it.copy(
-                            isPlaying = false,
-                            isBuffering = false,
-                            currentPositionMs = 0L,
-                        )
-                    }
-                    exoPlayer?.seekTo(0L)
+                    currentSource = null
                     exoPlayer?.pause()
+                    _state.update { VoicePlaybackState(speed = it.speed) }
                 }
                 Player.STATE_READY -> {
                     val actualDuration = exoPlayer?.duration?.takeIf { it > 0L }

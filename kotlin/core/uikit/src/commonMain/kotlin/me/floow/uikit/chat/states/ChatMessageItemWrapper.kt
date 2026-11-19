@@ -11,6 +11,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -56,6 +57,7 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import me.floow.uikit.chat.common.ElevatedMessageData
@@ -120,7 +122,7 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 	resolveContextMenuActions: (ChatMessage) -> List<ChatContextMenuAction>,
 	onContextMenuOpenRequest: (ChatMessage, Rect?, Rect?, ElevatedMessageData?) -> Unit,
 	onContextMenuDismissRequest: () -> Unit,
-	videoCircleContent: @Composable (VideoCircleOutMessage, Boolean, () -> Unit) -> Unit,
+	videoCircleContent: @Composable (VideoCircleOutMessage, Boolean, Dp, () -> Unit) -> Unit,
 	voiceContent: @Composable (VoiceMessage, Boolean, () -> Unit) -> Unit,
 	imageContent: @Composable (
 		message: ImageMessage,
@@ -472,19 +474,17 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 						},
 						modifier = Modifier.fillMaxWidth(),
 					) {
-						Row(
+						BoxWithConstraints(
 							modifier = Modifier.fillMaxWidth(),
-							horizontalArrangement = if (isOut) {
-								Arrangement.End
-							} else {
-								Arrangement.Start
-							},
+							contentAlignment = if (isOut) Alignment.CenterEnd else Alignment.CenterStart,
 						) {
+							val availableWidth = maxWidth
 							Box(modifier = contextMenuHighlightModifier) {
 								(message as? VideoCircleOutMessage)?.let { circleMsg ->
 									videoCircleContent(
 										circleMsg,
 										isSelectionMode,
+										availableWidth,
 										{ selectMessage() },
 									)
 								}

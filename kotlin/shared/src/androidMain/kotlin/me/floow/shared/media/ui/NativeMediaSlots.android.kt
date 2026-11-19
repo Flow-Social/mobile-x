@@ -22,11 +22,9 @@ import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -47,9 +45,6 @@ import me.floow.uikit.components.media.ProgressiveImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.floow.shared.chats.videocircle.CircleVideoSurface
-import me.floow.shared.chats.videocircle.VideoCirclePlaybackRequest
-import me.floow.shared.chats.videocircle.VideoCirclePlaybackStatus
-import me.floow.shared.chats.videocircle.VideoCirclePlayerProvider
 import me.floow.uikit.chat.components.videocircle.VideoCircleMotion
 import me.floow.uikit.chat.components.videocircle.VideoCirclePlayingEqualizer
 import me.floow.uikit.chat.components.videocircle.VideoCircleProgressOverlay
@@ -99,82 +94,34 @@ actual fun NativeCameraRecordingPreview(
 
 @OptIn(UnstableApi::class)
 @Composable
-actual fun NativeVideoCirclePlayer(
+internal actual fun NativeVideoCirclePlayer(
+    playback: NativeVideoCirclePlayback,
     messageKey: String,
     videoUrl: String,
     thumbnailUrl: String?,
     playbackUiState: VideoCirclePlaybackUiState,
     showMenuPreview: Boolean,
     onClick: (() -> Unit)?,
-    onSeek: ((Float) -> Unit)?,
-    onPlaybackEnded: (() -> Unit)?,
+    progress: () -> Float,
+    onSeek: (Float) -> Unit,
     modifier: Modifier,
 ) {
     val context = LocalContext.current
     var isSourceError by remember(videoUrl) { mutableStateOf(false) }
 
-    val manager = remember(context) { VideoCirclePlayerProvider.get(context) }
-    val managerState by manager.state.collectAsState()
-
-    val currentOnPlaybackEnded = androidx.compose.runtime.rememberUpdatedState(onPlaybackEnded)
-    val isSelected = playbackUiState.isPlaying || playbackUiState.isPaused
-    if (isSelected) {
-        DisposableEffect(manager, messageKey) {
-            val callback: (String) -> Unit = { endedKey ->
-                if (endedKey == messageKey) currentOnPlaybackEnded.value?.invoke()
-            }
-            manager.onPlaybackEnded = callback
-            onDispose {
-                if (manager.onPlaybackEnded === callback) manager.onPlaybackEnded = null
-            }
-        }
-    }
-
-    var isFirstFrameRendered by remember(videoUrl) { mutableStateOf(false) }
-    var menuFrame by remember(videoUrl, showMenuPreview) { mutableStateOf<ImageBitmap?>(null) }
-
-    LaunchedEffect(playbackUiState, messageKey, videoUrl) {
-        when (playbackUiState) {
-            VideoCirclePlaybackUiState.ActivePlaying -> {
-                if (videoUrl.isNotBlank()) {
-                    manager.play(
-                        VideoCirclePlaybackRequest(
-                            uiKey = messageKey,
-                            messageId = 0L,
-                            source = videoUrl,
-                            muted = false,
-                            userActivated = true,
-                        )
-                    )
-                }
-            }
-            VideoCirclePlaybackUiState.ActivePaused -> {
-                if (managerState.activeUiKey == messageKey) {
-                    manager.pause()
-                }
-            }
-            VideoCirclePlaybackUiState.IdlePreview,
-            VideoCirclePlaybackUiState.Uploading -> {
-                isFirstFrameRendered = false
-                if (managerState.activeUiKey == messageKey && managerState.isUserActivated) {
-                    manager.pause()
-                }
-            }
-        }
-    }
-
-    val isCurrentActive = (playbackUiState == VideoCirclePlaybackUiState.ActivePlaying ||
-        playbackUiState == VideoCirclePlaybackUiState.ActivePaused) &&
-        videoUrl.isNotBlank() &&
-        managerState.activeUiKey == messageKey &&
-        !isSourceError
-
-    val progress = remember { mutableFloatStateOf(0f) }
-    var isSeeking by remember { mutableStateOf(false) }
-
+    val manager = playback.manager
     val isPaused = playbackUiState.isPaused
     val isPlaying = playbackUiState.isPlaying
     val isProgressVisible = playbackUiState.isProgressVisible
+    val managerState = if (isProgressVisible) manager.state.collectAsState().value else null
+    val isCurrentActive = managerState?.activeUiKey == messageKey && !isSourceError
+    val playbackProgress = if (isProgressVisible) progress() else 0f
+
+    var isFirstFrameRendered by remember(videoUrl) { mutableStateOf(false) }
+    var menuFrame by remember(videoUrl, showMenuPreview) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(isCurrentActive) {
+        if (!isCurrentActive) isFirstFrameRendered = false
+    }
 
     // Telegram: pause progress animates 220ms in, 150ms out
     val pauseProgress by animateFloatAsState(
@@ -196,23 +143,6 @@ actual fun NativeVideoCirclePlayer(
         overshootInterpolation(pauseProgress)
     } else {
         pauseProgress
-    }
-
-    LaunchedEffect(isCurrentActive, playbackUiState, isSeeking) {
-        val currentPlayer = manager.player ?: return@LaunchedEffect
-        if (!isCurrentActive) return@LaunchedEffect
-        while (true) {
-            if (!isSeeking) {
-                val duration = currentPlayer.duration.takeIf { it > 0L } ?: 0L
-                val position = currentPlayer.currentPosition.coerceAtLeast(0L)
-                progress.floatValue = if (duration > 0L) {
-                    (position.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
-                } else {
-                    0f
-                }
-            }
-            kotlinx.coroutines.delay(32)
-        }
     }
 
     var localThumbnailBitmap by remember(videoUrl) {
@@ -323,7 +253,7 @@ actual fun NativeVideoCirclePlayer(
             isPaused = isPaused,
             pauseProgress = pauseProgress,
             overshootPauseProgress = overshootPauseProgress,
-            progress = progress.floatValue,
+            progress = playbackProgress,
             progressColor = MaterialTheme.colorScheme.primary,
         )
 
@@ -340,12 +270,9 @@ actual fun NativeVideoCirclePlayer(
                     .videoCircleSeekGesture(
                         isProgressVisible = isProgressVisible,
                         isPaused = isPaused,
-                        progress = progress.floatValue,
-                        onSeekingChange = { isSeeking = it },
-                        onSeekProgress = { nextProg: Float ->
-                            manager.seekToProgress(nextProg)
-                            onSeek?.invoke(nextProg)
-                        },
+                        progress = playbackProgress,
+                        onSeekingChange = {},
+                        onSeekProgress = onSeek,
                     )
             )
         }

@@ -61,6 +61,14 @@
     <string name="chat_load_failed">Не удалось загрузить чат</string>
     <string name="chat_no_messages">Сообщений пока нет</string>
     <string name="chat_selection_close">Закрыть выбор</string>
+    <string name="chat_playback_you">Вы</string>
+    <string name="chat_playback_at">%1$s в %2$s</string>
+    <string name="chat_playback_voice">Голосовое сообщение</string>
+    <string name="chat_playback_video">Видеосообщение</string>
+    <string name="chat_playback_play">Воспроизвести</string>
+    <string name="chat_playback_pause">Пауза</string>
+    <string name="chat_playback_close">Закрыть плеер</string>
+    <string name="chat_playback_speed">Скорость: %1$s</string>
     <string name="chat_copy_selected">Скопировать выбранное</string>
     <string name="chat_selection_delete">Удалить выбранное</string>
     <string name="chat_selection_selected_count">(%1$d) Выбрано</string>

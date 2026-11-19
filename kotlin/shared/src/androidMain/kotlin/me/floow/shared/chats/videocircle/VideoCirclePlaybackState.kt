@@ -24,6 +24,7 @@ data class VideoCirclePlaybackRequest(
     val source: String,
     val muted: Boolean,
     val userActivated: Boolean,
+    val speed: Float = 1f,
 )
 
 data class VideoCirclePlaybackCandidate(

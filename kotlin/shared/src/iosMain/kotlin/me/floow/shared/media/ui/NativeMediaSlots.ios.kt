@@ -89,27 +89,16 @@ actual fun NativeCameraRecordingPreview(
 private class IosVideoCircleContainerView : UIView(frame = platform.CoreGraphics.CGRectZero.readValue()) {
     var player: AVPlayer? = null
     var playerLayer: AVPlayerLayer? = null
-    var endObserver: platform.darwin.NSObjectProtocol? = null
 
     init {
         backgroundColor = UIColor.blackColor
         clipsToBounds = true
     }
 
-    fun attach(player: AVPlayer, playerItem: AVPlayerItem) {
+    fun attach(player: AVPlayer) {
+        if (this.player === player) return
         release()
         this.player = player
-        player.actionAtItemEnd = platform.AVFoundation.AVPlayerActionAtItemEndNone
-
-        endObserver = platform.Foundation.NSNotificationCenter.defaultCenter.addObserverForName(
-            name = platform.AVFoundation.AVPlayerItemDidPlayToEndTimeNotification,
-            `object` = playerItem,
-            queue = platform.Foundation.NSOperationQueue.mainQueue,
-        ) { _ ->
-            player.seekToTime(platform.CoreMedia.CMTimeMake(0, 1))
-            player.play()
-        }
-
         val layer = AVPlayerLayer.playerLayerWithPlayer(player)
         layer.videoGravity = platform.AVFoundation.AVLayerVideoGravityResizeAspectFill
         this.playerLayer = layer
@@ -118,11 +107,6 @@ private class IosVideoCircleContainerView : UIView(frame = platform.CoreGraphics
     }
 
     fun release() {
-        endObserver?.let {
-            platform.Foundation.NSNotificationCenter.defaultCenter.removeObserver(it)
-        }
-        endObserver = null
-        player?.pause()
         player = null
         playerLayer?.removeFromSuperlayer()
         playerLayer = null
@@ -146,23 +130,23 @@ private val ActiveCircleSize = 252.dp
 
 @OptIn(ExperimentalForeignApi::class, androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
-actual fun NativeVideoCirclePlayer(
+internal actual fun NativeVideoCirclePlayer(
+    playback: NativeVideoCirclePlayback,
     messageKey: String,
     videoUrl: String,
     thumbnailUrl: String?,
     playbackUiState: me.floow.uikit.chat.model.VideoCirclePlaybackUiState,
     showMenuPreview: Boolean,
     onClick: (() -> Unit)?,
-    onSeek: ((Float) -> Unit)?,
-    onPlaybackEnded: (() -> Unit)?,
+    progress: () -> Float,
+    onSeek: (Float) -> Unit,
     modifier: Modifier
 ) {
-    val progress = androidx.compose.runtime.remember(messageKey) { androidx.compose.runtime.mutableFloatStateOf(0f) }
-    var activePlayer by androidx.compose.runtime.remember(messageKey) { androidx.compose.runtime.mutableStateOf<AVPlayer?>(null) }
-
     val isPlaying = playbackUiState.isPlaying
     val isPaused = playbackUiState.isPaused
     val isProgressVisible = playbackUiState.isProgressVisible
+    val playbackProgress = if (isProgressVisible) progress() else 0f
+    val player = if (isProgressVisible) playback.playerFor(messageKey) else null
 
     val pauseProgress by androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (isPaused) 1f else 0f,
@@ -183,22 +167,6 @@ actual fun NativeVideoCirclePlayer(
         me.floow.uikit.chat.components.videocircle.overshootInterpolation(pauseProgress)
     } else {
         pauseProgress
-    }
-
-    androidx.compose.runtime.LaunchedEffect(activePlayer, isPlaying) {
-        val player = activePlayer ?: return@LaunchedEffect
-        while (isPlaying) {
-            val currentItem = player.currentItem
-            if (currentItem != null) {
-                val duration = runCatching { platform.CoreMedia.CMTimeGetSeconds(currentItem.duration) }.getOrDefault(0.0)
-                val current = runCatching { platform.CoreMedia.CMTimeGetSeconds(player.currentTime()) }.getOrDefault(0.0)
-                if (!duration.isNaN() && !duration.isInfinite() && duration > 0.0 &&
-                    !current.isNaN() && !current.isInfinite() && current >= 0.0) {
-                    progress.floatValue = (current / duration).coerceIn(0.0, 1.0).toFloat()
-                }
-            }
-            kotlinx.coroutines.delay(32)
-        }
     }
 
     Box(
@@ -225,53 +193,15 @@ actual fun NativeVideoCirclePlayer(
             )
         }
 
-        if ((isPlaying || isPaused) && videoUrl.isNotBlank()) {
+        if (player != null) {
             UIKitView(
-                factory = {
-                    val container = IosVideoCircleContainerView()
-
-                    val cleanPath = if (videoUrl.startsWith("file://")) {
-                        videoUrl.removePrefix("file://")
-                    } else {
-                        videoUrl
-                    }
-
-                    val url = if (cleanPath.startsWith("/")) {
-                        NSURL.fileURLWithPath(cleanPath)
-                    } else {
-                        NSURL.URLWithString(videoUrl)
-                    }
-
-                    if (url != null) {
-                        try {
-                            val audioSession = platform.AVFAudio.AVAudioSession.sharedInstance()
-                            audioSession.setCategory(platform.AVFAudio.AVAudioSessionCategoryPlayback, error = null)
-                        } catch (_: Throwable) {}
-
-                        val playerItem = AVPlayerItem(uRL = url)
-                        val player = AVPlayer(playerItem = playerItem)
-                        container.attach(player, playerItem)
-
-                        activePlayer = player
-                        if (isPlaying) {
-                            player.play()
-                        }
-                    }
-                    container
-                },
+                factory = { IosVideoCircleContainerView() },
                 update = { container ->
+                    container.attach(player)
                     container.alpha = if (showMenuPreview) 0.0 else 1.0
-                    if (isPlaying) {
-                        container.player?.play()
-                    } else {
-                        container.player?.pause()
-                    }
                 },
                 modifier = Modifier.fillMaxSize(),
-                onRelease = { container ->
-                    if (activePlayer == container.player) activePlayer = null
-                    container.release()
-                },
+                onRelease = { it.release() },
                 properties = UIKitInteropProperties(interactionMode = null),
             )
         }
@@ -283,7 +213,7 @@ actual fun NativeVideoCirclePlayer(
             isPaused = isPaused,
             pauseProgress = pauseProgress,
             overshootPauseProgress = overshootPauseProgress,
-            progress = progress.floatValue,
+            progress = playbackProgress,
             progressColor = androidx.compose.material3.MaterialTheme.colorScheme.primary,
         )
 
@@ -300,20 +230,9 @@ actual fun NativeVideoCirclePlayer(
                     .videoCircleSeekGesture(
                         isProgressVisible = isProgressVisible,
                         isPaused = isPaused,
-                        progress = progress.floatValue,
+                        progress = playbackProgress,
                         onSeekingChange = {},
-                        onSeekProgress = { nextProg ->
-                            activePlayer?.let { p ->
-                                val currentItem = p.currentItem ?: return@let
-                                val duration = runCatching { platform.CoreMedia.CMTimeGetSeconds(currentItem.duration) }.getOrDefault(0.0)
-                                if (duration > 0.0) {
-                                    val targetSeconds = duration * nextProg.toDouble()
-                                    val targetTime = platform.CoreMedia.CMTimeMakeWithSeconds(targetSeconds, 1000)
-                                    p.seekToTime(targetTime)
-                                }
-                            }
-                            onSeek?.invoke(nextProg)
-                        },
+                        onSeekProgress = onSeek,
                     )
             )
         }

@@ -73,6 +73,7 @@ sealed interface FlowSubscreen {
         val peerDisplayName: String = "",
         val peerAvatarUrl: String? = null,
         val isSavedMessages: Boolean = false,
+        val anchorMessageId: Long? = null,
     ) : FlowSubscreen
     data class Profile(
         val userId: String = "self",

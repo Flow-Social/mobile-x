@@ -61,6 +61,14 @@
     <string name="chat_load_failed">Unable to load chat</string>
     <string name="chat_no_messages">No messages yet</string>
     <string name="chat_selection_close">Close selection</string>
+    <string name="chat_playback_you">You</string>
+    <string name="chat_playback_at">%1$s at %2$s</string>
+    <string name="chat_playback_voice">Voice message</string>
+    <string name="chat_playback_video">Video message</string>
+    <string name="chat_playback_play">Play</string>
+    <string name="chat_playback_pause">Pause</string>
+    <string name="chat_playback_close">Close player</string>
+    <string name="chat_playback_speed">Playback speed: %1$s</string>
     <string name="chat_copy_selected">Copy selected messages</string>
     <string name="chat_selection_delete">Delete selected messages</string>
     <string name="chat_selection_selected_count">(%1$d) Selected</string>

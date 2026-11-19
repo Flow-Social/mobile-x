@@ -24,16 +24,6 @@ import me.floow.shared.chats.ui.currentChatEpochMillis
 import me.floow.shared.media.outbox.MediaOutboxEngine
 import me.floow.shared.media.outbox.MediaOutboxStatus
 import me.floow.shared.media.outbox.MediaOutboxTask
-import me.floow.uikit.chat.model.VideoCirclePlaybackUiState
-
-data class ActiveVideoCirclePlayback(
-	val uiKey: String? = null,
-	val messageId: Long? = null,
-	val isPaused: Boolean = false,
-	val progress: Float = 0f,
-	val positionMs: Long = 0L,
-	val durationMs: Long = 0L,
-)
 
 class ChatMediaController(
 	private val repository: ChatThreadRepository,
@@ -60,53 +50,6 @@ class ChatMediaController(
 	val localVideoCircleMessages = LinkedHashMap<String, ChatMessageItemModel>()
 	val localVoiceMessages = LinkedHashMap<String, ChatMessageItemModel>()
 	val localImageMessages = LinkedHashMap<String, ChatMessageItemModel>()
-
-	private val _activeVideoCircle = MutableStateFlow(ActiveVideoCirclePlayback())
-	val activeVideoCircle: StateFlow<ActiveVideoCirclePlayback> = _activeVideoCircle.asStateFlow()
-
-	fun toggleVideoCircle(uiKey: String, messageId: Long) {
-		val current = _activeVideoCircle.value
-		if (current.uiKey == uiKey) {
-			_activeVideoCircle.value = current.copy(isPaused = !current.isPaused)
-		} else {
-			_activeVideoCircle.value = ActiveVideoCirclePlayback(
-				uiKey = uiKey,
-				messageId = messageId,
-				isPaused = false,
-			)
-		}
-	}
-
-	fun setVideoCirclePaused(paused: Boolean) {
-		val current = _activeVideoCircle.value
-		if (current.uiKey != null) {
-			_activeVideoCircle.value = current.copy(isPaused = paused)
-		}
-	}
-
-	fun updateVideoCircleProgress(progress: Float, positionMs: Long = 0L, durationMs: Long = 0L) {
-		_activeVideoCircle.update { current ->
-			if (current.uiKey == null) current
-			else current.copy(progress = progress.coerceIn(0f, 1f), positionMs = positionMs, durationMs = durationMs)
-		}
-	}
-
-	fun clearActiveVideoCircle() {
-		_activeVideoCircle.value = ActiveVideoCirclePlayback()
-	}
-
-	fun resolveVideoCircleUiState(
-		active: ActiveVideoCirclePlayback,
-		uiKey: String,
-		isUploading: Boolean,
-		isFailed: Boolean,
-	): VideoCirclePlaybackUiState {
-		if (isUploading || isFailed) return VideoCirclePlaybackUiState.Uploading
-		if (active.uiKey == uiKey) {
-			return if (active.isPaused) VideoCirclePlaybackUiState.ActivePaused else VideoCirclePlaybackUiState.ActivePlaying
-		}
-		return VideoCirclePlaybackUiState.IdlePreview
-	}
 
 	init {
 		mediaOutboxEngine?.tasks?.let { tasksFlow ->
@@ -1161,7 +1104,6 @@ class ChatMediaController(
 		outgoingRecordingJob?.cancel()
 		outgoingRecordingJob = null
 		localRecordingStartedAtMillis = null
-		clearActiveVideoCircle()
 		if (clearLocalMedia) {
 			clearLocalMedia()
 		}

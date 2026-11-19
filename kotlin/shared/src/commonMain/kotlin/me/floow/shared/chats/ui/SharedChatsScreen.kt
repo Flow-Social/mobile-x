@@ -72,6 +72,7 @@ fun SharedChatsScreen(
 	onDeleteConversation: (ChatListItemModel, Boolean) -> Unit = { _, _ -> },
 	onLoadMore: () -> Unit = {},
 	modifier: Modifier = Modifier,
+	playbackBar: @Composable () -> Unit = {},
 ) {
 	val outgoingPrefix = stringResource(Res.string.chats_outgoing_prefix)
 	var actionDialogTarget by remember { mutableStateOf<ChatListItemModel?>(null) }
@@ -318,46 +319,47 @@ fun SharedChatsScreen(
 		contentWindowInsets = WindowInsets(0.dp),
 		modifier = modifier,
 	) { innerPadding ->
-		val commonModifier = Modifier
-			.fillMaxSize()
-			.padding(innerPadding)
+		Box(Modifier.fillMaxSize().padding(innerPadding)) {
+			val commonModifier = Modifier.fillMaxSize()
 
-		when (state) {
-			is ChatsScreenState.Loading -> {
-				Box(commonModifier, Alignment.Center) { FlowLoadingIndicator() }
-			}
+			when (state) {
+				is ChatsScreenState.Loading -> {
+					Box(commonModifier, Alignment.Center) { FlowLoadingIndicator() }
+				}
 
-			is ChatsScreenState.Error -> {
-				Box(commonModifier, Alignment.Center) {
-					Text(text = stringResource(Res.string.chats_error_generic))
+				is ChatsScreenState.Error -> {
+					Box(commonModifier, Alignment.Center) {
+						Text(text = stringResource(Res.string.chats_error_generic))
+					}
+				}
+
+				is ChatsScreenState.NoChats -> {
+					SharedBlankContentBox(commonModifier)
+				}
+
+				is ChatsScreenState.HasData -> {
+					ChatsListContent(
+						items = state.chats,
+						outgoingPrefix = outgoingPrefix,
+						repliesInboxAvatar = painterResource(Res.drawable.replyplz),
+						mutedIcon = painterResource(Res.drawable.chat_muted_icon),
+						sentIcon = painterResource(Res.drawable.chat_sent_icon),
+						readIcon = painterResource(Res.drawable.chat_read_icon),
+						onChatClick = onChatClick,
+						onChatLongClick = { clicked ->
+							if (clicked.visualType == ChatListItemVisualType.Regular) {
+								actionDialogTarget = clicked
+							}
+						},
+						onLoadMore = onLoadMore,
+						isLoadingMore = state.isLoadingMore,
+						hasMore = state.hasMore,
+						loadMoreError = state.loadMoreError,
+						modifier = commonModifier,
+					)
 				}
 			}
-
-			is ChatsScreenState.NoChats -> {
-				SharedBlankContentBox(commonModifier)
-			}
-
-			is ChatsScreenState.HasData -> {
-				ChatsListContent(
-					items = state.chats,
-					outgoingPrefix = outgoingPrefix,
-					repliesInboxAvatar = painterResource(Res.drawable.replyplz),
-					mutedIcon = painterResource(Res.drawable.chat_muted_icon),
-					sentIcon = painterResource(Res.drawable.chat_sent_icon),
-					readIcon = painterResource(Res.drawable.chat_read_icon),
-					onChatClick = onChatClick,
-					onChatLongClick = { clicked ->
-						if (clicked.visualType == ChatListItemVisualType.Regular) {
-							actionDialogTarget = clicked
-						}
-					},
-					onLoadMore = onLoadMore,
-					isLoadingMore = state.isLoadingMore,
-					hasMore = state.hasMore,
-					loadMoreError = state.loadMoreError,
-					modifier = commonModifier,
-				)
-			}
+			playbackBar()
 		}
 	}
 }

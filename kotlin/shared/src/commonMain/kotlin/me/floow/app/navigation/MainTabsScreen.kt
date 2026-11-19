@@ -55,6 +55,7 @@ fun MainTabsScreen(
     onNavigateToSettings: () -> Unit = {},
     onNavigateToBump: (slug: String) -> Unit = {},
     isTopScreen: Boolean = true,
+    chatPlaybackBar: @Composable () -> Unit = {},
     modifier: Modifier = Modifier,
     feedStateHolder: SharedFeedStateHolder = koinInject(),
     chatsListStateHolder: ChatsListStateHolder = koinInject(),
@@ -145,6 +146,7 @@ fun MainTabsScreen(
                 ) {
                     SharedChatsRoute(
                         stateHolder = chatsListStateHolder,
+                        playbackBar = { if (isChats) chatPlaybackBar() },
                         onSearchClick = onNavigateToSearch,
                         onChatClick = { chat ->
                             if (chat.visualType == ChatListItemVisualType.RepliesInbox) {

@@ -101,7 +101,7 @@ fun HasDataState(
 	config: ChatScreenConfig,
 	composerBottomInset: Dp? = null,
 	messageListScrollEnabled: Boolean = true,
-	videoCircleContent: @Composable (VideoCircleOutMessage, Boolean, () -> Unit) -> Unit = { _, _, _ -> },
+	videoCircleContent: @Composable (VideoCircleOutMessage, Boolean, Dp, () -> Unit) -> Unit = { _, _, _, _ -> },
 	voiceContent: @Composable (VoiceMessage, Boolean, () -> Unit) -> Unit = { _, _, _ -> },
 	imageContent: @Composable (
 		message: ImageMessage,

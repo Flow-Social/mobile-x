@@ -59,6 +59,12 @@ import me.floow.domain.models.PostContent
 import me.floow.domain.values.ProfileName
 import me.floow.domain.values.ProfileUsername
 import me.floow.shared.chats.ui.SharedDirectChatRoute
+import me.floow.shared.chats.ui.ChatPlaybackTarget
+import me.floow.shared.chats.ui.LocalChatPlayback
+import me.floow.shared.chats.ui.SharedChatPlaybackBar
+import me.floow.shared.chats.ui.rememberChatPlaybackSession
+import me.floow.shared.chats.model.ChatOpenMode
+import androidx.compose.runtime.CompositionLocalProvider
 import me.floow.shared.chats.ui.SharedRepliesRoute
 import me.floow.shared.chats.uilogic.direct.DirectChatInitialRequest
 import me.floow.shared.chats.uilogic.direct.DirectChatStateHolder
@@ -100,10 +106,25 @@ fun FlowRootNavHost(
     navController: NavHostController,
     modifier: Modifier = Modifier,
 ) {
+    val chatPlayback = rememberChatPlaybackSession()
+    CompositionLocalProvider(LocalChatPlayback provides chatPlayback) {
+        FlowRootNavigation(navController, modifier)
+    }
+}
+
+@Composable
+private fun FlowRootNavigation(
+    navController: NavHostController,
+    modifier: Modifier,
+) {
     val overlayState = rememberFlowOverlayState()
     val density = LocalDensity.current
     val tokenStorage = koinInject<TokenStorage>()
     val authState by tokenStorage.authState.collectAsState()
+    val chatPlayback = LocalChatPlayback.current
+    LaunchedEffect(authState is AuthTokenState.Authenticated) {
+        if (authState !is AuthTokenState.Authenticated) chatPlayback.stop()
+    }
     val defaultProfileStateHolder = koinInject<ProfileStateHolder> {
         parametersOf(null as String?)
     }
@@ -152,6 +173,21 @@ fun FlowRootNavHost(
             enteredIds.remove(removed.id)
         }
         overlayProgress = 0f
+    }
+
+    fun openPlaybackMessage(target: ChatPlaybackTarget) {
+        val conversationId = target.conversationId ?: 0L
+        if (conversationId <= 0L && target.peerUserId.isBlank()) return
+        pushOverlay(
+            FlowSubscreen.DirectChat(
+                conversationId = conversationId,
+                peerUserId = target.peerUserId,
+                peerDisplayName = target.peerName,
+                peerAvatarUrl = target.peerAvatarUrl,
+                isSavedMessages = target.isSavedMessages,
+                anchorMessageId = target.message.id.takeIf { it > 0L },
+            ),
+        )
     }
 
     LaunchedEffect(overlayStack.size) {
@@ -310,6 +346,7 @@ fun FlowRootNavHost(
             composable<MainTabsDestination> {
                 MainTabsScreen(
                     isTopScreen = !isSubscreenOpen,
+                    chatPlaybackBar = { SharedChatPlaybackBar(::openPlaybackMessage) },
                     onNavigateToPost = { postId ->
                         pushOverlay(
                             FlowSubscreen.PostDetail(
@@ -421,6 +458,7 @@ fun FlowRootNavHost(
                                     overlayState = overlayState,
                                     defaultProfileStateHolder = defaultProfileStateHolder,
                                     onPresentFullscreenViewer = { hostedFullscreenViewer = it },
+                                    onOpenPlaybackMessage = ::openPlaybackMessage,
                                 )
                             }
                         }
@@ -516,6 +554,7 @@ private fun SubscreenContent(
     overlayState: FlowOverlayState,
     defaultProfileStateHolder: ProfileStateHolder,
     onPresentFullscreenViewer: (HostedFullscreenImageViewer?) -> Unit,
+    onOpenPlaybackMessage: (ChatPlaybackTarget) -> Unit,
 ) {
     val overlayClose = LocalSwipeBackOverlayClose.current
     val handleBack: () -> Unit = {
@@ -544,8 +583,11 @@ private fun SubscreenContent(
             val isSaved = subscreen.isSavedMessages || subscreen.conversationId == 100L || subscreen.peerUserId == "saved" || subscreen.peerUserId == "self"
             SharedDirectChatRoute(
                 stateHolder = directChatStateHolder,
+                onOpenPlaybackMessage = onOpenPlaybackMessage,
                 initialRequest = DirectChatInitialRequest(
                     conversationId = subscreen.conversationId.takeIf { it > 0L },
+                    anchorMessageId = subscreen.anchorMessageId,
+                    openMode = if (subscreen.anchorMessageId != null) ChatOpenMode.FROM_MESSAGE_LINK else ChatOpenMode.FROM_LAST_SEEN,
                     peerUserId = subscreen.peerUserId,
                     peerDisplayName = subscreen.peerDisplayName.ifBlank { if (isSaved) "Избранное" else "Чат" },
                     peerAvatarUrl = subscreen.peerAvatarUrl,
