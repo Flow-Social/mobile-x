@@ -102,6 +102,7 @@ internal actual fun NativeVideoCirclePlayer(
     playbackUiState: VideoCirclePlaybackUiState,
     showMenuPreview: Boolean,
     showVideoSurface: Boolean,
+    showPlaybackControls: Boolean,
     onClick: (() -> Unit)?,
     progress: () -> Float,
     onSeek: (Float) -> Unit,
@@ -113,8 +114,8 @@ internal actual fun NativeVideoCirclePlayer(
     val manager = playback.manager
     val isPaused = playbackUiState.isPaused
     val isPlaying = playbackUiState.isPlaying
-    val isProgressVisible = playbackUiState.isProgressVisible
-    val managerState = if (isProgressVisible) manager.state.collectAsState().value else null
+    val isProgressVisible = showPlaybackControls && playbackUiState.isProgressVisible
+    val managerState = if (playbackUiState.isProgressVisible) manager.state.collectAsState().value else null
     val isCurrentActive = managerState?.activeUiKey == messageKey && !isSourceError
     val playbackProgress = if (isProgressVisible) progress() else 0f
 
@@ -126,7 +127,7 @@ internal actual fun NativeVideoCirclePlayer(
 
     // Telegram: pause progress animates 220ms in, 150ms out
     val pauseProgress by animateFloatAsState(
-        targetValue = if (isPaused) 1f else 0f,
+        targetValue = if (showPlaybackControls && isPaused) 1f else 0f,
         animationSpec = if (isPaused) {
             tween(
                 durationMillis = VideoCircleMotion.PauseProgressInDurationMs,
@@ -260,7 +261,7 @@ internal actual fun NativeVideoCirclePlayer(
 
         // Pulsing equalizer when playing
         VideoCirclePlayingEqualizer(
-            visible = isPlaying && isFirstFrameRendered,
+            visible = showPlaybackControls && isPlaying && isFirstFrameRendered,
         )
 
         // Telegram-grade circular seek overlay (active only when progress is visible)

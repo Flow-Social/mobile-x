@@ -138,6 +138,7 @@ internal actual fun NativeVideoCirclePlayer(
     playbackUiState: me.floow.uikit.chat.model.VideoCirclePlaybackUiState,
     showMenuPreview: Boolean,
     showVideoSurface: Boolean,
+    showPlaybackControls: Boolean,
     onClick: (() -> Unit)?,
     progress: () -> Float,
     onSeek: (Float) -> Unit,
@@ -145,12 +146,12 @@ internal actual fun NativeVideoCirclePlayer(
 ) {
     val isPlaying = playbackUiState.isPlaying
     val isPaused = playbackUiState.isPaused
-    val isProgressVisible = playbackUiState.isProgressVisible
+    val isProgressVisible = showPlaybackControls && playbackUiState.isProgressVisible
     val playbackProgress = if (isProgressVisible) progress() else 0f
-    val player = if (isProgressVisible && showVideoSurface) playback.playerFor(messageKey) else null
+    val player = if (playbackUiState.isProgressVisible && showVideoSurface) playback.playerFor(messageKey) else null
 
     val pauseProgress by androidx.compose.animation.core.animateFloatAsState(
-        targetValue = if (isPaused) 1f else 0f,
+        targetValue = if (showPlaybackControls && isPaused) 1f else 0f,
         animationSpec = if (isPaused) {
             tween(
                 durationMillis = me.floow.uikit.chat.components.videocircle.VideoCircleMotion.PauseProgressInDurationMs,
@@ -220,7 +221,7 @@ internal actual fun NativeVideoCirclePlayer(
 
         // Pulsing equalizer when playing
         me.floow.uikit.chat.components.videocircle.VideoCirclePlayingEqualizer(
-            visible = isPlaying,
+            visible = showPlaybackControls && isPlaying,
         )
 
         // Telegram-grade circular seek & tap gesture overlay
