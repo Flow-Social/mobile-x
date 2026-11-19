@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import me.floow.shared.chats.model.ChatDeliveryState
 import me.floow.shared.chats.model.ChatMessageItemModel
+import me.floow.shared.chats.model.toReplyDraft
 import me.floow.shared.chats.model.ChatPresenceState
 import me.floow.shared.chats.model.ChatThreadHeaderModel
 import me.floow.shared.chats.model.ChatTypingState
@@ -92,7 +93,8 @@ class ChatInputInteractionController(
 		if (messageId <= 0L) return
 		stateFlow.update { current ->
 			when (current) {
-				is DirectChatScreenState.HasData -> current.copy(currentReplyMessageId = messageId)
+				is DirectChatScreenState.HasData -> current.messages.firstOrNull { it.id == messageId && !it.isDeleted }
+                    ?.let { current.copy(replyDraft = it.toReplyDraft()) } ?: current
 				else -> current
 			}
 		}
@@ -101,7 +103,7 @@ class ChatInputInteractionController(
 	fun clearReply() {
 		stateFlow.update { current ->
 			when (current) {
-				is DirectChatScreenState.HasData -> current.copy(currentReplyMessageId = null)
+				is DirectChatScreenState.HasData -> current.copy(replyDraft = null)
 				else -> current
 			}
 		}
@@ -133,18 +135,7 @@ class ChatInputInteractionController(
 
 	fun togglePin(conversationId: Long, messageId: Long, isPinned: Boolean, chatActions: ChatActions) {
 		if (messageId <= 0L) return
-		chatActions.togglePin(conversationId, messageId, isPinned) {
-			stateFlow.update { state ->
-				when (state) {
-					is DirectChatScreenState.HasData -> state.copy(
-						messages = state.messages.map { message ->
-							if (message.id == messageId) message.copy(isPinned = isPinned) else message
-						}
-					)
-					else -> state
-				}
-			}
-		}
+        chatActions.togglePin(conversationId, messageId, isPinned) {}
 	}
 
 	fun pinMessage(conversationId: Long, messageId: Long, chatActions: ChatActions) {

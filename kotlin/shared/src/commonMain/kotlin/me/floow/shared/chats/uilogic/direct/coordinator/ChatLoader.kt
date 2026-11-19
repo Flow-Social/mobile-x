@@ -6,19 +6,13 @@ import me.floow.shared.chats.model.ChatThreadSnapshot
 import me.floow.shared.chats.uilogic.direct.ChatThreadPage
 import me.floow.shared.chats.uilogic.direct.ChatThreadRepository
 import me.floow.shared.chats.uilogic.direct.DirectChatInitialRequest
-import me.floow.shared.chats.uilogic.session.SharedChatSessionCache
 
 class ChatLoader(
 	private val repository: ChatThreadRepository,
-	private val sessionCache: SharedChatSessionCache? = null,
 	private val logger: Logger? = null,
 ) {
 	companion object {
 		const val LOAD_TIMEOUT_MS = 15_000L
-	}
-
-	fun getInstantCached(request: DirectChatInitialRequest): ChatThreadSnapshot? {
-		return sessionCache?.cachedThreadSnapshot(request)
 	}
 
 	suspend fun loadCachedInitial(request: DirectChatInitialRequest): ChatThreadSnapshot? {

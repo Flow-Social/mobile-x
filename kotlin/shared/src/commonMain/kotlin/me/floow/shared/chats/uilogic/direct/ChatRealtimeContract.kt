@@ -13,9 +13,11 @@ sealed interface ChatRealtimeEvent {
 	data class MessageUpserted(
 		val message: ChatMessageItemModel,
 		val peerLastReadMessageId: Long? = null,
-	) : ChatRealtimeEvent
+        val isNew: Boolean = true,
+    ) : ChatRealtimeEvent
 	data class MessageDeleted(val messageId: Long) : ChatRealtimeEvent
 	data class MessagePinned(val messageId: Long, val isPinned: Boolean) : ChatRealtimeEvent
+	data object OwnReadUpdated : ChatRealtimeEvent
 	data class PeerReadUpdated(val messageId: Long) : ChatRealtimeEvent
 	data class TypingUpdated(
 		val actorUserId: String,

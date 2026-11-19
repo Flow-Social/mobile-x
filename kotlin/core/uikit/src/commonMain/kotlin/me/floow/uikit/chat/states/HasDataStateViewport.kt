@@ -8,7 +8,7 @@ internal data class ChatViewportCoordinatorSnapshot(
     val visibleItems: List<me.floow.uikit.chat.model.ChatVisibleItemSnapshot>,
     val viewportAnchorMessageId: Long?,
     val viewportAnchorOffsetPx: Int,
-    val visibleReadCandidateId: Long?,
+    val readableIncomingIds: Set<Long>,
     val isAtBottom: Boolean,
     val firstVisibleDayStartMillis: Long?,
 )

@@ -46,7 +46,6 @@ class SharedChatUiAdaptersTest {
 			messages = messages,
 		).toSharedChatUiState(
 			selectionState = me.floow.uikit.chat.model.ChatSelectionState(),
-			jumpRequest = null,
 		)
 
 		val hasData = assertIs<ChatScreenUiState.HasData>(uiState)
@@ -55,6 +54,23 @@ class SharedChatUiAdaptersTest {
 		assertEquals(10, album.images.size)
 		assertEquals((0 until 10).toList(), album.images.map { it.position })
 	}
+
+    @Test
+    fun `an image reply keeps its quote and can navigate to the original`() {
+        val image = ChatMessageItemModel(
+            id = 20, text = "", createdAtMillis = 20, isOutgoing = false,
+            content = ChatMessageContent.Image(remoteUrl = "https://example.test/image.jpg"),
+            replyToMessageId = 10, replyToMessageText = "original",
+        )
+        val state = DirectChatScreenState.HasData(
+            conversationId = 42,
+            header = ChatThreadHeaderModel(peerUserId = "peer", title = "Peer"),
+            messages = listOf(image),
+        ).toSharedChatUiState(me.floow.uikit.chat.model.ChatSelectionState()) as ChatScreenUiState.HasData
+        val row = assertIs<ImageMessage>(state.messages.single().messages.single())
+        assertEquals(10L, resolveReplyTargetId(row))
+        assertEquals("original", row.quote?.preview)
+    }
 
 	@Test
 	fun `shared chat ui state forwards peer presence for no messages`() {
@@ -68,7 +84,6 @@ class SharedChatUiAdaptersTest {
 			peerLastSeenAtMillis = 456L,
 		).toSharedChatUiState(
 			selectionState = me.floow.uikit.chat.model.ChatSelectionState(),
-			jumpRequest = null,
 		)
 
 		val noMessages = assertIs<ChatScreenUiState.NoMessages>(uiState)
@@ -89,7 +104,6 @@ class SharedChatUiAdaptersTest {
 			peerLastSeenAtMillis = 789L,
 		).toSharedChatUiState(
 			selectionState = me.floow.uikit.chat.model.ChatSelectionState(),
-			jumpRequest = null,
 		)
 
 		val hasData = assertIs<ChatScreenUiState.HasData>(uiState)
@@ -119,7 +133,6 @@ class SharedChatUiAdaptersTest {
 			),
 		).toSharedChatUiState(
 			selectionState = me.floow.uikit.chat.model.ChatSelectionState(),
-			jumpRequest = null,
 		)
 
 		val hasData = assertIs<ChatScreenUiState.HasData>(uiState)
@@ -160,7 +173,6 @@ class SharedChatUiAdaptersTest {
 			anchorRequestOffsetPx = 24,
 		).toSharedChatUiState(
 			selectionState = me.floow.uikit.chat.model.ChatSelectionState(),
-			jumpRequest = null,
 		)
 
 		val hasData = assertIs<ChatScreenUiState.HasData>(uiState)
@@ -198,7 +210,6 @@ class SharedChatUiAdaptersTest {
 			),
 		).toSharedChatUiState(
 			selectionState = me.floow.uikit.chat.model.ChatSelectionState(),
-			jumpRequest = null,
 		)
 
 		val hasData = assertIs<ChatScreenUiState.HasData>(uiState)

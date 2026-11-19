@@ -1,11 +1,11 @@
 package me.floow.shared.chats.uilogic.direct.coordinator
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import me.floow.shared.chats.uilogic.direct.ChatThreadRepository
 import me.floow.shared.chats.uilogic.direct.DirectChatOpenViewportSnapshot
 import me.floow.uikit.chat.model.ChatViewportSnapshot
@@ -15,11 +15,9 @@ class ChatReadTracker(
 	private val scope: CoroutineScope,
 ) {
 	companion object {
-		const val READ_DEBOUNCE_DELAY_MS = 3_000L
+		const val READ_DEBOUNCE_DELAY_MS = 350L
 	}
 
-	var latestViewportSnapshot: ChatViewportSnapshot? = null
-		private set
 	var unseenIncomingMessageIds: Set<Long> = emptySet()
 		private set
 	var lastMarkedReadMessageId: Long = 0L
@@ -30,15 +28,14 @@ class ChatReadTracker(
 	private var pendingReadDebounceJob: Job? = null
 
 	fun initializeLastMarkedRead(messageId: Long) {
-		lastMarkedReadMessageId = messageId
+		lastMarkedReadMessageId = maxOf(lastMarkedReadMessageId, messageId)
 	}
 
 	fun markReadUpToIfNeeded(
 		conversationId: Long,
 		messageId: Long,
 	) {
-		if (conversationId <= 0L || messageId <= 0L || messageId <= lastMarkedReadMessageId) return
-		lastMarkedReadMessageId = messageId
+		if (conversationId <= 0L || messageId <= 0L || messageId <= maxOf(lastMarkedReadMessageId, pendingReadUpToMessageId ?: 0L)) return
 		pendingReadUpToMessageId = messageId
 		pendingReadDebounceJob?.cancel()
 		pendingReadDebounceJob = scope.launch {
@@ -46,6 +43,7 @@ class ChatReadTracker(
 			val targetMessageId = pendingReadUpToMessageId ?: return@launch
 			repository.markReadUpTo(conversationId, targetMessageId)
 				.onSuccess {
+                    initializeLastMarkedRead(targetMessageId)
 					if (pendingReadUpToMessageId == targetMessageId) {
 						pendingReadUpToMessageId = null
 					}
@@ -59,7 +57,6 @@ class ChatReadTracker(
 		keepAnchorRequest: Boolean,
 		onBadgeCountChanged: (Int) -> Unit,
 	) {
-		latestViewportSnapshot = snapshot
 		if (conversationId == null || conversationId <= 0L) return
 
 		val anchorRestoreActive = keepAnchorRequest
@@ -68,18 +65,12 @@ class ChatReadTracker(
 			anchorOffsetPx = snapshot.firstVisibleOffsetPx,
 			isBottomPinned = snapshot.isAtBottom,
 		)
-		if (!anchorRestoreActive) {
+		if (!anchorRestoreActive && (openSnapshot.anchorMessageId != null || openSnapshot.isBottomPinned)) {
 			pendingOpenViewportSnapshot = openSnapshot
 		}
-		unseenIncomingMessageIds = when {
-			snapshot.isAtBottom -> emptySet()
-			else -> unseenIncomingMessageIds - snapshot.visibleMessageIds
-		}
+        unseenIncomingMessageIds -= snapshot.readableIncomingIds
 		onBadgeCountChanged(unseenIncomingMessageIds.size)
 
-		snapshot.visibleReadCandidateId
-			?.takeIf { it > 0L }
-			?.let { candidateId -> markReadUpToIfNeeded(conversationId, candidateId) }
 	}
 
 	fun registerIncomingMessage(
@@ -88,11 +79,8 @@ class ChatReadTracker(
 		onBadgeCountChanged: (Int) -> Unit,
 	) {
 		if (messageId <= 0L || isOutgoing) return
-		val atBottom = latestViewportSnapshot?.isAtBottom == true
-		if (!atBottom) {
-			unseenIncomingMessageIds = unseenIncomingMessageIds + messageId
-			onBadgeCountChanged(unseenIncomingMessageIds.size)
-		}
+        unseenIncomingMessageIds += messageId
+        onBadgeCountChanged(unseenIncomingMessageIds.size)
 	}
 
 	fun onScrollSettled(conversationId: Long?) {
@@ -103,11 +91,6 @@ class ChatReadTracker(
 		}
 	}
 
-	fun onBottomReached(onBadgeCountChanged: (Int) -> Unit) {
-		unseenIncomingMessageIds = emptySet()
-		onBadgeCountChanged(0)
-	}
-
 	fun flushReadAndOpenAnchorOnClose(conversationId: Long?) {
 		pendingReadDebounceJob?.cancel()
 		pendingReadDebounceJob = null
@@ -116,22 +99,15 @@ class ChatReadTracker(
 		val pendingAnchor = pendingOpenViewportSnapshot
 		if (pendingRead == null && pendingAnchor == null) return
 		pendingReadUpToMessageId = null
-		scope.launch(NonCancellable) {
-			withContext(NonCancellable) {
-				pendingAnchor?.let { snapshot ->
-					repository.setOpenViewportSnapshot(conversationId, snapshot)
-				}
-				pendingRead?.let { messageId ->
-					repository.markReadUpTo(conversationId, messageId)
-				}
-			}
-		}
+        scope.launch(NonCancellable, start = CoroutineStart.UNDISPATCHED) {
+            pendingAnchor?.let { repository.setOpenViewportSnapshot(conversationId, it) }
+            pendingRead?.let { repository.markReadUpTo(conversationId, it) }
+        }
 	}
 
 	fun reset() {
 		pendingReadDebounceJob?.cancel()
 		pendingReadDebounceJob = null
-		latestViewportSnapshot = null
 		unseenIncomingMessageIds = emptySet()
 		lastMarkedReadMessageId = 0L
 		pendingReadUpToMessageId = null

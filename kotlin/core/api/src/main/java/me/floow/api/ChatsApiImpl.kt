@@ -1347,6 +1347,8 @@ private fun JsonObject.toChatConversationItemOrNull(): ChatConversationItem? {
 		lastMessage = lastMessage,
 		unreadCount = unreadCount,
 		lastReadMessageId = lastReadMessageId,
+		firstUnreadId = longOrNullFlexible("first_unread_id"),
+		readStateVersion = longOrNullFlexible("read_state_version") ?: 0L,
 		peerLastReadMessageId = peerLastReadMessageId,
 		isPinned = isPinned,
 		pinnedAt = pinnedAt,

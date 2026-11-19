@@ -3,7 +3,15 @@ package me.floow.domain.data.repos
 data class DirectChatViewportSnapshot(
 	val anchorMessageId: Long?,
 	val anchorOffsetPx: Int,
-	val isBottomPinned: Boolean
+	val isBottomPinned: Boolean,
+    val history: DirectChatWindowBounds? = null,
+)
+
+data class DirectChatWindowBounds(
+    val oldestId: Long,
+    val newestId: Long,
+    val hasOlder: Boolean,
+    val hasNewer: Boolean,
 )
 
 interface DirectMessagesReadCursorStore {

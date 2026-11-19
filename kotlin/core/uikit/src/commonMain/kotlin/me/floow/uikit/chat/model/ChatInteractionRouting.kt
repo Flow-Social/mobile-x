@@ -15,10 +15,4 @@ fun resolveMessageTapOutcome(
 	else -> ChatMessageTapOutcome.OpenContextMenu
 }
 
-fun resolveReplyTargetId(message: ChatMessage): Long {
-	return if (message is ChatReplyMessage) {
-		message.replyMessageId
-	} else {
-		message.id
-	}
-}
+fun resolveReplyTargetId(message: ChatMessage): Long = message.quote?.messageId ?: message.id

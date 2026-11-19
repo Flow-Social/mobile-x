@@ -16,6 +16,7 @@ import me.floow.database.dbo.DirectChatConversationEntity
 import me.floow.database.dbo.DirectChatMessageEntity
 import me.floow.database.dbo.DirectChatOutboxCommandEntity
 import me.floow.database.dbo.DirectChatReadStateEntity
+import me.floow.database.dbo.DirectChatProgressEntity
 import me.floow.database.dbo.FeedStackSnapshotEntity
 import me.floow.database.dbo.FeedSyncCommandEntity
 import me.floow.database.dbo.PendingPostMutationEntity
@@ -36,9 +37,10 @@ import me.floow.database.dbo.RepliesInboxNotificationEntity
         DirectChatMessageEntity::class,
         DirectChatOutboxCommandEntity::class,
         DirectChatReadStateEntity::class,
+        DirectChatProgressEntity::class,
         PendingPostMutationEntity::class
     ],
-    version = 36,
+    version = 37,
     exportSchema = true
 )
 @ConstructedBy(AppDatabaseConstructor::class)

@@ -67,37 +67,10 @@ internal data class ActiveAnchorRestoreRequest(
 	val initialOffsetPx: Int
 )
 
-internal data class AnchorControllerState(
-	val activeRequest: ActiveAnchorRestoreRequest? = null,
-	val phase: AnchorRestorePhase = AnchorRestorePhase.Idle,
-	val startedAtMs: Long = 0L,
-	val lastLoadTriggerKey: Long? = null,
-	val lastObservedOldestMessageId: Long? = null,
-	val lastProgressAtMs: Long = 0L,
-	val noProgressPasses: Int = 0,
-	val lastHandledRequestToken: Long = 0L,
-	val lastHandledMessageId: Long? = null,
-	val settleStableFrames: Int = 0
-)
-
-internal enum class AnchorRestorePhase {
-	Idle,
-	WaitingForTarget,
-	Jumping,
-	Settling,
-	TimedOut
-}
-
-internal fun logAnchorRestore(message: String) {
-	message.let { }
-}
-
 internal fun buildTimelineItems(
 	datedMessages: List<DatedChatMessages>,
 	isReverseLayout: Boolean,
-	unreadBoundaryMessageId: Long?
 ): List<ChatTimelineItem> {
-	unreadBoundaryMessageId?.let { }
 
 	val items = mutableListOf<ChatTimelineItem>()
 	val groups = if (isReverseLayout) datedMessages.asReversed() else datedMessages
@@ -344,10 +317,8 @@ internal fun resolveViewportTarget(
 
 internal fun resolveViewportAnchorMessage(
 	lazyListState: LazyListState,
-	isReverseLayout: Boolean,
 	messageIdByKey: Map<Any, Long>? = null
 ): ViewportAnchorMessage {
-	isReverseLayout.let { }
 	val layoutInfo = lazyListState.layoutInfo
 	val anchorItem = layoutInfo.visibleItemsInfo
 		.mapNotNull { item ->

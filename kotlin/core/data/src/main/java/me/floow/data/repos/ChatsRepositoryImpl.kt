@@ -493,7 +493,7 @@ class ChatsRepositoryImpl(
 					beforeId = beforeId
 				)
 				if (cached.items.isNotEmpty()) {
-					GetDataResponse.Success(cached)
+					GetDataResponse.Success(cached.copy(isCached = true))
 				} else {
 					GetDataResponse.Error(error = GetDataError.Other)
 				}
@@ -534,6 +534,7 @@ class ChatsRepositoryImpl(
 						anchorMessageId = response.anchorId,
 						anchorIndex = resolvedAnchorIndex,
 						hasOlderMessages = response.hasOlder,
+						hasNewerMessages = response.hasNewer,
 						newerCachedCount = if (resolvedAnchorIndex in items.indices) {
 							items.size - resolvedAnchorIndex - 1
 						} else {
@@ -545,8 +546,8 @@ class ChatsRepositoryImpl(
 				)
 			}
 
-			ChatsGetMessagesAroundResponse.NotFound,
-			ChatsGetMessagesAroundResponse.Error -> {
+            ChatsGetMessagesAroundResponse.NotFound -> GetDataResponse.Error(GetDataError.NoData)
+            ChatsGetMessagesAroundResponse.Error -> {
 				logger.d("ChatsRepositoryImpl.getMessagesAround", "Failure response")
 				GetDataResponse.Error(error = GetDataError.Other)
 			}
@@ -577,7 +578,13 @@ class ChatsRepositoryImpl(
 		}
 	}
 
-	override suspend fun refreshLatestMessagesWindow(
+    override suspend fun getVerifiedWindow(conversationId: Long, oldest: Long, newest: Long): List<DirectChatMessage> =
+        localStore.getVerifiedWindow(conversationId, oldest, newest)
+
+    override suspend fun getCachedMessageAnchor(conversationId: Long, messageId: Long): DirectChatAnchoredMessagesWindow? =
+        localStore.getAnchoredMessagesWindow(conversationId, messageId, olderLimit = 0, newerLimit = 0)
+
+    override suspend fun refreshLatestMessagesWindow(
 		conversationId: Long,
 		limit: Int
 	): GetDataResponse<DirectChatMessagesPage> {
@@ -909,6 +916,14 @@ class ChatsRepositoryImpl(
 		}
 	}
 
+    private val pinWrites = Mutex()
+    private val pinRevision = mutableMapOf<Long, Long>()
+
+    private suspend fun applyPinUpdate(message: DirectChatMessage) = pinWrites.withLock {
+        localStore.upsertMessage(message)
+        pinRevision[message.conversationId] = (pinRevision[message.conversationId] ?: 0L) + 1
+    }
+
 	override suspend fun getPinnedMessages(
 		conversationId: Long,
 		limit: Int
@@ -916,11 +931,16 @@ class ChatsRepositoryImpl(
 		if (conversationId <= 0L) {
 			return GetDataResponse.Error(error = GetDataError.Other)
 		}
-		return when (val response = chatsApi.getPinnedMessages(conversationId = conversationId, limit = limit)) {
+        val startedAt = pinWrites.withLock { pinRevision[conversationId] ?: 0L }
+        return when (val response = chatsApi.getPinnedMessages(conversationId = conversationId, limit = limit)) {
 			is ChatsGetPinnedMessagesResponse.Success -> {
 				val messages = response.items.map(ChatMessageItem::toDomain)
-				localStore.upsertMessages(conversationId = conversationId, items = messages)
-				GetDataResponse.Success(messages)
+                pinWrites.withLock {
+                    if (startedAt == (pinRevision[conversationId] ?: 0L)) {
+                        localStore.replacePinnedMessages(conversationId, messages)
+                    }
+                }
+                GetDataResponse.Success(messages)
 			}
 
 			ChatsGetPinnedMessagesResponse.NotFound,
@@ -952,13 +972,13 @@ class ChatsRepositoryImpl(
 			when (val response = chatsApi.pinMessage(conversationId = conversationId, messageId = messageId)) {
 				is ChatsPinMessageResponse.Success -> {
 					val message = response.message.toDomain()
-					localStore.upsertMessage(message)
+					applyPinUpdate(message)
 					GetDataResponse.Success(message)
 				}
 
-				ChatsPinMessageResponse.NotFound,
-				ChatsPinMessageResponse.Conflict,
-				ChatsPinMessageResponse.Error -> {
+                ChatsPinMessageResponse.Conflict -> GetDataResponse.Error(GetDataError.LimitExceeded)
+                ChatsPinMessageResponse.NotFound,
+                ChatsPinMessageResponse.Error -> {
 					logger.d("ChatsRepositoryImpl.setMessagePinned", "Failure response pinned=true")
 					GetDataResponse.Error(error = GetDataError.Other)
 				}
@@ -967,7 +987,7 @@ class ChatsRepositoryImpl(
 			when (val response = chatsApi.unpinMessage(conversationId = conversationId, messageId = messageId)) {
 				is ChatsUnpinMessageResponse.Success -> {
 					val message = response.message.toDomain()
-					localStore.upsertMessage(message)
+					applyPinUpdate(message)
 					GetDataResponse.Success(message)
 				}
 
@@ -1058,8 +1078,8 @@ class ChatsRepositoryImpl(
 				GetDataResponse.Success(readState)
 			}
 
-			ChatsMarkReadUpToResponse.NotFound,
-			ChatsMarkReadUpToResponse.Error -> {
+            ChatsMarkReadUpToResponse.NotFound -> GetDataResponse.Error(GetDataError.NoData)
+            ChatsMarkReadUpToResponse.Error -> {
 				logger.d("ChatsRepositoryImpl.markReadUpTo", "Failure response")
 				GetDataResponse.Error(error = GetDataError.Other)
 			}
@@ -1278,13 +1298,11 @@ class ChatsRepositoryImpl(
 				maxMessageId = event.maxMessageId,
 				readStateVersion = event.readStateVersion
 			).also {
-				localStore.setMessagePinned(
-					conversationId = event.conversationId,
-					messageId = event.pinnedMessageId,
-					isPinned = event.isPinned,
-					pinnedAt = event.pinnedAt,
-					pinnedByUserId = event.pinnedByUserId
-				)
+                applyPinUpdate(it.message.copy(
+                    isPinned = event.isPinned,
+                    pinnedAt = event.pinnedAt,
+                    pinnedByUserId = event.pinnedByUserId,
+                ))
 				applyReadState(event)
 			}
 
@@ -1346,6 +1364,8 @@ private fun ChatConversationItem.toDomain(): DirectChatConversation {
 		lastMessage = lastMessage?.toDomain(),
 		unreadCount = unreadCount,
 		lastReadMessageId = lastReadMessageId,
+		firstUnreadId = firstUnreadId,
+		readStateVersion = readStateVersion,
 		peerLastReadMessageId = peerLastReadMessageId,
 		isPinned = isPinned,
 		pinnedAt = pinnedAt,

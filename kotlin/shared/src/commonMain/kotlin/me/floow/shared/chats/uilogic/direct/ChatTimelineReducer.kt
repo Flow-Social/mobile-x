@@ -314,19 +314,20 @@ class ChatTimelineReducer {
 		if (current !is DirectChatScreenState.HasData || loadedState !is DirectChatScreenState.HasData) {
 			return loadedState
 		}
+        val keepCurrentPlacement = !current.keepAnchorRequest &&
+            loadedState.anchorRequestMessageId != null &&
+            loadedState.anchorRequestMessageId == current.anchorRequestMessageId
 		return loadedState.copy(
 			messages = current.messages
 				.filter(::isLocalOutgoingPending)
 				.fold(loadedState.messages) { messages, pending -> upsertMessage(messages, pending) },
 			pinnedMessages = loadedState.pinnedMessages.ifEmpty { current.pinnedMessages },
 			input = current.input,
-			currentReplyMessageId = current.currentReplyMessageId,
+			replyDraft = current.replyDraft,
 			editingMessageId = current.editingMessageId,
-			highlightedMessageId = current.highlightedMessageId ?: loadedState.highlightedMessageId,
-			anchorRequestMessageId = current.anchorRequestMessageId,
-			anchorRequestOffsetPx = current.anchorRequestOffsetPx,
-			anchorRequestToken = current.anchorRequestToken,
-			keepAnchorRequest = current.keepAnchorRequest,
+            highlightedMessageId = loadedState.highlightedMessageId,
+            keepAnchorRequest = loadedState.keepAnchorRequest && !keepCurrentPlacement,
+            anchorRequestToken = if (keepCurrentPlacement) current.anchorRequestToken else loadedState.anchorRequestToken,
 			scrollToBottomRequestToken = current.scrollToBottomRequestToken,
 			scrollToBottomBadgeCount = current.scrollToBottomBadgeCount,
 			typingUserNames = current.typingUserNames,

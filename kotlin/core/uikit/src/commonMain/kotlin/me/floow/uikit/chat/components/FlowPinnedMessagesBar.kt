@@ -57,12 +57,8 @@ fun FlowPinnedMessagesBar(
 ) {
 	if (pinnedMessages.isEmpty()) return
 
-	var currentIndex by remember(pinnedMessages) { mutableStateOf(0) }
-	val safeIndex = if (pinnedMessages.isNotEmpty()) {
-		(currentIndex % pinnedMessages.size + pinnedMessages.size) % pinnedMessages.size
-	} else {
-		0
-	}
+    var selectedId by remember { mutableStateOf<Long?>(null) }
+    val safeIndex = pinnedMessages.indexOfFirst { it.id == selectedId }.coerceAtLeast(0)
 	val currentMessage = pinnedMessages[safeIndex]
 
 	Column(
@@ -102,7 +98,7 @@ fun FlowPinnedMessagesBar(
 					.clickable {
 						onMessageClick(currentMessage.id.toString())
 						if (pinnedMessages.size > 1) {
-							currentIndex = (safeIndex + 1) % pinnedMessages.size
+							selectedId = pinnedMessages[(safeIndex + 1) % pinnedMessages.size].id
 						}
 					},
 				label = "PinnedMessageSlide",

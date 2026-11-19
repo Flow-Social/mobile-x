@@ -114,6 +114,8 @@ interface ChatScreenUiState {
 		val peerLastReadMessageId: Long = 0L,
 		val showUnreadIndicators: Boolean = true,
 		val canLoadMore: Boolean = false,
+        val hasNewerHistory: Boolean = false,
+        val provisionalHistory: Boolean = false,
 		val isLoadingMore: Boolean = false,
 		val selectionState: ChatSelectionState = ChatSelectionState()
 	) : ChatScreenUiState

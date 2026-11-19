@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import me.floow.uikit.chat.common.ElevatedMessageData
 import me.floow.uikit.chat.components.ChatAlbumBubble
+import me.floow.uikit.chat.components.ReplyPill
 import me.floow.uikit.chat.components.ChatMessageTimestamp
 import me.floow.uikit.chat.components.ChatTailVector
 import me.floow.uikit.chat.components.chatMessageTimestampPadding
@@ -150,10 +151,10 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 	val showAuthorHeader = layoutState?.showAuthorHeader ?: false
 	val showAvatar = layoutState?.showAvatar ?: false
 
-	val shouldShowUnreadBoundaryBeforeMessage = !isReverseLayout &&
-		unreadBoundaryMessageId == message.id
-	val shouldShowUnreadBoundaryAfterMessage = isReverseLayout &&
-		unreadBoundaryMessageId == message.id
+    val isUnreadBoundary = unreadBoundaryMessageId != null && (unreadBoundaryMessageId == message.id ||
+        (message as? ImageMessage)?.images?.any { it.id == unreadBoundaryMessageId } == true)
+    val shouldShowUnreadBoundaryBeforeMessage = !isReverseLayout && isUnreadBoundary
+    val shouldShowUnreadBoundaryAfterMessage = isReverseLayout && isUnreadBoundary
 
 	val isPostPreview = message is PostPreviewMessage
 	val isVideoCircle = message is VideoCircleOutMessage ||
@@ -329,7 +330,25 @@ internal fun LazyItemScope.ChatMessageItemWrapper(
 			)
 		}
 
-		HighlightedMessageRow(
+
+        val mediaQuote = message.quote
+        if ((isImage || isVoice || isVideoCircle || isPostPreview) && mediaQuote != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                horizontalArrangement = if (isOut) Arrangement.End else Arrangement.Start,
+            ) {
+                ReplyPill(
+                    replyText = mediaQuote.preview.ifBlank { "Сообщение недоступно" },
+                    isDark = isDark,
+                    isOut = isOut,
+                    onClick = { onReplyClick(message) },
+                    modifier = Modifier.widthIn(max = 263.dp),
+                    enabled = mediaQuote.isAvailable && !isSelectionMode,
+                )
+            }
+        }
+
+        HighlightedMessageRow(
 			highlighted = isRowHighlighted,
 			selected = isSelected
 		) {

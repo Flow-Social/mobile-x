@@ -72,7 +72,6 @@ internal fun SharedDirectChatScreen(
 	activeContextMenuMessageId: Long? = null,
 	contextMenuActions: List<ChatContextMenuAction>,
 	resolveContextMenuActions: (Long) -> List<ChatContextMenuAction>,
-	jumpRequest: SharedJumpRequest?,
 	onBackClick: () -> Unit,
 	onHeaderClick: (() -> Unit)?,
 	onInputChange: (String) -> Unit,
@@ -169,10 +168,9 @@ internal fun SharedDirectChatScreen(
 		)
 	}
 	val config = remember(header) { sharedDirectChatConfig(header) }
-	val uiState = remember(state, selectionState, jumpRequest) {
+	val uiState = remember(state, selectionState) {
 		state.toSharedChatUiState(
 			selectionState = selectionState,
-			jumpRequest = jumpRequest,
 		)
 	}
 	val density = LocalDensity.current

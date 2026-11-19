@@ -91,7 +91,8 @@ class DirectChatsLocalStoreImpl(
 		val current = dao.getReadState(item.id)
 		val incomingLastReadMessageId = item.lastReadMessageId.coerceAtLeast(0L)
 		val currentLastReadMessageId = current?.lastReadMessageId?.coerceAtLeast(0L) ?: 0L
-		val shouldKeepLocalRead = currentLastReadMessageId > incomingLastReadMessageId
+		val shouldKeepLocalRead = currentLastReadMessageId > incomingLastReadMessageId ||
+            (current?.readStateVersion ?: 0L) > item.readStateVersion
 		return DirectChatReadStateEntity(
 			conversationId = item.id,
 			lastReadMessageId = if (shouldKeepLocalRead) currentLastReadMessageId else incomingLastReadMessageId,
@@ -100,9 +101,9 @@ class DirectChatsLocalStoreImpl(
 			} else {
 				item.unreadCount.coerceAtLeast(0)
 			},
-			firstUnreadId = if (shouldKeepLocalRead) current?.firstUnreadId else null,
+			firstUnreadId = if (shouldKeepLocalRead) current?.firstUnreadId else item.firstUnreadId,
 			maxMessageId = maxOf(current?.maxMessageId ?: 0L, item.lastMessage?.id ?: 0L),
-			readStateVersion = current?.readStateVersion ?: 0L,
+			readStateVersion = maxOf(current?.readStateVersion ?: 0L, item.readStateVersion),
 			updatedAt = now()
 		)
 	}
@@ -238,6 +239,9 @@ class DirectChatsLocalStoreImpl(
 			peerLastReadMessageId = dao.getConversationById(conversationId)?.peerLastReadMessageId
 		)
 	}
+
+    override suspend fun getVerifiedWindow(conversationId: Long, oldest: Long, newest: Long): List<DirectChatMessage> =
+        dao.getVerifiedWindow(conversationId, oldest, newest).map { it.toDomain() }
 
 	override suspend fun getAnchoredMessagesWindow(
 		conversationId: Long,
@@ -853,7 +857,14 @@ class DirectChatsLocalStoreImpl(
 	}
 
 
-	override suspend fun getPinnedMessages(
+    override suspend fun replacePinnedMessages(conversationId: Long, items: List<DirectChatMessage>) {
+        database.withTransaction {
+            dao.clearPinsAbsentFrom(conversationId, items.map { it.id }.ifEmpty { listOf(0L) })
+            items.forEach { upsertMergedMessage(it.toEntity()) }
+        }
+    }
+
+    override suspend fun getPinnedMessages(
 		conversationId: Long,
 		limit: Int
 	): List<DirectChatMessage> {
@@ -928,6 +939,7 @@ class DirectChatsLocalStoreImpl(
 		if (conversationId <= 0L || validIds.isEmpty()) return
 		database.withTransaction {
 			dao.deleteMessagesByIds(conversationId = conversationId, messageIds = validIds)
+            dao.clearDeletedReplyPreviews(conversationId, validIds)
 			rebuildConversationLastMessage(conversationId = conversationId)
 		}
 	}

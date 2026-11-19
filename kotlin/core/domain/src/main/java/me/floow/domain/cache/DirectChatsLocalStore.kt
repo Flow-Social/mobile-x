@@ -45,6 +45,8 @@ interface DirectChatsLocalStore {
 		beforeId: Long?
 	): DirectChatMessagesPage
 
+    suspend fun getVerifiedWindow(conversationId: Long, oldest: Long, newest: Long): List<DirectChatMessage> = emptyList()
+
 	suspend fun getAnchoredMessagesWindow(
 		conversationId: Long,
 		anchorMessageId: Long,
@@ -124,7 +126,11 @@ interface DirectChatsLocalStore {
 		clientMessageId: String
 	)
 
-	suspend fun getPinnedMessages(
+    suspend fun replacePinnedMessages(conversationId: Long, items: List<DirectChatMessage>) {
+        upsertMessages(conversationId, items)
+    }
+
+    suspend fun getPinnedMessages(
 		conversationId: Long,
 		limit: Int
 	): List<DirectChatMessage>

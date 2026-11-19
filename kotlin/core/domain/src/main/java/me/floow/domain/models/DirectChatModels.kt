@@ -127,7 +127,9 @@ data class DirectChatConversation(
 	val createdAt: Long,
 	val updatedAt: Long,
 	val isPinned: Boolean = false,
-	val pinnedAt: Long? = null
+	val pinnedAt: Long? = null,
+	val firstUnreadId: Long? = null,
+	val readStateVersion: Long = 0L,
 )
 
 data class DirectChatConversationsPage(
@@ -139,7 +141,8 @@ data class DirectChatConversationsPage(
 data class DirectChatMessagesPage(
 	val items: List<DirectChatMessage>,
 	val nextBeforeId: Long?,
-	val peerLastReadMessageId: Long?
+	val peerLastReadMessageId: Long?,
+	val isCached: Boolean = false,
 )
 
 data class DirectChatInitialPage(
@@ -155,6 +158,7 @@ data class DirectChatAnchoredMessagesWindow(
 	val anchorIndex: Int,
 	val hasOlderMessages: Boolean,
 	val newerCachedCount: Int,
+	val hasNewerMessages: Boolean = false,
 	val latestCachedMessageId: Long,
 	val peerLastReadMessageId: Long?
 )

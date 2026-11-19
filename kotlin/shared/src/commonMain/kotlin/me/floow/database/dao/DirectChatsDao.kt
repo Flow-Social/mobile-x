@@ -9,9 +9,53 @@ import me.floow.database.dbo.DirectChatConversationEntity
 import me.floow.database.dbo.DirectChatMessageEntity
 import me.floow.database.dbo.DirectChatOutboxCommandEntity
 import me.floow.database.dbo.DirectChatReadStateEntity
+import me.floow.database.dbo.DirectChatProgressEntity
 
 @Dao
 interface DirectChatsDao {
+    @Query("SELECT * FROM direct_chat_progress WHERE account_id = :accountId AND conversation_id = :conversationId")
+    suspend fun getProgress(accountId: String, conversationId: Long): DirectChatProgressEntity?
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertProgress(row: DirectChatProgressEntity)
+
+    @Query("""
+        UPDATE direct_chat_progress
+        SET anchor_message_id = :messageId, anchor_offset_px = :offset, bottom_pinned = :bottom,
+            oldest_cached_id = :oldest, newest_cached_id = :newest, cache_has_older = :hasOlder, cache_has_newer = :hasNewer
+        WHERE account_id = :accountId AND conversation_id = :conversationId
+    """)
+    suspend fun saveViewport(
+        accountId: String, conversationId: Long, messageId: Long?, offset: Int, bottom: Boolean,
+        oldest: Long?, newest: Long?, hasOlder: Boolean, hasNewer: Boolean,
+    )
+
+    @Query("""
+        SELECT * FROM direct_chat_messages
+        WHERE conversation_id = :conversationId AND id BETWEEN :oldest AND :newest
+        ORDER BY id ASC
+    """)
+    suspend fun getVerifiedWindow(conversationId: Long, oldest: Long, newest: Long): List<DirectChatMessageEntity>
+
+    @Query("""
+        UPDATE direct_chat_progress SET pending_read = MAX(pending_read, :messageId)
+        WHERE account_id = :accountId AND conversation_id = :conversationId
+    """)
+    suspend fun enqueueRead(accountId: String, conversationId: Long, messageId: Long)
+
+    @Query("""
+        UPDATE direct_chat_progress SET pending_read = 0
+        WHERE account_id = :accountId AND conversation_id = :conversationId AND pending_read <= :messageId
+    """)
+    suspend fun acknowledgeRead(accountId: String, conversationId: Long, messageId: Long)
+
+    @Query("""
+        SELECT * FROM direct_chat_progress WHERE account_id = :accountId AND pending_read > 0
+        ORDER BY conversation_id
+    """)
+    fun observePendingReads(accountId: String): Flow<List<DirectChatProgressEntity>>
+
+
 	@Query(
 		"""
 		SELECT *
@@ -363,6 +407,13 @@ interface DirectChatsDao {
 		limit: Int
 	): List<DirectChatMessageEntity>
 
+    @Query("""
+        UPDATE direct_chat_messages
+        SET is_pinned = 0, pinned_at = NULL, pinned_by_user_id = NULL
+        WHERE conversation_id = :conversationId AND is_pinned = 1 AND id NOT IN (:ids)
+    """)
+    suspend fun clearPinsAbsentFrom(conversationId: Long, ids: List<Long>)
+
 	@Query(
 		"""
 		SELECT *
@@ -611,6 +662,12 @@ interface DirectChatsDao {
 		conversationId: Long,
 		messageIds: List<Long>
 	)
+
+    @Query("""
+        UPDATE direct_chat_messages SET reply_to_message_text = NULL
+        WHERE conversation_id = :conversationId AND reply_to_message_id IN (:ids)
+    """)
+    suspend fun clearDeletedReplyPreviews(conversationId: Long, ids: List<Long>)
 
 	@Query(
 		"""
