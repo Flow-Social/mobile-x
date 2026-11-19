@@ -54,6 +54,7 @@ fun MainTabsScreen(
     onNavigateToReplies: () -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
     onNavigateToBump: (slug: String) -> Unit = {},
+    isTopScreen: Boolean = true,
     modifier: Modifier = Modifier,
     feedStateHolder: SharedFeedStateHolder = koinInject(),
     chatsListStateHolder: ChatsListStateHolder = koinInject(),
@@ -184,6 +185,7 @@ fun MainTabsScreen(
                 ) {
                     ProfileScreen(
                         stateHolder = profileStateHolder,
+                        controlsStatusBar = isProfile && isTopScreen,
                         onAddPostButtonClick = onNavigateToCreatePost,
                         onProfileEditClick = { data ->
                             if (onNavigateToEditProfileWithData != null) {

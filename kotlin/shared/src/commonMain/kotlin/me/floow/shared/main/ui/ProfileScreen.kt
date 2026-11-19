@@ -44,6 +44,7 @@ fun ProfileScreen(
     onOpenPost: (PostScreenModel) -> Unit = {},
     onSettingsClick: () -> Unit = {},
     onBackClick: () -> Unit = {},
+    controlsStatusBar: Boolean = true,
 ) {
     val state by stateHolder.state.collectAsState()
     val scope = rememberCoroutineScope()
@@ -120,6 +121,7 @@ fun ProfileScreen(
                     }
                 },
                 onLoadMorePosts = stateHolder::loadMorePosts,
+                controlsStatusBar = controlsStatusBar,
                 modifier = modifier
             )
         }

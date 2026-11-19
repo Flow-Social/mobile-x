@@ -309,6 +309,7 @@ fun FlowRootNavHost(
 
             composable<MainTabsDestination> {
                 MainTabsScreen(
+                    isTopScreen = !isSubscreenOpen,
                     onNavigateToPost = { postId ->
                         pushOverlay(
                             FlowSubscreen.PostDetail(
@@ -408,11 +409,12 @@ fun FlowRootNavHost(
                     )
 
                 val movableOverlayContent = remember(entry.id) {
-                    movableContentOf { close: () -> Unit ->
+                    movableContentOf { isTopScreen: Boolean, close: () -> Unit ->
                         subscreenStateHolder.SaveableStateProvider(entryKey) {
                             key(entryKey) {
                                 SubscreenContent(
                                     subscreen = entry.screen,
+                                    isTopScreen = isTopScreen,
                                     onClose = close,
                                     pushOverlay = { pushOverlay(it) },
                                     postCacheById = postCacheById,
@@ -437,11 +439,11 @@ fun FlowRootNavHost(
                         animateIn = animateIn,
                         modifier = layerModifier,
                     ) {
-                        movableOverlayContent { popOverlay() }
+                        movableOverlayContent(true) { popOverlay() }
                     }
                 } else {
                     Box(modifier = layerModifier) {
-                        movableOverlayContent {}
+                        movableOverlayContent(false) {}
                     }
                 }
             }
@@ -507,6 +509,7 @@ fun FlowRootNavHost(
 @Composable
 private fun SubscreenContent(
     subscreen: FlowSubscreen,
+    isTopScreen: Boolean,
     onClose: () -> Unit,
     pushOverlay: (FlowSubscreen) -> Unit,
     postCacheById: MutableMap<String, Post>,
@@ -576,6 +579,7 @@ private fun SubscreenContent(
             }
             ProfileScreen(
                 stateHolder = profileStateHolder,
+                controlsStatusBar = isTopScreen,
                 onBackClick = handleBack,
                 onOpenPost = { postModel ->
                     overlayState.show(FlowOverlay.ViewPost(postModel))

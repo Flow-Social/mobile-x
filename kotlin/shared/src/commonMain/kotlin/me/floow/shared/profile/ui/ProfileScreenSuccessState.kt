@@ -91,6 +91,7 @@ fun ProfileScreenSuccessState(
     onDeletePost: (String) -> Unit = {},
     onRetryPendingPost: (String) -> Unit = {},
     onLoadMorePosts: () -> Unit = {},
+    controlsStatusBar: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val heroPrefetchUrls = remember(avatarUri, backgroundUri) {
@@ -208,6 +209,7 @@ fun ProfileScreenSuccessState(
     ProfilePager(
         postsGridState = postsGridState,
         hasPostsGrid = posts.isNotEmpty() && !arePostsError,
+        controlsStatusBar = controlsStatusBar,
         modifier = modifier,
         header = { heroHeight ->
             val heroBoundsInWindow = remember { mutableStateOf<Rect?>(null) }

@@ -30,6 +30,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -41,6 +42,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -57,6 +59,7 @@ import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import me.floow.uikit.components.shell.MainShellDefaults
+import me.floow.uikit.util.SetStatusBarStyle
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -72,6 +75,7 @@ private val ProfilePageSnap = tween<Float>(
 internal fun ProfilePager(
     postsGridState: LazyGridState,
     hasPostsGrid: Boolean,
+    controlsStatusBar: Boolean,
     modifier: Modifier = Modifier,
     header: @Composable (height: Dp) -> Unit,
     posts: @Composable (scrollEnabled: Boolean) -> Unit,
@@ -173,6 +177,18 @@ internal fun ProfilePager(
         val radius by animateDpAsState(if (postsOpen) 0.dp else 24.dp, label = "profilePostsRadius")
         val handleAlpha by animateFloatAsState(if (postsOpen) 0f else 1f, label = "profilePostsHandle")
         val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+        val postsColor = MaterialTheme.colorScheme.surface
+        if (controlsStatusBar) {
+            val statusBarMidpointPx = with(LocalDensity.current) { statusBarHeight.toPx() / 2f }
+            val darkIcons by remember(state, travelPx, statusBarMidpointPx, postsColor) {
+                derivedStateOf {
+                    // The hero image is darkened; use the surface contrast once posts cover the icons.
+                    travelPx + state.requireOffset() <= statusBarMidpointPx &&
+                        postsColor.luminance() > 0.179f
+                }
+            }
+            SetStatusBarStyle(color = Color.Transparent, darkIcons = darkIcons)
+        }
 
         Box(
             Modifier.fillMaxSize()
@@ -194,7 +210,7 @@ internal fun ProfilePager(
                     .fillMaxWidth()
                     .height(viewportHeight)
                     .background(
-                        MaterialTheme.colorScheme.surface,
+                        postsColor,
                         RoundedCornerShape(topStart = radius, topEnd = radius),
                     )
                     .nestedScroll(gridHandoff),
