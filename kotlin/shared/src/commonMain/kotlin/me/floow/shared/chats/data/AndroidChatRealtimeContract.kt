@@ -45,6 +45,7 @@ private fun DirectChatRealtimeEvent.toSharedEvent(selfUserId: String?): ChatReal
 	is DirectChatRealtimeEvent.MessageUpdated -> ChatRealtimeEvent.MessageUpserted(
 		message = message.toRealtimeItemModel(selfUserId),
 		peerLastReadMessageId = null,
+        isNew = false,
 	)
 	is DirectChatRealtimeEvent.MessagePinnedUpdated -> ChatRealtimeEvent.MessagePinned(
 		messageId = message.id,
@@ -54,7 +55,7 @@ private fun DirectChatRealtimeEvent.toSharedEvent(selfUserId: String?): ChatReal
 	is DirectChatRealtimeEvent.ReadUpToUpdated -> {
 		val updatedMessageId = actorLastReadMessageId
 		if (actorUserId == selfUserId || updatedMessageId == null) {
-			ChatRealtimeEvent.ResyncRequired
+			ChatRealtimeEvent.OwnReadUpdated
 		} else {
 			ChatRealtimeEvent.PeerReadUpdated(updatedMessageId)
 		}

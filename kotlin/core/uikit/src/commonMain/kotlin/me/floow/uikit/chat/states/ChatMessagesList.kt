@@ -24,6 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -138,45 +139,27 @@ internal fun rememberChatMessagesPositioningState(
 		}
 	}
 
-	val incomingUiKeys by remember(timelineItems) {
-		derivedStateOf {
-			timelineItems
-				.asSequence()
-				.filterIsInstance<ChatTimelineItem.MessageRow>()
-				.flatMap { item ->
-					val message = item.message
-					if (message is PrimaryInMessage || message is ReplyInMessage) {
-						sequenceOf(message.uiKey, message.id)
-					} else {
-						emptySequence()
-					}
-				}
-				.toSet()
-		}
-	}
+    val incomingIdsByKey = remember(timelineItems) {
+        buildMap {
+            for (row in timelineItems.filterIsInstance<ChatTimelineItem.MessageRow>()) {
+                val message = row.message
+                val ids = when (message) {
+                    is PrimaryInMessage, is ReplyInMessage -> listOf(message.id)
+                    is me.floow.uikit.chat.model.ImageMessage -> if (message.isOutgoing) emptyList() else message.images.map { it.id }.ifEmpty { listOf(message.id) }
+                    is me.floow.uikit.chat.model.VoiceMessage -> if (message.isOutgoing) emptyList() else listOf(message.id)
+                    is me.floow.uikit.chat.model.VideoCircleOutMessage -> if (message.isOutgoing) emptyList() else listOf(message.id)
+                    else -> emptyList()
+                }.filter { it > 0L }
+                if (ids.isNotEmpty()) put(message.uiKey, ids)
+            }
+        }
+    }
 
-	val activeAnchorRestoreRequest by remember(anchorRequest, highlightRequest) {
-		derivedStateOf {
-			highlightRequest
-				?.takeIf { it.keepAnchored }
-				?.let { request ->
-					ActiveAnchorRestoreRequest(
-						messageId = request.messageId,
-						requestToken = request.requestToken,
-						initialOffsetPx = 0
-					)
-				}
-				?: anchorRequest
-					?.takeIf { it.keepAnchored }
-					?.let { request ->
-						ActiveAnchorRestoreRequest(
-							messageId = request.messageId,
-							requestToken = request.requestToken,
-							initialOffsetPx = request.initialOffsetPx
-						)
-					}
-		}
-	}
+    val activeAnchorRestoreRequest = anchorRequest?.takeIf { it.keepAnchored }?.let {
+        ActiveAnchorRestoreRequest(it.messageId, it.requestToken, it.initialOffsetPx)
+    } ?: highlightRequest?.takeIf { it.keepAnchored }?.let {
+        ActiveAnchorRestoreRequest(it.messageId, it.requestToken, 0)
+    }
 
 	val highlightedItemIndex by remember(highlightRequest?.messageId, timelineItems) {
 		derivedStateOf {
@@ -202,7 +185,6 @@ internal fun rememberChatMessagesPositioningState(
 	val keyboardController = LocalSoftwareKeyboardController.current
 	val rowBoundsRegistry = remember(state.chatInterlocutorId) { RowBoundsRegistry(maxEntries = 500) }
 
-	var hasUserStartedScroll by remember(stableSessionKey) { mutableStateOf(false) }
 	var isProgrammaticScrollInProgress by remember(stableSessionKey) { mutableStateOf(false) }
 	var followBottom by remember(stableSessionKey) {
 		mutableStateOf(
@@ -213,7 +195,7 @@ internal fun rememberChatMessagesPositioningState(
 		)
 	}
 	var suppressAutoFollowAfterRestore by remember(stableSessionKey) { mutableStateOf(false) }
-	var anchorController by remember(stableSessionKey) { mutableStateOf(AnchorControllerState()) }
+    var handledAnchor by remember(stableSessionKey) { mutableStateOf<ActiveAnchorRestoreRequest?>(null) }
 	var lastHandledHighlightRequestToken by rememberSaveable(stableSessionKey) { mutableStateOf(0L) }
 	var lastHandledHighlightMessageId by rememberSaveable(stableSessionKey) { mutableStateOf<Long?>(null) }
 	var lastHandledScrollRequestToken by rememberSaveable(stableSessionKey) { mutableStateOf(0L) }
@@ -229,51 +211,6 @@ internal fun rememberChatMessagesPositioningState(
 		)
 	}
 
-	fun beginAnchorRestore(request: ActiveAnchorRestoreRequest) {
-		val now = currentChatTimeMillis()
-		logAnchorRestore(
-			"begin requestToken=${request.requestToken} message=${request.messageId} offset=${request.initialOffsetPx}"
-		)
-		followBottom = false
-		suppressAutoFollowAfterRestore = true
-		hasUserStartedScroll = false
-		anchorController = anchorController.copy(
-			activeRequest = request,
-			phase = AnchorRestorePhase.WaitingForTarget,
-			startedAtMs = now,
-			lastLoadTriggerKey = null,
-			lastProgressAtMs = now,
-			noProgressPasses = 0
-		)
-	}
-
-	fun markAnchorRestoreTimedOut(request: ActiveAnchorRestoreRequest) {
-		logAnchorRestore(
-			"timeout requestToken=${request.requestToken} message=${request.messageId} phase=${anchorController.phase}"
-		)
-		anchorController = anchorController.copy(
-			activeRequest = request,
-			phase = AnchorRestorePhase.TimedOut,
-			startedAtMs = 0L,
-			lastLoadTriggerKey = null,
-			lastProgressAtMs = 0L,
-			noProgressPasses = 0,
-			lastHandledRequestToken = request.requestToken,
-			lastHandledMessageId = request.messageId
-		)
-		onAnchorRestoreTimedOut(request.messageId)
-		anchorController = anchorController.copy(
-			activeRequest = request,
-			phase = AnchorRestorePhase.Idle,
-			startedAtMs = 0L,
-			lastLoadTriggerKey = null,
-			lastProgressAtMs = 0L,
-			noProgressPasses = 0,
-			lastHandledRequestToken = request.requestToken,
-			lastHandledMessageId = request.messageId
-		)
-	}
-
 	val keyboardDismissOnUserScrollConnection = remember(
 		focusManager,
 		keyboardController,
@@ -284,21 +221,12 @@ internal fun rememberChatMessagesPositioningState(
 		object : NestedScrollConnection {
 			override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
 				if (source == NestedScrollSource.UserInput && available.y != 0f) {
-					if (!hasUserStartedScroll && !isProgrammaticScrollInProgress) {
-						hasUserStartedScroll = true
-						onUserStartedScroll()
-					}
-					followBottom = false
-					activeAnchorRestoreRequest?.messageId?.let { messageId ->
-						if (anchorController.phase != AnchorRestorePhase.Idle) {
-							anchorController = anchorController.copy(
-								phase = AnchorRestorePhase.TimedOut,
-								startedAtMs = 0L,
-								lastLoadTriggerKey = null
-							)
-							onAnchorRestoreTimedOut(messageId)
-						}
-					}
+                    if (!isProgrammaticScrollInProgress) onUserStartedScroll()
+                    followBottom = false
+                    activeAnchorRestoreRequest?.let { request ->
+                        handledAnchor = request
+                        onAnchorRestoreTimedOut(request.messageId)
+                    }
 					focusManager.clearFocus(force = true)
 					keyboardController?.hide()
 				}
@@ -339,7 +267,6 @@ internal fun rememberChatMessagesPositioningState(
 
 	suspend fun jumpToIndexInternal(
 		targetIndex: Int,
-		targetMessageId: Long?,
 		animate: Boolean,
 		scrollOffset: Int = 0,
 		centerInViewport: Boolean = false,
@@ -418,12 +345,7 @@ internal fun rememberChatMessagesPositioningState(
 			if (alignToViewportStart) {
 				withFrameNanos { }
 				val targetItem = lazyListState.layoutInfo.visibleItemsInfo
-					.firstOrNull { item ->
-						when {
-							targetMessageId != null -> extractMessageIdFromItemKey(item) == targetMessageId
-							else -> item.index == targetIndex
-						}
-					}
+					.firstOrNull { it.index == targetIndex }
 				if (targetItem != null) {
 					val viewportStart = lazyListState.layoutInfo.viewportStartOffset
 					val startDelta = (targetItem.offset - viewportStart - scrollOffset).toFloat()
@@ -469,7 +391,11 @@ internal fun rememberChatMessagesPositioningState(
 		}
 	}
 
-	val latestIncomingUiKeys by rememberUpdatedState(incomingUiKeys)
+	val latestIncomingIds by rememberUpdatedState(incomingIdsByKey)
+    val lifecycleState by androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsState()
+    val latestPlacementSuspended by rememberUpdatedState(
+        suspendInitialPlacement || state.provisionalHistory || activeAnchorRestoreRequest != null
+    )
 	val latestMessageIdByKey by rememberUpdatedState(messageIdByKey)
 
 	var olderMessagesPrefetchWindowSize by remember(stableSessionKey) {
@@ -502,15 +428,7 @@ internal fun rememberChatMessagesPositioningState(
 		}
 	}
 
-	val isAnchorRestoreInProgress by remember(anchorController, activeAnchorRestoreRequest) {
-		derivedStateOf {
-			activeAnchorRestoreRequest != null && anchorController.phase in setOf(
-				AnchorRestorePhase.WaitingForTarget,
-				AnchorRestorePhase.Jumping,
-				AnchorRestorePhase.Settling
-			)
-		}
-	}
+    val isAnchorRestoreInProgress = activeAnchorRestoreRequest?.let { it != handledAnchor } == true
 
 	DisposableEffect(Unit) {
 		onDispose {
@@ -534,7 +452,7 @@ internal fun rememberChatMessagesPositioningState(
 		snapshotFlow {
 			traceChatUiSection("chat.viewportCoordinator.snapshot") {
 				val messageIdByKeySnapshot = latestMessageIdByKey
-				val incomingKeysSnapshot = latestIncomingUiKeys
+				val incomingIds = latestIncomingIds
 				val layoutInfo = lazyListState.layoutInfo
 				val visibleItems = layoutInfo.visibleItemsInfo
 				val firstVisibleIndex = lazyListState.firstVisibleItemIndex
@@ -555,16 +473,15 @@ internal fun rememberChatMessagesPositioningState(
 							),
 						)
 					}
-				val readCandidateId = visibleItems
-					.asSequence()
-					.filter { item ->
-						item.key in incomingKeysSnapshot && item.isVisibleEnoughToBeRead(
-							viewportStart = layoutInfo.viewportStartOffset,
-							viewportEnd = layoutInfo.viewportEndOffset,
-						)
-					}
-					.mapNotNull { item -> messageIdByKeySnapshot[item.key] }
-					.maxOrNull()
+                val readableIncomingIds = if (latestPlacementSuspended || isProgrammaticScrollInProgress ||
+                    lazyListState.isScrollInProgress || !lifecycleState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)
+                ) {
+                    emptySet()
+                } else {
+                    visibleItems.asSequence().filter { item ->
+                        item.isVisibleEnoughToBeRead(layoutInfo.viewportStartOffset, layoutInfo.viewportEndOffset)
+                    }.flatMap { item -> incomingIds[item.key].orEmpty().asSequence() }.toSet()
+                }
 				val atBottom = if (isReverseLayout) {
 					firstVisibleIndex == 0 && firstVisibleOffset <= 32
 				} else {
@@ -573,8 +490,7 @@ internal fun rememberChatMessagesPositioningState(
 				}
 				val viewportAnchor = resolveViewportAnchorMessage(
 					lazyListState = lazyListState,
-					isReverseLayout = isReverseLayout,
-					messageIdByKey = messageIdByKeySnapshot
+                    messageIdByKey = messageIdByKeySnapshot
 				)
 				val firstVisibleDayStartMillis = visibleItems
 					.asSequence()
@@ -594,7 +510,7 @@ internal fun rememberChatMessagesPositioningState(
 					visibleItems = visibleItemSnapshots,
 					viewportAnchorMessageId = viewportAnchor.messageId,
 					viewportAnchorOffsetPx = viewportAnchor.offsetPx,
-					visibleReadCandidateId = readCandidateId,
+					readableIncomingIds = readableIncomingIds,
 					isAtBottom = atBottom,
 					firstVisibleDayStartMillis = firstVisibleDayStartMillis,
 				)
@@ -644,7 +560,8 @@ internal fun rememberChatMessagesPositioningState(
 						firstVisibleOffsetPx = snapshot.viewportAnchorOffsetPx,
 						firstVisibleItemIndex = index,
 						firstVisibleItemScrollOffsetPx = offset,
-						visibleReadCandidateId = snapshot.visibleReadCandidateId,
+						visibleReadCandidateId = snapshot.readableIncomingIds.maxOrNull(),
+                        readableIncomingIds = snapshot.readableIncomingIds,
 						isAtBottom = snapshot.isAtBottom
 					)
 				)
@@ -661,22 +578,6 @@ internal fun rememberChatMessagesPositioningState(
 				suppressAutoFollowAfterRestore = false
 			}
 			scrollToBottomInternal(animate)
-		}
-	}
-
-	LaunchedEffect(activeAnchorRestoreRequest?.requestToken) {
-		val restoreRequest = activeAnchorRestoreRequest
-		if (restoreRequest != null) {
-			beginAnchorRestore(restoreRequest)
-		} else if (anchorController.phase != AnchorRestorePhase.Idle || anchorController.activeRequest != null) {
-			anchorController = anchorController.copy(
-				activeRequest = null,
-				phase = AnchorRestorePhase.Idle,
-				startedAtMs = 0L,
-				lastLoadTriggerKey = null,
-				lastProgressAtMs = 0L,
-				noProgressPasses = 0
-			)
 		}
 	}
 
@@ -702,7 +603,7 @@ internal fun rememberChatMessagesPositioningState(
 		lastTotalMessagesCount = totalMessages
 		if (addedCount <= 0) return@LaunchedEffect
 		val hasPendingJumpTarget = highlightRequest != null && highlightRequest.keepAnchored.not() && highlightedItemIndex == null
-		val shouldAutoFollowBottom = followBottom &&
+		val shouldAutoFollowBottom = !state.hasNewerHistory && followBottom &&
 			!suppressAutoFollowAfterRestore &&
 			!isAnchorRestoreInProgress &&
 			!hasPendingJumpTarget
@@ -714,185 +615,39 @@ internal fun rememberChatMessagesPositioningState(
 		}
 	}
 
-	LaunchedEffect(
-		activeAnchorRestoreRequest?.messageId,
-		activeAnchorRestoreRequest?.requestToken,
-		timelineItems,
-		state.canLoadMore,
-		state.isLoadingMore,
-		oldestLoadedEdgeMessageIds,
-		hasUserStartedScroll,
-		suspendInitialPlacement
-	) {
-		if (suspendInitialPlacement) return@LaunchedEffect
-		val request = activeAnchorRestoreRequest ?: return@LaunchedEffect
-		val shouldHandleAnchor = (
-			request.requestToken > 0L && request.requestToken != anchorController.lastHandledRequestToken
-			) || request.messageId != anchorController.lastHandledMessageId
-		if (!shouldHandleAnchor) return@LaunchedEffect
-		if (hasUserStartedScroll) {
-			logAnchorRestore(
-				"user_interrupted requestToken=${request.requestToken} message=${request.messageId}"
-			)
-			markAnchorRestoreTimedOut(request)
-			return@LaunchedEffect
-		}
-		anchorController = anchorController.copy(
-			activeRequest = request,
-			phase = AnchorRestorePhase.WaitingForTarget
-		)
-		val itemIndex = findTimelineMessageIndex(
-			timelineItems = timelineItems,
-			targetMessageId = request.messageId
-		)
-		if (itemIndex == null) {
-			val now = currentChatTimeMillis()
-			val oldestLoadedKey = oldestLoadedEdgeMessageIds.minOrNull()
-			if (oldestLoadedKey != null && oldestLoadedKey != anchorController.lastObservedOldestMessageId) {
-				anchorController = anchorController.copy(
-					lastObservedOldestMessageId = oldestLoadedKey,
-					lastProgressAtMs = now,
-					lastLoadTriggerKey = null,
-					noProgressPasses = 0
-				)
-			}
-			val noProgressPasses = if (!state.isLoadingMore) {
-				anchorController.noProgressPasses + 1
-			} else {
-				anchorController.noProgressPasses
-			}
-			val didTimeout = anchorController.lastProgressAtMs > 0L &&
-				now - anchorController.lastProgressAtMs >= 8_000L &&
-				(noProgressPasses >= 2 || !state.canLoadMore)
-			when {
-				state.canLoadMore && !state.isLoadingMore && oldestLoadedKey != null && anchorController.lastLoadTriggerKey != oldestLoadedKey -> {
-					logAnchorRestore(
-						"load_more requestToken=${request.requestToken} message=${request.messageId} " +
-							"oldest=$oldestLoadedKey visibleFirst=${lazyListState.firstVisibleItemIndex}"
-					)
-					anchorController = anchorController.copy(
-						lastLoadTriggerKey = oldestLoadedKey,
-						noProgressPasses = noProgressPasses
-					)
-					onLoadMore()
-				}
-				didTimeout || (!state.canLoadMore && !state.isLoadingMore) -> {
-					logAnchorRestore(
-						"target_missing_timeout requestToken=${request.requestToken} message=${request.messageId} " +
-							"canLoadMore=${state.canLoadMore} noProgress=$noProgressPasses oldest=$oldestLoadedKey"
-					)
-					markAnchorRestoreTimedOut(request)
-				}
-				!state.isLoadingMore -> {
-					logAnchorRestore(
-						"waiting_target requestToken=${request.requestToken} message=${request.messageId} " +
-							"noProgress=$noProgressPasses oldest=$oldestLoadedKey"
-					)
-					anchorController = anchorController.copy(noProgressPasses = noProgressPasses)
-				}
-			}
-			return@LaunchedEffect
-		}
-		logAnchorRestore(
-			"target_found requestToken=${request.requestToken} message=${request.messageId} itemIndex=$itemIndex " +
-				"requestedOffset=${request.initialOffsetPx}"
-		)
-		anchorController = anchorController.copy(
-			activeRequest = request,
-			phase = AnchorRestorePhase.Jumping,
-			settleStableFrames = 0
-		)
-		var anchorRestored = false
-		for (attempt in 0 until 6) {
-			val didJump = jumpToIndexInternal(
-				targetIndex = itemIndex,
-				targetMessageId = request.messageId,
-				animate = false,
-				scrollOffset = request.initialOffsetPx,
-				centerInViewport = false,
-				alignToViewportStart = true
-			)
-			logAnchorRestore(
-				"jump_attempt requestToken=${request.requestToken} message=${request.messageId} attempt=${attempt + 1} " +
-					"didJump=$didJump targetIndex=$itemIndex requestedOffset=${request.initialOffsetPx}"
-			)
-			if (!didJump) continue
-			anchorController = anchorController.copy(
-				activeRequest = request,
-				phase = AnchorRestorePhase.Settling
-			)
-			withFrameNanos { }
-			var resolvedAnchor = resolveViewportAnchorMessage(lazyListState, isReverseLayout, messageIdByKey)
-			logAnchorRestore(
-				"after_jump requestToken=${request.requestToken} message=${request.messageId} attempt=${attempt + 1} " +
-					"resolvedMessage=${resolvedAnchor.messageId} resolvedOffset=${resolvedAnchor.offsetPx} " +
-					"firstVisibleIndex=${lazyListState.firstVisibleItemIndex} firstVisibleOffset=${lazyListState.firstVisibleItemScrollOffset}"
-			)
-			if (resolvedAnchor.messageId != request.messageId) {
-				anchorController = anchorController.copy(
-					activeRequest = request,
-					phase = AnchorRestorePhase.Settling,
-					settleStableFrames = 0
-				)
-				continue
-			}
-
-			var remainedStable = true
-			repeat(2) { settleIndex ->
-				withFrameNanos { }
-				resolvedAnchor = resolveViewportAnchorMessage(lazyListState, isReverseLayout, messageIdByKey)
-				logAnchorRestore(
-					"passive_settle requestToken=${request.requestToken} message=${request.messageId} " +
-						"attempt=${attempt + 1} frame=${settleIndex + 1} resolvedMessage=${resolvedAnchor.messageId} " +
-						"resolvedOffset=${resolvedAnchor.offsetPx} firstVisibleIndex=${lazyListState.firstVisibleItemIndex} " +
-						"firstVisibleOffset=${lazyListState.firstVisibleItemScrollOffset}"
-				)
-				if (resolvedAnchor.messageId != request.messageId) {
-					remainedStable = false
-					return@repeat
-				}
-			}
-			if (remainedStable) {
-				anchorController = anchorController.copy(
-					activeRequest = request,
-					phase = AnchorRestorePhase.Settling,
-					settleStableFrames = 2
-				)
-				anchorRestored = true
-				break
-			}
-			anchorController = anchorController.copy(
-				activeRequest = request,
-				phase = AnchorRestorePhase.Settling,
-				settleStableFrames = 0
-			)
-		}
-		if (!anchorRestored) {
-			markAnchorRestoreTimedOut(request)
-		}
-		if (anchorRestored) {
-			val resolvedAnchor = resolveViewportAnchorMessage(lazyListState, isReverseLayout, messageIdByKey)
-			logAnchorRestore(
-				"settled requestToken=${request.requestToken} message=${request.messageId} " +
-					"resolvedOffset=${resolvedAnchor.offsetPx} viewportFirstIndex=${lazyListState.firstVisibleItemIndex} " +
-					"viewportFirstOffset=${lazyListState.firstVisibleItemScrollOffset}"
-			)
-			anchorController = anchorController.copy(
-				activeRequest = request,
-				phase = AnchorRestorePhase.Idle,
-				startedAtMs = 0L,
-				lastLoadTriggerKey = null,
-				lastProgressAtMs = 0L,
-				lastObservedOldestMessageId = oldestLoadedEdgeMessageIds.minOrNull(),
-				noProgressPasses = 0,
-				lastHandledRequestToken = request.requestToken,
-				lastHandledMessageId = request.messageId,
-				settleStableFrames = 0
-			)
-			followBottom = false
-			onAnchorRestoreSettled(request.messageId, resolvedAnchor.offsetPx)
-		}
-	}
+    val anchorIndex = remember(activeAnchorRestoreRequest?.messageId, timelineItems) {
+        findTimelineMessageIndex(timelineItems, activeAnchorRestoreRequest?.messageId)
+    }
+    LaunchedEffect(activeAnchorRestoreRequest, anchorIndex, suspendInitialPlacement) {
+        val request = activeAnchorRestoreRequest ?: return@LaunchedEffect
+        if (suspendInitialPlacement || handledAnchor == request) return@LaunchedEffect
+        followBottom = false
+        suppressAutoFollowAfterRestore = true
+        // The feature loads the target window before asking Compose to place it.
+        val index = anchorIndex
+        if (index == null || !jumpToIndexInternal(
+                targetIndex = index, animate = false,
+                scrollOffset = request.initialOffsetPx, alignToViewportStart = true,
+            )
+        ) {
+            handledAnchor = request
+            onAnchorRestoreTimedOut(request.messageId)
+            return@LaunchedEffect
+        }
+        withFrameNanos { }
+        val layout = lazyListState.layoutInfo
+        val placed = layout.visibleItemsInfo.firstOrNull { it.index == index }
+        handledAnchor = request
+        if (placed != null) {
+            if (highlightRequest?.messageId == request.messageId) {
+                lastHandledHighlightRequestToken = highlightRequest.requestToken
+                lastHandledHighlightMessageId = request.messageId
+            }
+            onAnchorRestoreSettled(request.messageId, placed.offset - layout.viewportStartOffset)
+        } else {
+            onAnchorRestoreTimedOut(request.messageId)
+        }
+    }
 
 	LaunchedEffect(
 		highlightRequest?.messageId,
@@ -904,7 +659,7 @@ internal fun rememberChatMessagesPositioningState(
 	) {
 		if (suspendInitialPlacement) return@LaunchedEffect
 		val request = highlightRequest ?: return@LaunchedEffect
-		if (request.keepAnchored) return@LaunchedEffect
+		if (request.keepAnchored || activeAnchorRestoreRequest != null) return@LaunchedEffect
 		val itemIndex = highlightedItemIndex ?: return@LaunchedEffect
 		val shouldHandleHighlight = (
 			request.requestToken > 0L && request.requestToken != lastHandledHighlightRequestToken
@@ -913,7 +668,6 @@ internal fun rememberChatMessagesPositioningState(
 		followBottom = false
 		val didJump = jumpToIndexInternal(
 			targetIndex = itemIndex,
-			targetMessageId = request.messageId,
 			animate = scrollPolicy.animateJumpToHighlightedMessage,
 			centerInViewport = scrollPolicy.jumpAlignment == ChatJumpAlignment.Center
 		)
@@ -921,7 +675,7 @@ internal fun rememberChatMessagesPositioningState(
 			lastHandledHighlightRequestToken = request.requestToken
 			lastHandledHighlightMessageId = request.messageId
 			withFrameNanos { }
-			val resolvedAnchor = resolveViewportAnchorMessage(lazyListState, isReverseLayout, messageIdByKey)
+			val resolvedAnchor = resolveViewportAnchorMessage(lazyListState, messageIdByKey)
 			onAnchorRestoreSettled(request.messageId, resolvedAnchor.offsetPx)
 		}
 	}
@@ -941,9 +695,9 @@ internal fun rememberChatMessagesPositioningState(
 		scrollToBottomInternal(animate = false)
 	}
 
-	LaunchedEffect(isAtBottom, hasListLayout, isAnchorRestoreInProgress) {
+	LaunchedEffect(isAtBottom, hasListLayout, isAnchorRestoreInProgress, state.hasNewerHistory) {
 		if (!hasListLayout) return@LaunchedEffect
-		if (isAtBottom) {
+		if (isAtBottom && !state.hasNewerHistory) {
 			if (!isAnchorRestoreInProgress) {
 				followBottom = true
 				suppressAutoFollowAfterRestore = false
@@ -981,8 +735,8 @@ internal fun rememberChatMessagesPositioningState(
 			}
 	}
 
-	LaunchedEffect(state.canLoadMore, state.isLoadingMore, isReverseLayout, isAnchorRestoreInProgress, olderMessagesPrefetchWindowSize) {
-		if (!state.canLoadMore || state.isLoadingMore || isAnchorRestoreInProgress) return@LaunchedEffect
+	LaunchedEffect(state.canLoadMore, state.isLoadingMore, isReverseLayout, isAnchorRestoreInProgress, olderMessagesPrefetchWindowSize, state.provisionalHistory) {
+		if (!state.canLoadMore || state.isLoadingMore || isAnchorRestoreInProgress || state.provisionalHistory) return@LaunchedEffect
 		snapshotFlow {
 			val layoutInfo = lazyListState.layoutInfo
 			val totalItems = layoutInfo.totalItemsCount

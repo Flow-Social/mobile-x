@@ -52,7 +52,9 @@ data class ChatConversationItem(
 	val createdAt: Long,
 	val updatedAt: Long,
 	val isPinned: Boolean = false,
-	val pinnedAt: Long? = null
+	val pinnedAt: Long? = null,
+	val firstUnreadId: Long? = null,
+	val readStateVersion: Long = 0L,
 )
 
 data class ChatReadStateItem(

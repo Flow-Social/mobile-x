@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -22,6 +24,7 @@ import me.floow.shared.chats.model.ChatDeliveryState
 import me.floow.shared.chats.model.ChatMessageContent
 import me.floow.shared.chats.model.ChatMessageItemModel
 import me.floow.shared.chats.model.ChatPresenceState
+import me.floow.shared.chats.model.ChatReplyDraft
 import me.floow.shared.chats.model.ChatThreadHeaderModel
 import me.floow.shared.chats.model.ChatThreadSnapshot
 import me.floow.shared.chats.model.ConversationActivityState
@@ -31,7 +34,6 @@ import me.floow.shared.chats.uilogic.direct.coordinator.ChatLoader
 import me.floow.shared.chats.uilogic.direct.coordinator.ChatReadTracker
 import me.floow.shared.chats.uilogic.direct.coordinator.ChatRealtimeCoordinator
 import me.floow.shared.chats.uilogic.direct.coordinator.ChatTypingCoordinator
-import me.floow.shared.chats.uilogic.session.SharedChatSessionCache
 import me.floow.shared.media.outbox.MediaOutboxEngine
 import me.floow.shared.media.outbox.MediaOutboxTask
 import me.floow.uikit.chat.model.ChatViewportSnapshot
@@ -56,8 +58,13 @@ sealed interface DirectChatScreenState {
 		val canLoadMore: Boolean = false,
 		val nextBeforeMessageId: Long? = null,
 		val isLoadingMore: Boolean = false,
+        val hasNewerMessages: Boolean = false,
+        val historyUpperBound: Long? = null,
+        val provisionalHistory: Boolean = false,
+        val firstUnreadMessageId: Long? = null,
+        val unreadBoundaryMessageId: Long? = null,
 		val sending: Boolean = false,
-		val currentReplyMessageId: Long? = null,
+		val replyDraft: ChatReplyDraft? = null,
 		val editingMessageId: Long? = null,
 		val highlightedMessageId: Long? = null,
 		val anchorRequestMessageId: Long? = null,
@@ -87,15 +94,13 @@ class DirectChatStateHolder(
 	private val realtimeContract: ChatRealtimeContract? = null,
 	private val presenceContract: ChatPresenceContract? = null,
 	private val activityStore: ConversationActivityStore? = null,
-	private val sessionCache: SharedChatSessionCache? = null,
 	private val logger: Logger? = null,
 	private val mediaOutboxEngine: MediaOutboxEngine? = null,
 	private val mediaDownloadController: me.floow.domain.media.MediaDownloadController? = null,
-	private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+	private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
 ) {
 	sealed interface Event {
 		data class ShowMessage(val message: String) : Event
-		data class JumpToMessage(val messageId: Long) : Event
 	}
 
 	data class LocalImageDraft(
@@ -116,14 +121,20 @@ class DirectChatStateHolder(
 	private val _events = MutableSharedFlow<Event>(extraBufferCapacity = 16)
 	val events: SharedFlow<Event> = _events.asSharedFlow()
 
-	val timelineReducer: ChatTimelineReducer = ChatTimelineReducer()
+	private var readStateJob: Job? = null
+    private var pinnedRefreshJob: Job? = null
+    private var pinsConversationId: Long? = null
+    private var observedPins: List<ChatMessageItemModel> = emptyList()
+    private var resyncJob: Job? = null
+
+    val timelineReducer: ChatTimelineReducer = ChatTimelineReducer()
 
 	private val typingCoordinator: ChatTypingCoordinator = ChatTypingCoordinator(repository, scope)
 	private val readTracker: ChatReadTracker = ChatReadTracker(repository, scope)
 	private val chatActions: ChatActions = ChatActions(repository, scope) { message ->
 		_events.tryEmit(Event.ShowMessage(message))
 	}
-	private val chatLoader: ChatLoader = ChatLoader(repository, sessionCache, logger)
+	private val chatLoader: ChatLoader = ChatLoader(repository, logger)
 	private val realtimeCoordinator: ChatRealtimeCoordinator = ChatRealtimeCoordinator(
 		repository = repository,
 		realtimeContract = realtimeContract,
@@ -231,17 +242,81 @@ class DirectChatStateHolder(
 		inputController.cancelEditing()
 	}
 
-	fun requestScrollToBottom() {
-		scrollAnchorController.requestScrollToBottom()
-	}
+    fun requestScrollToBottom() {
+        val current = _state.value as? DirectChatScreenState.HasData
+        if (current == null || (!current.hasNewerMessages && !current.provisionalHistory)) {
+            scrollAnchorController.invalidateWindow()
+            _state.update { if (it is DirectChatScreenState.HasData) it.copy(
+                isLoadingMore = false, keepAnchorRequest = false, highlightedMessageId = null,
+            ) else it }
+            scrollAnchorController.requestScrollToBottom()
+            return
+        }
+        val generation = scrollAnchorController.invalidateWindow()
+        _state.update { if (it is DirectChatScreenState.HasData) it.copy(isLoadingMore = false) else it }
+        val request = activeRequest?.copy(
+            conversationId = current.conversationId,
+            anchorMessageId = null,
+            openMode = me.floow.shared.chats.model.ChatOpenMode.LATEST,
+        ) ?: return
+        scope.launch {
+            chatLoader.loadInitialRemote(request).onSuccess { snapshot ->
+                if (generation != scrollAnchorController.windowGeneration || activeConversationIdOrNull() != current.conversationId) return@onSuccess
+                val loaded = snapshotToScreenState(snapshot, showUnreadIndicators = true)
+                _state.update { timelineReducer.mergeFreshSnapshotIntoCurrent(it, loaded) }
+                scrollAnchorController.requestScrollToBottom()
+            }.onFailure {
+                if (generation == scrollAnchorController.windowGeneration) {
+                    _events.tryEmit(Event.ShowMessage("Не удалось загрузить последние сообщения"))
+                }
+            }
+        }
+    }
 
-	fun onUserStartedScroll() {
-		scrollAnchorController.onUserStartedScroll()
-	}
+    fun onUserStartedScroll() {
+        failedOlderEdge = null
+        if ((_state.value as? DirectChatScreenState.HasData)?.isLoadingMore != true) lastNewerEdgeRequested = null
+        scrollAnchorController.onUserStartedScroll()
+    }
 
 	fun onViewportSnapshotChanged(snapshot: ChatViewportSnapshot) {
-		scrollAnchorController.onViewportSnapshotChanged(snapshot)
-	}
+        scrollAnchorController.onViewportSnapshotChanged(snapshot)
+        val state = _state.value as? DirectChatScreenState.HasData ?: return
+        if (snapshot.isAtBottom && !state.keepAnchorRequest && state.hasNewerMessages && !state.provisionalHistory) {
+            loadNewer(state)
+        }
+    }
+
+    private fun followLatestAfterSend() {
+        if ((_state.value as? DirectChatScreenState.HasData)?.hasNewerMessages == true) requestScrollToBottom()
+    }
+
+    private var lastNewerEdgeRequested: Pair<Long, Long>? = null
+    private var failedOlderEdge: Pair<Long, Long?>? = null
+
+    private fun loadNewer(current: DirectChatScreenState.HasData) {
+        if (current.isLoadingMore) return
+        val newest = current.historyUpperBound ?: return
+        val generation = scrollAnchorController.windowGeneration
+        val requestKey = generation to newest
+        if (requestKey == lastNewerEdgeRequested) return
+        lastNewerEdgeRequested = requestKey
+        _state.update { if (it is DirectChatScreenState.HasData) it.copy(isLoadingMore = true) else it }
+        scope.launch {
+            val page = repository.loadNewer(current.conversationId, newest).getOrNull()
+            if (generation != scrollAnchorController.windowGeneration) return@launch
+            _state.update { state ->
+                if (state !is DirectChatScreenState.HasData || state.conversationId != current.conversationId ||
+                    state.historyUpperBound != newest) return@update state
+                if (page == null) state.copy(isLoadingMore = false) else state.copy(
+                    messages = timelineReducer.mergeMessages(state.messages + page.items, inputController.inFlightEdits),
+                    hasNewerMessages = page.hasNewerMessages,
+                    historyUpperBound = if (page.hasNewerMessages) page.items.maxOfOrNull { it.id } ?: newest else null,
+                    isLoadingMore = false,
+                )
+            }
+        }
+    }
 
 	fun onScrollSettled() {
 		scrollAnchorController.onScrollSettled()
@@ -260,7 +335,7 @@ class DirectChatStateHolder(
 	}
 
 	fun addLocalVideoCircle(clip: RecordedClip, enqueueOutbox: Boolean = true): String {
-		return mediaController.addLocalVideoCircle(clip, enqueueOutbox)
+		return mediaController.addLocalVideoCircle(clip, enqueueOutbox).also { if (it.isNotEmpty()) followLatestAfterSend() }
 	}
 
 	fun updateLocalVideoCircleClip(clientMessageId: String, clip: RecordedClip) {
@@ -300,7 +375,7 @@ class DirectChatStateHolder(
 	}
 
 	fun addLocalVoice(clip: RecordedVoiceClip): String {
-		return mediaController.addLocalVoice(clip)
+		return mediaController.addLocalVoice(clip).also { if (it.isNotEmpty()) followLatestAfterSend() }
 	}
 
 	fun markLocalVoiceUploading(clientMessageId: String) {
@@ -346,7 +421,7 @@ class DirectChatStateHolder(
 			fallbackHeader = fallbackHeader,
 			replyToMessageId = replyToMessageId,
 			enqueueOutbox = enqueueOutbox,
-		)
+		).also { if (it.isNotEmpty()) followLatestAfterSend() }
 	}
 
 	fun addLocalImage(
@@ -476,9 +551,10 @@ class DirectChatStateHolder(
 		}
 	}
 
-	fun dispose() {
-		disposeActiveWork(clearLocalVideoCircles = true)
-	}
+    fun dispose() {
+        disposeActiveWork(clearLocalVideoCircles = true)
+        activeRequest = null
+    }
 
 	private fun disposeActiveWork(clearLocalVideoCircles: Boolean) {
 		scrollAnchorController.flushReadAndOpenAnchorOnClose()
@@ -486,7 +562,15 @@ class DirectChatStateHolder(
 		loadJob = null
 		remoteRefreshRetryJob?.cancel()
 		remoteRefreshRetryJob = null
-		realtimeCoordinator.stopAll()
+        realtimeCoordinator.stopAll()
+        readStateJob?.cancel()
+        readStateJob = null
+        pinnedRefreshJob?.cancel()
+        pinnedRefreshJob = null
+        pinsConversationId = null
+        observedPins = emptyList()
+        resyncJob?.cancel()
+        resyncJob = null
 		typingCoordinator.reset()
 		inputController.reset()
 		inputController.clearRecordingActivityForCurrentConversation()
@@ -499,41 +583,25 @@ class DirectChatStateHolder(
 	fun load(request: DirectChatInitialRequest) {
 		activeRequest = request
 		disposeActiveWork(clearLocalVideoCircles = false)
-		val instantCached = chatLoader.getInstantCached(request)
-		if (instantCached != null) {
-			_state.value = snapshotToScreenState(
-				snapshot = instantCached,
-				showUnreadIndicators = true,
-			)
-			inputController.publishLocalActivityFromCurrentState()
-			observeRealtime(instantCached.conversationId)
-			observeLocalMessages(instantCached.conversationId)
-			observePinnedMessages(instantCached.conversationId)
-			observePresence(instantCached.header)
-		} else {
-			_state.value = DirectChatScreenState.Loading
-		}
-		loadJob = scope.launch {
-			val cachedSnapshot = instantCached ?: chatLoader.loadCachedInitial(request)
-			if (cachedSnapshot != null) {
-				if (instantCached == null) {
-					_state.value = snapshotToScreenState(
-						snapshot = cachedSnapshot,
-						showUnreadIndicators = true,
-					)
-					inputController.publishLocalActivityFromCurrentState()
-					observeRealtime(cachedSnapshot.conversationId)
-					observeLocalMessages(cachedSnapshot.conversationId)
-					observePinnedMessages(cachedSnapshot.conversationId)
-					observePresence(cachedSnapshot.header)
-				}
-			} else if (instantCached == null) {
-				_state.value = DirectChatScreenState.Loading
-			}
+        val generation = scrollAnchorController.windowGeneration
+        _state.value = DirectChatScreenState.Loading
+        loadJob = scope.launch {
+            val cachedSnapshot = chatLoader.loadCachedInitial(request)
+            if (activeRequest != request || generation != scrollAnchorController.windowGeneration) return@launch
+            if (cachedSnapshot != null) {
+                _state.value = snapshotToScreenState(cachedSnapshot, showUnreadIndicators = true)
+                inputController.publishLocalActivityFromCurrentState()
+                observePinnedMessages(cachedSnapshot.conversationId)
+                observePresence(cachedSnapshot.header)
+            }
 
 			chatLoader.loadInitialRemote(request)
 				.onSuccess { snapshot ->
-					_state.update { current ->
+                    if (generation != scrollAnchorController.windowGeneration) return@onSuccess
+                    val pendingRead = snapshot.conversationId?.let { repository.getLocalLastReadMessageId(it) } ?: 0L
+                    if (activeRequest != request || generation != scrollAnchorController.windowGeneration) return@onSuccess
+                    readTracker.initializeLastMarkedRead(maxOf(snapshot.lastReadMessageId, pendingRead))
+                    _state.update { current ->
 						val loadedState = snapshotToScreenState(
 							snapshot = snapshot,
 							showUnreadIndicators = true,
@@ -546,17 +614,16 @@ class DirectChatStateHolder(
 					}
 					inputController.publishLocalActivityFromCurrentState()
 					snapshot.conversationId?.takeIf { it > 0L }?.let { conversationId ->
-						readTracker.initializeLastMarkedRead(repository.getLocalLastReadMessageId(conversationId))
 						mediaController.flushPendingLocalVideoOutbox(conversationId, snapshot.header)
 					}
-					scrollAnchorController.markLatestVisibleMessagesReadIfAppropriate()
 					observeRealtime(snapshot.conversationId)
 					observeLocalMessages(snapshot.conversationId)
 					observePinnedMessages(snapshot.conversationId)
 					observePresence(snapshot.header)
 				}
-				.onFailure {
-					val message = if (it is kotlinx.coroutines.TimeoutCancellationException) {
+                .onFailure {
+                    if (activeRequest != request || generation != scrollAnchorController.windowGeneration) return@onFailure
+                    val message = if (it is kotlinx.coroutines.TimeoutCancellationException) {
 						"chat load timed out"
 					} else {
 						it.message ?: "chat load failed"
@@ -565,11 +632,13 @@ class DirectChatStateHolder(
 						tag = "DirectChatStateHolder",
 						message = "load failed conversationId=${request.conversationId} peer=${request.peerUserId} cached=${cachedSnapshot != null} reason=$message"
 					)
-					if (cachedSnapshot == null) {
-						_state.value = DirectChatScreenState.Error(message)
-					} else {
-						scheduleSilentRemoteRefreshRetry(request)
-					}
+                    if (cachedSnapshot == null || it is ChatMessageUnavailableException) {
+                        _state.value = DirectChatScreenState.Error(message)
+                        if (it is ChatMessageUnavailableException) _events.tryEmit(Event.ShowMessage(message))
+                    }
+                    if (it !is ChatMessageUnavailableException && (cachedSnapshot != null || repository.networkOnline?.value == false)) {
+                        scheduleSilentRemoteRefreshRetry(request)
+                    }
 				}
 		}
 	}
@@ -579,10 +648,14 @@ class DirectChatStateHolder(
 		delayMs: Long = 2_000L,
 	) {
 		remoteRefreshRetryJob?.cancel()
-		remoteRefreshRetryJob = scope.launch {
-			delay(delayMs)
-			val snapshot = chatLoader.loadInitialRemote(request).getOrNull() ?: return@launch
-			_state.update { current ->
+		val generation = scrollAnchorController.windowGeneration
+        remoteRefreshRetryJob = scope.launch {
+            delay(delayMs)
+            repository.networkOnline?.first { it }
+            val snapshot = chatLoader.loadInitialRemote(request).getOrNull() ?: return@launch
+            if (activeRequest != request || generation != scrollAnchorController.windowGeneration) return@launch
+            readTracker.initializeLastMarkedRead(snapshot.lastReadMessageId)
+            _state.update { current ->
 				val loadedState = snapshotToScreenState(
 					snapshot = snapshot,
 					showUnreadIndicators = true,
@@ -592,7 +665,6 @@ class DirectChatStateHolder(
 			snapshot.conversationId?.takeIf { it > 0L }?.let { conversationId ->
 				readTracker.initializeLastMarkedRead(repository.getLocalLastReadMessageId(conversationId))
 			}
-			scrollAnchorController.markLatestVisibleMessagesReadIfAppropriate()
 			observeRealtime(snapshot.conversationId)
 			observeLocalMessages(snapshot.conversationId)
 			observePinnedMessages(snapshot.conversationId)
@@ -618,7 +690,7 @@ class DirectChatStateHolder(
 		)
 		mediaController.seedMediaDownloadStates(normalizedMessages)
 		val normalizedPinnedMessages = inputController.normalizePinnedMessages(
-			messages = snapshot.pinnedMessages,
+			messages = if (pinsConversationId == snapshot.conversationId) observedPins else snapshot.pinnedMessages,
 			peerLastReadMessageId = peerLastReadMessageId,
 		)
 		val resolvedPeerIsOnline = inputController.latestPresenceState.resolveIsOnline()
@@ -647,7 +719,12 @@ class DirectChatStateHolder(
 					input = restoredInput,
 					pinnedMessages = normalizedPinnedMessages,
 					canLoadMore = snapshot.canLoadMore,
-					nextBeforeMessageId = snapshot.nextBeforeMessageId,
+                    hasNewerMessages = snapshot.hasNewerMessages,
+                    historyUpperBound = snapshot.messages.maxOfOrNull { it.id }?.takeIf { snapshot.hasNewerMessages },
+                    provisionalHistory = snapshot.provisionalHistory,
+                    firstUnreadMessageId = snapshot.firstUnreadMessageId,
+                    unreadBoundaryMessageId = snapshot.firstUnreadMessageId,
+                    nextBeforeMessageId = snapshot.nextBeforeMessageId,
 					highlightedMessageId = snapshot.highlightedMessageId,
 					anchorRequestMessageId = snapshot.openAnchorMessageId,
 					anchorRequestOffsetPx = snapshot.openAnchorOffsetPx,
@@ -670,7 +747,12 @@ class DirectChatStateHolder(
 				input = restoredInput,
 				pinnedMessages = normalizedPinnedMessages,
 				canLoadMore = snapshot.canLoadMore,
-				nextBeforeMessageId = snapshot.nextBeforeMessageId,
+                hasNewerMessages = snapshot.hasNewerMessages,
+                    historyUpperBound = snapshot.messages.maxOfOrNull { it.id }?.takeIf { snapshot.hasNewerMessages },
+                provisionalHistory = snapshot.provisionalHistory,
+                firstUnreadMessageId = snapshot.firstUnreadMessageId,
+                unreadBoundaryMessageId = snapshot.firstUnreadMessageId,
+                nextBeforeMessageId = snapshot.nextBeforeMessageId,
 				highlightedMessageId = snapshot.highlightedMessageId,
 				anchorRequestMessageId = snapshot.openAnchorMessageId,
 				anchorRequestOffsetPx = snapshot.openAnchorOffsetPx,
@@ -724,20 +806,7 @@ class DirectChatStateHolder(
 		val originalEditingMessage = currentHasData
 			?.messages
 			?.firstOrNull { it.id == editingMessageId }
-		val currentReplyMessageId = currentHasData?.currentReplyMessageId
-		val currentReplyMessageText = currentHasData
-			?.messages
-			?.firstOrNull { it.id == currentReplyMessageId }
-			?.let { msg ->
-				when {
-					msg.text.isNotBlank() -> msg.text
-					msg.content is ChatMessageContent.Image -> if (msg.content.groupId != null) "Альбом" else "Фотография"
-					msg.content is ChatMessageContent.Voice -> "Голосовое сообщение"
-					msg.content is ChatMessageContent.VideoCircle -> "Видеосообщение"
-					msg.content is ChatMessageContent.PostPreview -> "Запись на стене"
-					else -> "Сообщение"
-				}
-			}
+        val replyDraft = currentHasData?.replyDraft
 		val header = when (current) {
 			is DirectChatScreenState.HasData -> current.header
 			is DirectChatScreenState.NoMessages -> current.header
@@ -749,10 +818,11 @@ class DirectChatStateHolder(
 				conversationId = conversationId,
 				header = header,
 				text = text,
-				replyToMessageId = currentReplyMessageId,
-				replyToMessageText = currentReplyMessageText,
-			)
-			return
+				replyToMessageId = replyDraft?.messageId,
+                replyToMessageText = replyDraft?.preview,
+            )
+            followLatestAfterSend()
+            return
 		}
 		if (originalEditingMessage == null) {
 			_events.tryEmit(Event.ShowMessage("message action failed"))
@@ -772,7 +842,7 @@ class DirectChatStateHolder(
 						messages = timelineReducer.applyPeerReadState(updatedMessages, state.peerLastReadMessageId),
 						input = "",
 						sending = true,
-						currentReplyMessageId = null,
+						replyDraft = null,
 						editingMessageId = null,
 					)
 				}
@@ -869,7 +939,7 @@ class DirectChatStateHolder(
 					state.copy(
 						messages = messages,
 						input = "",
-						currentReplyMessageId = null,
+						replyDraft = null,
 						editingMessageId = null,
 						scrollToBottomRequestToken = scrollAnchorController.nextScrollRequestToken(),
 						conversationActivityState = inputController.resolveConversationActivityState(state.header, messages, state.input),
@@ -880,7 +950,7 @@ class DirectChatStateHolder(
 					header = header,
 					messages = listOf(optimisticMessage),
 					input = "",
-					currentReplyMessageId = null,
+					replyDraft = null,
 					editingMessageId = null,
 					scrollToBottomRequestToken = scrollAnchorController.nextScrollRequestToken(),
 					peerIsOnline = state.peerIsOnline,
@@ -978,14 +1048,19 @@ class DirectChatStateHolder(
 		val current = _state.value as? DirectChatScreenState.HasData ?: return
 		if (current.isLoadingMore || !current.canLoadMore) return
 
-		_state.value = current.copy(isLoadingMore = true)
-		scope.launch {
-			chatLoader.loadMore(
+        val generation = scrollAnchorController.windowGeneration
+        val cursor = current.nextBeforeMessageId ?: current.messages.firstOrNull { it.id > 0L }?.id
+        val requestKey = generation to cursor
+        if (failedOlderEdge == requestKey) return
+        _state.value = current.copy(isLoadingMore = true)
+        scope.launch {
+            chatLoader.loadMore(
 				conversationId = current.conversationId,
-				beforeMessageId = current.nextBeforeMessageId ?: current.messages.firstOrNull()?.id,
+				beforeMessageId = cursor,
 			)
-				.onSuccess { page ->
-					mediaController.seedMediaDownloadStates(page.items)
+                .onSuccess { page ->
+                    if (generation != scrollAnchorController.windowGeneration) return@onSuccess
+                    mediaController.seedMediaDownloadStates(page.items)
 					_state.update { state ->
 						when (state) {
 							is DirectChatScreenState.HasData -> state.copy(
@@ -998,10 +1073,12 @@ class DirectChatStateHolder(
 						}
 					}
 				}
-				.onFailure {
-					_state.update { state ->
-						when (state) {
-							is DirectChatScreenState.HasData -> state.copy(isLoadingMore = false)
+                .onFailure {
+                    if (generation != scrollAnchorController.windowGeneration) return@onFailure
+                    failedOlderEdge = requestKey
+                    _state.update { state ->
+                        when (state) {
+                            is DirectChatScreenState.HasData -> state.copy(isLoadingMore = false)
 							else -> state
 						}
 					}
@@ -1060,7 +1137,10 @@ class DirectChatStateHolder(
 							peerLastSeenAtMillis = state.peerLastSeenAtMillis,
 						)
 					} else {
-						state.copy(messages = remainingMessages)
+						state.copy(
+                        messages = remainingMessages.map { if (it.replyToMessageId in immediateDeleteIds) it.copy(replyToMessageText = null) else it },
+                        replyDraft = state.replyDraft?.takeUnless { it.messageId in immediateDeleteIds },
+                    )
 					}
 				}
 				else -> state
@@ -1126,7 +1206,7 @@ class DirectChatStateHolder(
 							peerLastSeenAtMillis = state.peerLastSeenAtMillis,
 						)
 					} else {
-						state.copy(messages = remainingMessages)
+						state.copy(messages = remainingMessages, replyDraft = state.replyDraft?.takeUnless { it.messageId == messageId })
 					}
 				}
 				else -> state
@@ -1225,9 +1305,32 @@ class DirectChatStateHolder(
 
 	private fun observeRealtime(conversationId: Long?) {
 		if (conversationId == null || realtimeContract == null) return
-		realtimeCoordinator.observeRealtime(conversationId, afterSeq = currentMaxMessageId(conversationId)) { event ->
+        readStateJob?.cancel()
+        readStateJob = scope.launch {
+            repository.observeReadState(conversationId).collect { read ->
+                if (read == null || activeConversationIdOrNull() != conversationId) return@collect
+                readTracker.initializeLastMarkedRead(read.lastReadMessageId)
+                _state.update { current ->
+                    if (current !is DirectChatScreenState.HasData || current.conversationId != conversationId) current
+                    else current.copy(
+                        firstUnreadMessageId = read.firstUnreadId,
+                        unreadBoundaryMessageId = current.unreadBoundaryMessageId ?: read.firstUnreadId,
+                    )
+                }
+                scrollAnchorController.latestViewportSnapshot?.let(scrollAnchorController::onViewportSnapshotChanged)
+            }
+        }
+        var receivedHello = false
+        realtimeCoordinator.observeRealtime(conversationId, afterSeq = currentMaxMessageId(conversationId)) { event ->
 			when (event) {
-				is ChatRealtimeEvent.Hello -> {
+                is ChatRealtimeEvent.Hello -> {
+                    if (receivedHello) {
+                        failedOlderEdge = null
+                        lastNewerEdgeRequested = null
+                        refreshPins(conversationId)
+                        resyncConversation()
+                    }
+                    receivedHello = true
 					if (event.lastReadMessageId > readTracker.lastMarkedReadMessageId) {
 						readTracker.initializeLastMarkedRead(event.lastReadMessageId)
 					}
@@ -1256,6 +1359,17 @@ class DirectChatStateHolder(
 									timelineReducer.identityKey(existing) == timelineReducer.identityKey(normalizedMessage) ||
 										(existing.id > 0L && existing.id == normalizedMessage.id)
 								}
+                                val windowStart = current.messages.firstOrNull { it.id > 0L }?.id ?: 0L
+                                val windowEnd = current.historyUpperBound ?: current.messages.maxOfOrNull { it.id } ?: 0L
+                                if (!wasAlreadyInTimeline && (!event.isNew || current.provisionalHistory ||
+                                    normalizedMessage.id < windowStart ||
+                                    (current.hasNewerMessages && normalizedMessage.id > windowEnd))
+                                ) {
+                                    if (event.isNew && normalizedMessage.id > windowEnd) {
+                                        readTracker.registerIncomingMessage(normalizedMessage.id, normalizedMessage.isOutgoing) {}
+                                    }
+                                    return@update current.copy(scrollToBottomBadgeCount = readTracker.unseenIncomingMessageIds.size)
+                                }
 								val updated = timelineReducer.upsertMessage(current.messages, normalizedMessage, inputController.inFlightEdits)
 								val shouldAutoScrollToBottom = !wasAlreadyInTimeline &&
 									!current.keepAnchorRequest &&
@@ -1303,7 +1417,7 @@ class DirectChatStateHolder(
 						when (current) {
 							is DirectChatScreenState.HasData -> {
 								val remaining = current.messages.filterNot { it.id == event.messageId }
-								if (remaining.isEmpty()) {
+								if (remaining.isEmpty() && !current.hasNewerMessages) {
 									DirectChatScreenState.NoMessages(
 										conversationId = current.conversationId,
 										header = current.header,
@@ -1322,34 +1436,7 @@ class DirectChatStateHolder(
 						}
 					}
 				}
-				is ChatRealtimeEvent.MessagePinned -> {
-					_state.update { current ->
-						when (current) {
-							is DirectChatScreenState.HasData -> {
-								val updatedMessages = current.messages.map { message ->
-									if (message.id == event.messageId) {
-										message.copy(isPinned = event.isPinned)
-									} else {
-										message
-									}
-								}
-								val updatedPinnedMessages = if (event.isPinned) {
-									inputController.normalizePinnedMessages(
-										messages = current.pinnedMessages + updatedMessages.filter { it.id == event.messageId },
-										peerLastReadMessageId = current.peerLastReadMessageId,
-									)
-								} else {
-									current.pinnedMessages.filterNot { it.id == event.messageId }
-								}
-								current.copy(
-									messages = updatedMessages,
-									pinnedMessages = updatedPinnedMessages,
-								)
-							}
-							else -> current
-						}
-					}
-				}
+                is ChatRealtimeEvent.MessagePinned, ChatRealtimeEvent.OwnReadUpdated -> Unit // Room already applied the event.
 				is ChatRealtimeEvent.PeerReadUpdated -> {
 					_state.update { current ->
 						when (current) {
@@ -1377,7 +1464,10 @@ class DirectChatStateHolder(
 					_state.value = DirectChatScreenState.Error("Диалог удален")
 					_events.tryEmit(Event.ShowMessage("Диалог удален"))
 				}
-				ChatRealtimeEvent.ResyncRequired -> resyncConversation()
+                ChatRealtimeEvent.ResyncRequired -> {
+                    refreshPins(conversationId)
+                    resyncConversation()
+                }
 			}
 		}
 	}
@@ -1391,9 +1481,12 @@ class DirectChatStateHolder(
 	}
 
 	private fun observePinnedMessages(conversationId: Long?) {
-		val resolvedConversationId = conversationId?.takeIf { it > 0L } ?: return
-		realtimeCoordinator.observePinnedMessages(resolvedConversationId) { messages ->
-			_state.update { current ->
+        val resolvedConversationId = conversationId?.takeIf { it > 0L } ?: return
+        if (pinsConversationId == resolvedConversationId) return
+        pinsConversationId = resolvedConversationId
+        realtimeCoordinator.observePinnedMessages(resolvedConversationId) { messages ->
+            observedPins = messages
+            _state.update { current ->
 				when (current) {
 					is DirectChatScreenState.HasData -> {
 						if (current.conversationId != resolvedConversationId) {
@@ -1415,10 +1508,13 @@ class DirectChatStateHolder(
 				}
 			}
 		}
-		scope.launch {
-			repository.loadPinnedMessages(resolvedConversationId)
-		}
-	}
+        refreshPins(resolvedConversationId)
+    }
+
+    private fun refreshPins(conversationId: Long) {
+        pinnedRefreshJob?.cancel()
+        pinnedRefreshJob = scope.launch { repository.loadPinnedMessages(conversationId) }
+    }
 
 	private fun observeLocalMessages(conversationId: Long?) {
 		val resolvedConversationId = conversationId?.takeIf { it > 0L } ?: return
@@ -1435,88 +1531,59 @@ class DirectChatStateHolder(
 		page: ChatThreadPage,
 	) {
 		if (page.items.isEmpty()) return
-		var shouldMarkReadAfterUpdate = false
-		_state.update { current ->
-			when (current) {
-				is DirectChatScreenState.HasData -> {
-					if (current.conversationId != conversationId) return@update current
-					val previousLatestKey = current.messages.lastOrNull()?.let { timelineReducer.identityKey(it) }
-					val pageLatestMessage = page.items.lastOrNull()
-					val pageLatestKey = pageLatestMessage?.let { timelineReducer.identityKey(it) }
-					val latestWasAlreadyLoaded = pageLatestMessage?.let { incoming ->
-						current.messages.any { existing -> timelineReducer.matchesMessageIdentity(existing, incoming) }
-					} == true
-					val isAcknowledgedOutgoing = pageLatestMessage?.isOutgoing == true &&
-						(latestWasAlreadyLoaded || current.messages.any { it.isOutgoing && timelineReducer.matchesMessageIdentity(it, pageLatestMessage) })
-					val hasNewLatestMessage = pageLatestMessage != null &&
-						pageLatestKey != null &&
-						pageLatestKey != previousLatestKey &&
-						!latestWasAlreadyLoaded &&
-						!isAcknowledgedOutgoing
-					val shouldAutoScrollToBottom = hasNewLatestMessage &&
-						!current.keepAnchorRequest &&
-						(
-							pageLatestMessage.isOutgoing ||
-								(scrollAnchorController.latestViewportSnapshot?.isAtBottom != false)
-						)
-					if (hasNewLatestMessage) {
-						scrollAnchorController.updateUnseenIncomingMessages(
-							message = checkNotNull(pageLatestMessage),
-							shouldAutoScrollToBottom = shouldAutoScrollToBottom,
-						)
-					}
-					shouldMarkReadAfterUpdate = shouldAutoScrollToBottom &&
-						!pageLatestMessage.isOutgoing &&
-						pageLatestMessage.id > 0L
-					val nextPeerLastReadMessageId = page.peerLastReadMessageId ?: current.peerLastReadMessageId
-					val mergedMessages = timelineReducer.applyPeerReadState(
-						timelineReducer.mergeMessages(current.messages + page.items, inputController.inFlightEdits),
-						nextPeerLastReadMessageId,
-					)
-					current.copy(
-						messages = mergedMessages,
-						canLoadMore = current.canLoadMore,
-						nextBeforeMessageId = current.nextBeforeMessageId,
-						scrollToBottomRequestToken = if (shouldAutoScrollToBottom) {
-							scrollAnchorController.nextScrollRequestToken()
-						} else {
-							current.scrollToBottomRequestToken
-						},
-						scrollToBottomBadgeCount = readTracker.unseenIncomingMessageIds.size,
-						peerLastReadMessageId = nextPeerLastReadMessageId,
-						conversationActivityState = inputController.resolveConversationActivityState(current.header, mergedMessages, current.input),
-					)
-				}
-				is DirectChatScreenState.NoMessages -> {
-					if (current.conversationId != conversationId) return@update current
-					shouldMarkReadAfterUpdate = page.items.lastOrNull()?.let { message ->
-						!message.isOutgoing && message.id > 0L
-					} == true
-					val mergedMessages = timelineReducer.applyPeerReadState(
-						timelineReducer.mergeMessages(page.items, inputController.inFlightEdits),
-						page.peerLastReadMessageId ?: 0L,
-					)
-					DirectChatScreenState.HasData(
-						conversationId = conversationId,
-						header = current.header,
-						messages = mergedMessages,
-						input = current.input,
-						canLoadMore = page.canLoadMore,
-						nextBeforeMessageId = page.nextBeforeMessageId,
-						scrollToBottomRequestToken = scrollAnchorController.nextScrollRequestToken(),
-						peerLastReadMessageId = page.peerLastReadMessageId ?: 0L,
-						peerIsOnline = current.peerIsOnline,
-						peerLastSeenAtMillis = current.peerLastSeenAtMillis,
-						conversationActivityState = inputController.resolveConversationActivityState(current.header, mergedMessages, current.input),
-					)
-				}
-				else -> current
-			}
-		}
-		if (shouldMarkReadAfterUpdate) {
-			scrollAnchorController.markLatestVisibleMessagesReadIfAppropriate()
-		}
-	}
+        _state.update { current ->
+            when (current) {
+                is DirectChatScreenState.HasData -> {
+                    if (current.conversationId != conversationId) return@update current
+                    val knownIds = current.messages.mapTo(mutableSetOf()) { it.id }
+                    val clientIds = current.messages.mapNotNullTo(mutableSetOf()) { it.clientMessageId }
+                    val currentMax = current.messages.maxOfOrNull { it.id } ?: 0L
+                    val updates = page.items.filter { item ->
+                        item.id in knownIds || item.clientMessageId?.let(clientIds::contains) == true ||
+                            (!current.hasNewerMessages && !current.provisionalHistory &&
+                                (item.id <= 0L || (realtimeContract == null && item.id > currentMax)))
+                    }
+                    val additions = updates.filter { it.id > currentMax && it.id !in knownIds && it.clientMessageId !in clientIds }
+                    val shouldAutoScroll = additions.isNotEmpty() && !current.keepAnchorRequest &&
+                        scrollAnchorController.latestViewportSnapshot?.isAtBottom != false
+                    if (!shouldAutoScroll) additions.forEach {
+                        readTracker.registerIncomingMessage(it.id, it.isOutgoing) {}
+                    }
+                    val peerRead = maxOf(current.peerLastReadMessageId, page.peerLastReadMessageId ?: 0L)
+                    val merged = timelineReducer.applyPeerReadState(
+                        timelineReducer.mergeMessages(current.messages + updates, inputController.inFlightEdits),
+                        peerRead,
+                    )
+                    current.copy(
+                        messages = merged,
+                        peerLastReadMessageId = peerRead,
+                        scrollToBottomRequestToken = if (shouldAutoScroll) scrollAnchorController.nextScrollRequestToken() else current.scrollToBottomRequestToken,
+                        scrollToBottomBadgeCount = readTracker.unseenIncomingMessageIds.size,
+                        conversationActivityState = inputController.resolveConversationActivityState(current.header, merged, current.input),
+                    )
+                }
+                is DirectChatScreenState.NoMessages -> {
+                    if (current.conversationId != conversationId) return@update current
+                    val items = if (realtimeContract == null) page.items else page.items.filter { it.isOutgoing && it.id <= 0L }
+                    if (items.isEmpty()) return@update current
+                    val peerRead = page.peerLastReadMessageId ?: 0L
+                    DirectChatScreenState.HasData(
+                        conversationId = conversationId,
+                        header = current.header,
+                        messages = timelineReducer.applyPeerReadState(items, peerRead),
+                        input = current.input,
+                        canLoadMore = page.canLoadMore,
+                        nextBeforeMessageId = page.nextBeforeMessageId,
+                        scrollToBottomRequestToken = scrollAnchorController.nextScrollRequestToken(),
+                        peerLastReadMessageId = peerRead,
+                        peerIsOnline = current.peerIsOnline,
+                        peerLastSeenAtMillis = current.peerLastSeenAtMillis,
+                    )
+                }
+                else -> current
+            }
+        }
+    }
 
 	private fun observePresence(header: ChatThreadHeaderModel) {
 		if (header.isSavedMessages) {
@@ -1533,92 +1600,64 @@ class DirectChatStateHolder(
 		}
 	}
 
-	private fun resyncConversation() {
-		val request = when (val current = _state.value) {
-			is DirectChatScreenState.HasData -> DirectChatInitialRequest(
-				peerUserId = current.header.peerUserId,
-				peerDisplayName = current.header.title,
-				peerAvatarUrl = current.header.avatarUrl,
-				conversationId = current.conversationId,
-				anchorMessageId = current.highlightedMessageId,
-				isSavedMessages = current.header.isSavedMessages,
-			)
-			is DirectChatScreenState.NoMessages -> DirectChatInitialRequest(
-				peerUserId = current.header.peerUserId,
-				peerDisplayName = current.header.title,
-				peerAvatarUrl = current.header.avatarUrl,
-				conversationId = current.conversationId,
-				isSavedMessages = current.header.isSavedMessages,
-			)
-			else -> null
-		} ?: return
-		scope.launch {
-			val result = runCatching {
-				withTimeout(LOAD_TIMEOUT_MS) {
-					repository.loadInitial(request)
-				}
-			}.getOrElse {
-				Result.failure(it)
-			}
-			result.onSuccess { snapshot ->
-				_state.update { current ->
-					when (current) {
-						is DirectChatScreenState.HasData -> {
-							if (snapshot.conversationId == null) {
-								DirectChatScreenState.Error("chat conversation id is missing")
-							} else {
-								current.copy(
-									conversationId = snapshot.conversationId,
-									header = inputController.mergeLiveHeader(snapshot.header),
-									messages = current.messages
-										.filter(timelineReducer::isLocalOutgoingPending)
-										.fold(mediaController.mergeLocalMediaMessages(snapshot.messages)) { messages, pending ->
-											timelineReducer.upsertMessage(messages, pending, inputController.inFlightEdits)
-										},
-									canLoadMore = snapshot.canLoadMore,
-									nextBeforeMessageId = snapshot.nextBeforeMessageId,
-									isLoadingMore = false,
-									highlightedMessageId = snapshot.highlightedMessageId ?: current.highlightedMessageId,
-									anchorRequestMessageId = snapshot.openAnchorMessageId ?: current.anchorRequestMessageId,
-									anchorRequestOffsetPx = snapshot.openAnchorOffsetPx,
-									anchorRequestToken = if (snapshot.openAnchorMessageId != null) scrollAnchorController.nextAnchorRequestToken() else current.anchorRequestToken,
-									keepAnchorRequest = snapshot.keepOpenAnchorLocked,
-								)
-							}
-						}
-						is DirectChatScreenState.NoMessages -> {
-							if (snapshot.messages.isEmpty()) {
-								current.copy(
-									conversationId = snapshot.conversationId,
-									header = inputController.mergeLiveHeader(snapshot.header),
-									peerIsOnline = inputController.latestPresenceState.resolveIsOnline(),
-									peerLastSeenAtMillis = inputController.latestPresenceState.resolveLastSeenAtMillis(current.peerLastSeenAtMillis),
-								)
-							} else if (snapshot.conversationId == null) {
-								DirectChatScreenState.Error("chat conversation id is missing")
-							} else {
-								DirectChatScreenState.HasData(
-									conversationId = snapshot.conversationId,
-									header = inputController.mergeLiveHeader(snapshot.header),
-									messages = mediaController.mergeLocalMediaMessages(snapshot.messages),
-									canLoadMore = snapshot.canLoadMore,
-									nextBeforeMessageId = snapshot.nextBeforeMessageId,
-									highlightedMessageId = snapshot.highlightedMessageId,
-									anchorRequestMessageId = snapshot.openAnchorMessageId,
-									anchorRequestOffsetPx = snapshot.openAnchorOffsetPx,
-									anchorRequestToken = if (snapshot.openAnchorMessageId != null) scrollAnchorController.nextAnchorRequestToken() else 0L,
-									keepAnchorRequest = snapshot.keepOpenAnchorLocked,
-									peerIsOnline = inputController.latestPresenceState.resolveIsOnline(),
-									peerLastSeenAtMillis = inputController.latestPresenceState.resolveLastSeenAtMillis(current.peerLastSeenAtMillis),
-								)
-							}
-						}
-						else -> current
-					}
-				}
-			}.onFailure {
-				_events.tryEmit(Event.ShowMessage(it.message ?: "chat resync failed"))
-			}
-		}
-	}
+    private fun resyncConversation() {
+        val request = activeRequest ?: return
+        val conversationId = activeConversationIdOrNull() ?: return
+        if ((_state.value as? DirectChatScreenState.HasData)?.isLoadingMore == true) return
+        val visible = scrollAnchorController.latestViewportSnapshot
+        val current = _state.value as? DirectChatScreenState.HasData
+        val generation = scrollAnchorController.windowGeneration
+        resyncJob?.cancel()
+        resyncJob = scope.launch {
+            if (current?.hasNewerMessages == true) {
+                val target = visible?.firstVisibleMessageId ?: current.messages.firstOrNull { it.id > 0L }?.id ?: return@launch
+                val page = chatLoader.loadAroundMessage(conversationId, target).getOrNull() ?: return@launch
+                if (generation != scrollAnchorController.windowGeneration) return@launch
+                _state.update { state ->
+                    if (state !is DirectChatScreenState.HasData || state.conversationId != conversationId) return@update state
+                    val first = page.items.minOfOrNull { it.id } ?: return@update state
+                    val last = page.items.maxOfOrNull { it.id } ?: return@update state
+                    val earlier = state.messages.filter { it.id in 1 until first }
+                    val newer = state.messages.filter { it.id > last && it.id <= (state.historyUpperBound ?: last) }
+                    val pending = state.messages.filter { it.id <= 0L }
+                    state.copy(
+                        messages = timelineReducer.mergeMessages(earlier + page.items + newer + pending),
+                        hasNewerMessages = page.hasNewerMessages,
+                        historyUpperBound = if (page.hasNewerMessages) maxOf(last, state.historyUpperBound ?: 0L) else null,
+                        peerLastReadMessageId = maxOf(state.peerLastReadMessageId, page.peerLastReadMessageId ?: 0L),
+                    )
+                }
+                return@launch
+            }
+            val snapshot = chatLoader.loadInitialRemote(request.copy(
+                conversationId = conversationId,
+                openMode = me.floow.shared.chats.model.ChatOpenMode.LATEST,
+                anchorMessageId = null,
+            )).getOrNull() ?: return@launch
+            if (generation != scrollAnchorController.windowGeneration) return@launch
+            val loaded = snapshotToScreenState(snapshot, showUnreadIndicators = true)
+            _state.update { state ->
+                if (state !is DirectChatScreenState.HasData || loaded !is DirectChatScreenState.HasData) {
+                    return@update timelineReducer.mergeFreshSnapshotIntoCurrent(state, loaded)
+                }
+                val newest = state.messages.maxOfOrNull { it.id } ?: 0L
+                val first = loaded.messages.firstOrNull { it.id > 0L }?.id ?: 0L
+                val latestIds = loaded.messages.asSequence().map { it.id }.filter { it > 0L }.toSet()
+                val overlaps = state.messages.any { it.id in latestIds }
+                if (newest < first && visible?.isAtBottom == false) {
+                    // While reading an older window, leave its viewport intact and expose a newer edge.
+                    return@update state.copy(hasNewerMessages = true, historyUpperBound = newest)
+                }
+                val merged = timelineReducer.mergeFreshSnapshotIntoCurrent(state, loaded) as DirectChatScreenState.HasData
+                if (!overlaps) merged else {
+                    val older = state.messages.filter { it.id in 1 until first }
+                    merged.copy(
+                        messages = timelineReducer.mergeMessages(older + merged.messages),
+                        canLoadMore = if (older.isEmpty()) merged.canLoadMore else state.canLoadMore,
+                        nextBeforeMessageId = if (older.isEmpty()) merged.nextBeforeMessageId else state.nextBeforeMessageId,
+                    )
+                }
+            }
+        }
+    }
 }

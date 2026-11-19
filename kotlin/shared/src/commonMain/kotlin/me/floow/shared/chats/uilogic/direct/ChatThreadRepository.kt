@@ -12,6 +12,7 @@ data class ChatThreadPage(
 	val nextBeforeMessageId: Long? = null,
 	val canLoadMore: Boolean = false,
 	val peerLastReadMessageId: Long? = null,
+	val hasNewerMessages: Boolean = false,
 )
 
 data class DirectChatInitialRequest(
@@ -30,6 +31,7 @@ data class DirectChatOpenViewportSnapshot(
 	val anchorMessageId: Long?,
 	val anchorOffsetPx: Int = 0,
 	val isBottomPinned: Boolean = false,
+    val history: me.floow.domain.data.repos.DirectChatWindowBounds? = null,
 )
 
 fun DirectChatInitialRequest.hasValidConversationTarget(): Boolean {
@@ -40,10 +42,14 @@ fun DirectChatInitialRequest.hasValidPeerCreateTarget(): Boolean {
 	return allowCreateFromPeerUserId && peerUserId.isNotBlank()
 }
 
+internal class ChatMessageUnavailableException : IllegalStateException("Сообщение недоступно")
+
 interface ChatThreadRepository {
+    val networkOnline: kotlinx.coroutines.flow.StateFlow<Boolean>? get() = null
 	suspend fun loadCachedInitial(request: DirectChatInitialRequest): Result<ChatThreadSnapshot?> = Result.success(null)
 	suspend fun loadInitial(request: DirectChatInitialRequest): Result<ChatThreadSnapshot>
 	fun observeMessages(conversationId: Long): Flow<ChatThreadPage> = emptyFlow()
+    fun observeReadState(conversationId: Long): Flow<me.floow.domain.models.DirectChatReadState?> = emptyFlow()
 	fun observePinnedMessages(conversationId: Long): Flow<List<ChatMessageItemModel>> = emptyFlow()
 	suspend fun loadPinnedMessages(conversationId: Long): Result<List<ChatMessageItemModel>> = Result.success(emptyList())
 	suspend fun storeOptimisticOutgoingMessage(
@@ -61,7 +67,9 @@ interface ChatThreadRepository {
 	suspend fun loadMore(conversationId: Long, beforeMessageId: Long?): Result<ChatThreadPage>
 	suspend fun loadAroundMessage(conversationId: Long, messageId: Long): Result<ChatThreadPage> =
 		Result.failure(UnsupportedOperationException())
-	suspend fun sendMessage(
+    suspend fun loadNewer(conversationId: Long, afterMessageId: Long): Result<ChatThreadPage> =
+        Result.failure(UnsupportedOperationException())
+    suspend fun sendMessage(
 		conversationId: Long,
 		text: String,
 		replyToMessageId: Long? = null,

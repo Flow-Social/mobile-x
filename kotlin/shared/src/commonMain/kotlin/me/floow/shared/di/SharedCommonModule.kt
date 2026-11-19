@@ -102,7 +102,7 @@ val sharedCommonModule = module {
             activityStore = getOrNull() ?: ConversationActivityStore(),
         )
     }
-    single<ChatThreadRepository> { AndroidChatThreadRepository(get(), get(), get(), get()) }
+    single<ChatThreadRepository> { AndroidChatThreadRepository(get(), get(), get(), get(), get(), get()) }
     single<ChatRealtimeContract> { AndroidChatRealtimeContract(get(), get(), get()) }
     single<ChatPresenceContract> { AndroidChatPresenceContract(get()) }
     single<RepliesRepository> {
@@ -163,7 +163,6 @@ val sharedCommonModule = module {
             realtimeContract = params.getOrNull(),
             presenceContract = params.getOrNull(),
             activityStore = get(),
-            sessionCache = get<SharedChatSessionCache>(),
             logger = get<Logger>(),
             mediaOutboxEngine = get<me.floow.shared.media.outbox.MediaOutboxEngine>(),
             mediaDownloadController = getOrNull<me.floow.domain.media.MediaDownloadController>(),

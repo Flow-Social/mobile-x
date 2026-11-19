@@ -117,12 +117,11 @@ fun HasDataState(
 	modifier: Modifier = Modifier
 ) {
 	val isReverseLayout = config.layoutMode == ChatLayoutMode.NewestAtBottom
-	val timelineItems by remember(state.messages, state.unreadBoundaryMessageId, isReverseLayout) {
+	val timelineItems by remember(state.messages, isReverseLayout) {
 		derivedStateOf {
 			buildTimelineItems(
 				datedMessages = state.messages,
 				isReverseLayout = isReverseLayout,
-				unreadBoundaryMessageId = state.unreadBoundaryMessageId
 			)
 		}
 	}
@@ -220,12 +219,12 @@ fun HasDataState(
 				visible = shouldForceShowScrollToBottom ||
 					shouldShowForAnchoredReturn ||
 					(positioningState.hasListLayout && !positioningState.isAtBottom) ||
-					scrollBadgeCount > 0,
+					state.hasNewerHistory || scrollBadgeCount > 0,
 				badgeCount = scrollBadgeCount,
 				isLoading = state.isLoadingMore,
 				bottomPadding = scrollButtonBottomPadding,
 				onClick = {
-					positioningState.scrollToBottom(true, true)
+					if (!state.hasNewerHistory && !state.provisionalHistory && state.timelineSessionToken == 0L) positioningState.scrollToBottom(true, true)
 					onRequestScrollToBottom()
 				}
 			)

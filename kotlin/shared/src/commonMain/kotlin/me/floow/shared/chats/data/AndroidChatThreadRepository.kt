@@ -5,9 +5,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import me.floow.domain.auth.AuthenticationManager
+import me.floow.database.dao.DirectChatsDao
+import me.floow.domain.data.GetDataError
+import me.floow.domain.network.NetworkMonitor
 import me.floow.domain.data.GetDataResponse
 import me.floow.domain.data.UpdateDataResponse
 import me.floow.domain.data.repos.ChatsRepository
@@ -27,6 +31,7 @@ import me.floow.shared.chats.model.ChatThreadHeaderModel
 import me.floow.shared.chats.model.ChatThreadSnapshot
 import me.floow.shared.chats.model.VideoUploadState
 import me.floow.shared.chats.model.withSavedMessagesSemantics
+import me.floow.shared.chats.uilogic.direct.ChatMessageUnavailableException
 import me.floow.shared.chats.uilogic.direct.ChatThreadPage
 import me.floow.shared.chats.uilogic.direct.ChatThreadRepository
 import me.floow.shared.chats.uilogic.direct.DirectChatInitialRequest
@@ -37,78 +42,62 @@ class AndroidChatThreadRepository(
 	private val chatsRepository: ChatsRepository,
 	private val authenticationManager: AuthenticationManager,
 	private val directMessagesReadCursorStore: me.floow.domain.data.repos.DirectMessagesReadCursorStore,
-	private val sessionCache: SharedChatSessionCache,
+    private val sessionCache: SharedChatSessionCache,
+    private val progressDao: DirectChatsDao,
+    private val networkMonitor: NetworkMonitor,
 	private val backgroundScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 	private val logger: Logger? = null,
 ) : ChatThreadRepository {
-	override suspend fun loadCachedInitial(request: DirectChatInitialRequest): Result<ChatThreadSnapshot?> = runCatching {
-		val startedAtMillis = currentTimeMillis()
-		sessionCache.cachedThreadSnapshot(request)
-			?.takeIf { cached -> canUseSessionSnapshotForInitialOpen(request, cached) }
-			?.let { cached ->
-				logLoadStage("cachedInitial", request, startedAtMillis, "source=session")
-				launchPendingOutgoingRetry(cached.conversationId)
-				return@runCatching cached.withOpenViewportFor(request)
-			}
+    override val networkOnline get() = networkMonitor.isOnline
 
-		val conversation = resolveCachedConversation(request) ?: return@runCatching null
-		val selfUserId = resolveSelfUserId(request, conversation)
-		val header = conversation.toHeader(request, selfUserId)
-		loadLatestCachedSnapshot(
-			conversationId = conversation.id,
-			header = header,
-			selfUserId = selfUserId,
-			peerLastReadFallback = conversation.peerLastReadMessageId,
-			highlightedMessageId = request.anchorMessageId,
-		)?.let { snapshot ->
-			logLoadStage("cachedInitial", request, startedAtMillis, "source=messages conversationId=${conversation.id}")
-			launchPendingOutgoingRetry(conversation.id)
-			return@runCatching snapshot.withOpenViewportFor(request)
-		}
+    private val progress = DirectChatProgress(progressDao, chatsRepository, authenticationManager, networkMonitor, backgroundScope)
 
-		val openViewport = directMessagesReadCursorStore.getOpenViewportSnapshot(conversation.id)
-		val anchorMessageId = resolveInitialAnchorMessageId(request, conversation.id, conversation, openViewport)
-		val shouldLoadAnchored = anchorMessageId != null && (
-			request.openMode == ChatOpenMode.FROM_MESSAGE_LINK || !openViewport.isBottomPinned
-		)
-		if (shouldLoadAnchored) {
-			when (val response = chatsRepository.getAnchoredMessagesWindow(conversation.id, checkNotNull(anchorMessageId))) {
-				is GetDataResponse.Success -> response.data.toSnapshot(
-					header = header,
-					selfUserId = selfUserId,
-					highlightedMessageId = request.anchorMessageId,
-					openAnchorMessageId = anchorMessageId,
-					openAnchorOffsetPx = if (request.openMode == ChatOpenMode.FROM_MESSAGE_LINK) 0 else openViewport.anchorOffsetPx,
-					keepOpenAnchorLocked = true,
-				).also { snapshot ->
-					logLoadStage("cachedInitial", request, startedAtMillis, "source=anchored conversationId=${conversation.id}")
-					sessionCache.cacheThreadSnapshot(snapshot)
-					launchPendingOutgoingRetry(conversation.id)
-				}
-				is GetDataResponse.Error -> loadLatestCachedSnapshot(
-					conversationId = conversation.id,
-					header = header,
-					selfUserId = selfUserId,
-					peerLastReadFallback = conversation.peerLastReadMessageId,
-					highlightedMessageId = request.anchorMessageId,
-				)?.also {
-					logLoadStage("cachedInitial", request, startedAtMillis, "source=fallback conversationId=${conversation.id}")
-					launchPendingOutgoingRetry(conversation.id)
-				}
-			}
-		} else {
-			loadLatestCachedSnapshot(
-				conversationId = conversation.id,
-				header = header,
-				selfUserId = selfUserId,
-				peerLastReadFallback = conversation.peerLastReadMessageId,
-				highlightedMessageId = request.anchorMessageId,
-			)?.also {
-				logLoadStage("cachedInitial", request, startedAtMillis, "source=latest conversationId=${conversation.id}")
-				launchPendingOutgoingRetry(conversation.id)
-			}
-		}
-	}
+    override suspend fun loadCachedInitial(request: DirectChatInitialRequest): Result<ChatThreadSnapshot?> = runCatching {
+        val conversation = resolveCachedConversation(request) ?: return@runCatching null
+        val selfUserId = resolveSelfUserId(request, conversation)
+        val header = conversation.toHeader(request, selfUserId)
+        val viewport = openViewport(conversation.id)
+        val readState = progressDao.getReadState(conversation.id)
+        val target = resolveInitialAnchorMessageId(request, viewport, readState?.firstUnreadId ?: conversation.firstUnreadId)
+        val cachedSession = sessionCache.cachedThreadSnapshot(request)
+        val savedRange = viewport.history?.takeIf {
+            if (target != null) target in it.oldestId..it.newestId else !it.hasNewer
+        }
+        val savedRows = savedRange?.let { chatsRepository.getVerifiedWindow(conversation.id, it.oldestId, it.newestId) }.orEmpty()
+        val verified = savedRange != null && savedRows.isNotEmpty() && (target == null || savedRows.any { it.id == target })
+        val snapshot = when {
+            verified && savedRange != null -> ChatThreadSnapshot(
+                conversationId = conversation.id,
+                header = header,
+                messages = savedRows.map { it.toItemModel(selfUserId) },
+                canLoadMore = savedRange.hasOlder,
+                nextBeforeMessageId = savedRows.first().id.takeIf { savedRange.hasOlder },
+                hasNewerMessages = savedRange.hasNewer,
+                peerLastReadMessageId = conversation.peerLastReadMessageId,
+                openAnchorMessageId = target,
+                openAnchorOffsetPx = if (target == viewport.anchorMessageId && request.anchorMessageId == null) viewport.anchorOffsetPx else 0,
+                keepOpenAnchorLocked = target != null,
+                highlightedMessageId = request.anchorMessageId,
+            )
+            target != null -> {
+                // A single cached target is usable offline. Neighbours in Room can be from disjoint pages.
+                chatsRepository.getCachedMessageAnchor(conversation.id, target)
+                    ?.copy(hasOlderMessages = true, hasNewerMessages = true)
+                    ?.toSnapshot(header, selfUserId, request.anchorMessageId, target,
+                        if (target == viewport.anchorMessageId && request.anchorMessageId == null) viewport.anchorOffsetPx else 0, true)
+            }
+            request.openMode == ChatOpenMode.FROM_MESSAGE_LINK -> null
+            cachedSession != null && !cachedSession.hasNewerMessages && !cachedSession.provisionalHistory ->
+                cachedSession.copy(openAnchorMessageId = null, openAnchorOffsetPx = 0,
+                    keepOpenAnchorLocked = false, highlightedMessageId = null)
+            else -> loadLatestCachedSnapshot(conversation.id, header, selfUserId, conversation.peerLastReadMessageId, null)
+        }
+        snapshot?.copy(
+            provisionalHistory = !verified,
+            firstUnreadMessageId = readState?.firstUnreadId ?: conversation.firstUnreadId,
+            lastReadMessageId = maxOf(conversation.lastReadMessageId, readState?.lastReadMessageId ?: 0L),
+        )
+    }
 
 	override suspend fun sendMessage(
 		conversationId: Long,
@@ -130,7 +119,10 @@ class AndroidChatThreadRepository(
 		}
 	}
 
-	override fun observePinnedMessages(conversationId: Long): Flow<List<ChatMessageItemModel>> {
+    override fun observeReadState(conversationId: Long): Flow<me.floow.domain.models.DirectChatReadState?> =
+        chatsRepository.observeLocalReadStates().map { it[conversationId] }.distinctUntilChanged()
+
+    override fun observePinnedMessages(conversationId: Long): Flow<List<ChatMessageItemModel>> {
 		return chatsRepository.observePinnedMessages(conversationId, limit = PINNED_MESSAGES_LIMIT).map { messages ->
 			val selfUserId = authenticationManager.getSelfUserIdOrNull()
 			messages.map { message -> message.toItemModel(selfUserId) }
@@ -145,139 +137,113 @@ class AndroidChatThreadRepository(
 		)
 	}
 
-	override suspend fun loadInitial(request: DirectChatInitialRequest): Result<ChatThreadSnapshot> = runCatching {
-		val totalStartedAtMillis = currentTimeMillis()
-		val resolveStartedAtMillis = totalStartedAtMillis
-		val conversation = resolveConversation(request)
-		logLoadStage("resolveConversation", request, resolveStartedAtMillis, "conversationId=${conversation.id}")
-		val selfUserId = resolveSelfUserId(request, conversation)
-		val header = conversation.toHeader(request, selfUserId)
-		val openViewport = directMessagesReadCursorStore.getOpenViewportSnapshot(conversation.id)
-		val anchorMessageId = resolveInitialAnchorMessageId(request, conversation.id, conversation, openViewport)
-		val shouldLoadAnchored = anchorMessageId != null && (
-			request.openMode == ChatOpenMode.FROM_MESSAGE_LINK || !openViewport.isBottomPinned
-		)
-		val messagesStartedAtMillis = currentTimeMillis()
-		val snapshot = if (shouldLoadAnchored) {
-			when (val response = chatsRepository.getAnchoredMessagesWindow(conversation.id, checkNotNull(anchorMessageId))) {
-				is GetDataResponse.Success -> response.data.toSnapshot(
-					header = header,
-					selfUserId = selfUserId,
-					highlightedMessageId = request.anchorMessageId,
-					openAnchorMessageId = anchorMessageId,
-					openAnchorOffsetPx = if (request.openMode == ChatOpenMode.FROM_MESSAGE_LINK) 0 else openViewport.anchorOffsetPx,
-					keepOpenAnchorLocked = true,
-				).also(sessionCache::cacheThreadSnapshot)
-				is GetDataResponse.Error -> loadLatestSnapshot(
-					conversationId = conversation.id,
-					header = header,
-					selfUserId = selfUserId,
-					highlightedMessageId = request.anchorMessageId,
-				)
-			}
-		} else {
-			loadLatestSnapshot(
-				conversationId = conversation.id,
-				header = header,
-				selfUserId = selfUserId,
-				highlightedMessageId = request.anchorMessageId,
-			)
-		}
-		logLoadStage("loadMessages", request, messagesStartedAtMillis, "conversationId=${conversation.id} anchored=$shouldLoadAnchored")
-		snapshot.also {
-			sessionCache.cacheThreadSnapshot(it)
-			launchPendingOutgoingRetry(conversation.id)
-			logLoadStage("total", request, totalStartedAtMillis, "conversationId=${conversation.id}")
-		}
-	}
+    override suspend fun loadInitial(request: DirectChatInitialRequest): Result<ChatThreadSnapshot> = runCatching {
+        val conversation = resolveConversation(request)
+        val selfUserId = resolveSelfUserId(request, conversation)
+        val header = conversation.toHeader(request, selfUserId)
+        val explicitTarget = request.anchorMessageId?.takeIf { request.openMode == ChatOpenMode.FROM_MESSAGE_LINK }
+        val viewport = openViewport(conversation.id)
+        val localRead = progressDao.getReadState(conversation.id)
+        val target = resolveInitialAnchorMessageId(request, viewport, localRead?.firstUnreadId ?: conversation.firstUnreadId)
+        var snapshot: ChatThreadSnapshot? = null
+        if (target != null) {
+            when (val response = chatsRepository.getMessagesAround(conversation.id, target)) {
+                is GetDataResponse.Success -> snapshot = response.data.toSnapshot(
+                    header, selfUserId, explicitTarget, target,
+                    if (explicitTarget == null && target == viewport.anchorMessageId) viewport.anchorOffsetPx else 0, true,
+                )
+                is GetDataResponse.Error -> {
+                    if (response.error != GetDataError.NoData) error("chat history unavailable")
+                    if (explicitTarget != null) throw ChatMessageUnavailableException()
+                }
+            }
+        }
+        if (snapshot == null) {
+            snapshot = loadLatestSnapshot(conversation.id, header, selfUserId, highlightedMessageId = null)
+            val unread = snapshot.firstUnreadMessageId
+            if (request.openMode != ChatOpenMode.LATEST && target == null && unread != null) {
+                snapshot = if (snapshot.messages.any { it.id == unread }) {
+                    snapshot.copy(openAnchorMessageId = unread, keepOpenAnchorLocked = true)
+                } else {
+                    when (val result = chatsRepository.getMessagesAround(conversation.id, unread)) {
+                        is GetDataResponse.Success -> result.data.toSnapshot(header, selfUserId, null, unread, 0, true)
+                        is GetDataResponse.Error -> snapshot
+                    }
+                }
+            }
+        }
+        val confirmed = progressDao.getReadState(conversation.id)
+        snapshot.copy(
+            firstUnreadMessageId = if (confirmed != null) confirmed.firstUnreadId else snapshot.firstUnreadMessageId ?: conversation.firstUnreadId,
+            lastReadMessageId = maxOf(conversation.lastReadMessageId, confirmed?.lastReadMessageId ?: 0L, snapshot.lastReadMessageId),
+        ).also {
+            sessionCache.cacheThreadSnapshot(it.copy(
+                openAnchorMessageId = null, openAnchorOffsetPx = 0, keepOpenAnchorLocked = false, highlightedMessageId = null,
+            ))
+            launchPendingOutgoingRetry(conversation.id)
+        }
+    }
 
-	override suspend fun getLocalLastReadMessageId(conversationId: Long): Long {
-		return directMessagesReadCursorStore.getLocalLastReadMessageId(conversationId)
-	}
+    override suspend fun getLocalLastReadMessageId(conversationId: Long): Long =
+        maxOf(progressDao.getReadState(conversationId)?.lastReadMessageId ?: 0L, progress.pendingRead(conversationId))
 
-	override suspend fun getOpenViewportSnapshot(conversationId: Long): DirectChatOpenViewportSnapshot {
-		val snapshot = directMessagesReadCursorStore.getOpenViewportSnapshot(conversationId)
-		return DirectChatOpenViewportSnapshot(
-			anchorMessageId = snapshot.anchorMessageId,
-			anchorOffsetPx = snapshot.anchorOffsetPx,
-			isBottomPinned = snapshot.isBottomPinned,
-		)
-	}
+    private suspend fun openViewport(conversationId: Long) =
+        progress.viewport(conversationId)?.takeIf { it.isBottomPinned || it.anchorMessageId != null }
+            ?: directMessagesReadCursorStore.getOpenViewportSnapshot(conversationId)
 
-	override suspend fun setOpenViewportSnapshot(
-		conversationId: Long,
-		snapshot: DirectChatOpenViewportSnapshot,
-	): Result<Unit> = runCatching {
-		directMessagesReadCursorStore.setOpenViewportSnapshot(
-			conversationId = conversationId,
-			snapshot = me.floow.domain.data.repos.DirectChatViewportSnapshot(
-				anchorMessageId = snapshot.anchorMessageId,
-				anchorOffsetPx = snapshot.anchorOffsetPx,
-				isBottomPinned = snapshot.isBottomPinned,
-			),
-		)
-	}
+    override suspend fun getOpenViewportSnapshot(conversationId: Long): DirectChatOpenViewportSnapshot {
+        val snapshot = openViewport(conversationId)
+        return DirectChatOpenViewportSnapshot(snapshot.anchorMessageId, snapshot.anchorOffsetPx, snapshot.isBottomPinned, snapshot.history)
+    }
 
-	override suspend fun loadMore(conversationId: Long, beforeMessageId: Long?): Result<ChatThreadPage> = runCatching {
-		when (val response = chatsRepository.getMessages(conversationId, limit = 50, beforeId = beforeMessageId)) {
-			is GetDataResponse.Success -> {
-				val selfUserId = authenticationManager.getSelfUserIdOrNull()
-				ChatThreadPage(
-					items = response.data.items.map { it.toItemModel(selfUserId) },
-					nextBeforeMessageId = response.data.nextBeforeId,
-					canLoadMore = response.data.nextBeforeId != null,
-					peerLastReadMessageId = response.data.peerLastReadMessageId,
-				).also { page ->
-					sessionCache.updateThreadMessages(
-						conversationId = conversationId,
-						transform = { cachedMessages ->
-							mergeCachedMessages(page.items + cachedMessages)
-						},
-						updateMetadata = { cached ->
-							cached.copy(
-								canLoadMore = page.canLoadMore,
-								nextBeforeMessageId = page.nextBeforeMessageId,
-								peerLastReadMessageId = page.peerLastReadMessageId ?: cached.peerLastReadMessageId,
-							)
-						},
-					)
-				}
-			}
-			is GetDataResponse.Error -> error("failed to load more chat messages")
-		}
-	}
+    override suspend fun setOpenViewportSnapshot(conversationId: Long, snapshot: DirectChatOpenViewportSnapshot): Result<Unit> =
+        runCatching {
+            val accountId = authenticationManager.getSelfUserIdOrNull() ?: return@runCatching
+            progress.saveViewport(accountId, conversationId, me.floow.domain.data.repos.DirectChatViewportSnapshot(
+                snapshot.anchorMessageId, snapshot.anchorOffsetPx, snapshot.isBottomPinned, snapshot.history,
+            ))
+        }
 
-	override suspend fun loadAroundMessage(conversationId: Long, messageId: Long): Result<ChatThreadPage> = runCatching {
-		require(conversationId > 0L && messageId > 0L) { "invalid message target" }
-		when (val response = chatsRepository.getAnchoredMessagesWindow(conversationId, messageId)) {
-			is GetDataResponse.Success -> {
-				val selfUserId = authenticationManager.getSelfUserIdOrNull()
-				ChatThreadPage(
-					items = response.data.items.map { it.toItemModel(selfUserId) },
-					nextBeforeMessageId = response.data.items
-						.minOfOrNull(DirectChatMessage::id)
-						?.takeIf { response.data.hasOlderMessages },
-					canLoadMore = response.data.hasOlderMessages,
-					peerLastReadMessageId = response.data.peerLastReadMessageId,
-				).also { page ->
-					sessionCache.updateThreadMessages(
-						conversationId = conversationId,
-						transform = { cachedMessages ->
-							mergeCachedMessages(page.items + cachedMessages)
-						},
-						updateMetadata = { cached ->
-							cached.copy(
-								canLoadMore = page.canLoadMore,
-								nextBeforeMessageId = page.nextBeforeMessageId,
-								peerLastReadMessageId = page.peerLastReadMessageId ?: cached.peerLastReadMessageId,
-							)
-						},
-					)
-				}
-			}
-			is GetDataResponse.Error -> error("failed to load pinned message")
-		}
-	}
+    override suspend fun loadMore(conversationId: Long, beforeMessageId: Long?): Result<ChatThreadPage> = runCatching {
+        val response = chatsRepository.getMessages(conversationId, limit = 50, beforeId = beforeMessageId)
+        val page = (response as? GetDataResponse.Success)?.data
+            ?.takeUnless { it.isCached } ?: error("Не удалось загрузить историю")
+        val selfUserId = authenticationManager.getSelfUserIdOrNull()
+        ChatThreadPage(
+            items = page.items.map { it.toItemModel(selfUserId) },
+            nextBeforeMessageId = page.nextBeforeId,
+            canLoadMore = page.nextBeforeId != null,
+            peerLastReadMessageId = page.peerLastReadMessageId,
+        )
+    }
+
+    override suspend fun loadAroundMessage(conversationId: Long, messageId: Long): Result<ChatThreadPage> = runCatching {
+        require(conversationId > 0L && messageId > 0L)
+        when (val response = chatsRepository.getMessagesAround(conversationId, messageId)) {
+            is GetDataResponse.Success -> response.data.toThreadPage()
+            is GetDataResponse.Error -> error(if (response.error == GetDataError.NoData) "Сообщение недоступно" else "Не удалось загрузить сообщение")
+        }
+    }
+
+    override suspend fun loadNewer(conversationId: Long, afterMessageId: Long): Result<ChatThreadPage> = runCatching {
+        when (val response = chatsRepository.getMessagesAround(conversationId, afterMessageId, olderLimit = 0, newerLimit = 50)) {
+            is GetDataResponse.Success -> response.data.toThreadPage().let { page ->
+                page.copy(items = page.items.filter { it.id > afterMessageId })
+            }
+            is GetDataResponse.Error -> error("Не удалось загрузить новые сообщения")
+        }
+    }
+
+    private fun DirectChatAnchoredMessagesWindow.toThreadPage(): ChatThreadPage {
+        val selfUserId = authenticationManager.getSelfUserIdOrNull()
+        return ChatThreadPage(
+            items = items.map { it.toItemModel(selfUserId) },
+            nextBeforeMessageId = items.minOfOrNull { it.id }?.takeIf { hasOlderMessages },
+            canLoadMore = hasOlderMessages,
+            peerLastReadMessageId = peerLastReadMessageId,
+            hasNewerMessages = hasNewerMessages,
+        )
+    }
 
 	override suspend fun sendMessage(
 		conversationId: Long,
@@ -378,7 +344,7 @@ class AndroidChatThreadRepository(
 		messageId: Long,
 		isPinned: Boolean,
 	): Result<Unit> = runCatching {
-		when (chatsRepository.setMessagePinned(conversationId, messageId, isPinned)) {
+		when (val response = chatsRepository.setMessagePinned(conversationId, messageId, isPinned)) {
 			is GetDataResponse.Success -> {
 				sessionCache.updateThreadMessages(conversationId, transform = { cachedMessages ->
 					cachedMessages.map { message ->
@@ -387,65 +353,10 @@ class AndroidChatThreadRepository(
 				})
 				Unit
 			}
-			is GetDataResponse.Error -> error("failed to pin message")
+            is GetDataResponse.Error -> error(if (response.error == GetDataError.LimitExceeded) {
+                "В чате можно закрепить до 20 сообщений"
+            } else "Не удалось обновить закреп")
 		}
-	}
-
-	private suspend fun ChatThreadSnapshot.withOpenViewportFor(
-		request: DirectChatInitialRequest,
-	): ChatThreadSnapshot {
-		val conversationId = conversationId?.takeIf { it > 0L } ?: return this
-		val openViewport = directMessagesReadCursorStore.getOpenViewportSnapshot(conversationId)
-		val anchorMessageId = resolveInitialAnchorMessageId(
-			request = request,
-			conversationId = conversationId,
-			conversation = toCachedConversation(conversationId),
-			openViewport = openViewport,
-		)
-		if (anchorMessageId == null || openViewport.isBottomPinned) {
-			return copy(
-				openAnchorMessageId = null,
-				openAnchorOffsetPx = 0,
-				keepOpenAnchorLocked = false,
-				highlightedMessageId = request.anchorMessageId,
-			)
-		}
-		return copy(
-			openAnchorMessageId = anchorMessageId,
-			openAnchorOffsetPx = if (request.openMode == ChatOpenMode.FROM_MESSAGE_LINK) 0 else openViewport.anchorOffsetPx,
-			keepOpenAnchorLocked = true,
-			highlightedMessageId = request.anchorMessageId,
-		)
-	}
-
-	private fun canUseSessionSnapshotForInitialOpen(
-		request: DirectChatInitialRequest,
-		cached: ChatThreadSnapshot,
-	): Boolean {
-		if (request.openMode == ChatOpenMode.FROM_MESSAGE_LINK) {
-			val requestedAnchor = request.anchorMessageId?.takeIf { it > 0L } ?: return false
-			return cached.messages.any { it.id == requestedAnchor }
-		}
-		return cached.messages.isNotEmpty()
-	}
-
-	private fun ChatThreadSnapshot.toCachedConversation(conversationId: Long): DirectChatConversation {
-		return DirectChatConversation(
-			id = conversationId,
-			kind = if (header.isSavedMessages) SAVED_MESSAGES_CHAT_KIND else "direct",
-			peer = DirectChatPeer(
-				id = header.peerUserId,
-				username = null,
-				name = header.title,
-				avatarUrl = header.avatarUrl,
-			),
-			lastMessage = null,
-			unreadCount = 0,
-			lastReadMessageId = 0L,
-			peerLastReadMessageId = peerLastReadMessageId,
-			createdAt = 0L,
-			updatedAt = 0L,
-		)
 	}
 
 	private fun upsertCachedMessage(
@@ -456,6 +367,7 @@ class AndroidChatThreadRepository(
 		val existingByClientMessageId = clientMessageId?.let { normalizedClientMessageId ->
 			cachedMessages.firstOrNull { existing -> existing.clientMessageId?.trim() == normalizedClientMessageId }
 		}
+        if (existingByClientMessageId == null && cachedMessages.none { it.id == message.id }) return cachedMessages
 		val normalizedMessage = if (existingByClientMessageId != null && message.id > 0L) {
 			message.copy(createdAtMillis = existingByClientMessageId.createdAtMillis)
 		} else {
@@ -467,17 +379,11 @@ class AndroidChatThreadRepository(
 		} + normalizedMessage).sortedWith(compareBy<ChatMessageItemModel> { it.createdAtMillis }.thenBy { it.id })
 	}
 
-	private fun mergeCachedMessages(messages: List<ChatMessageItemModel>): List<ChatMessageItemModel> {
-		return messages.fold(emptyList()) { acc, message ->
-			upsertCachedMessage(acc, message)
-		}
-	}
-
-	override suspend fun markReadUpTo(conversationId: Long, messageId: Long): Result<Unit> = runCatching {
-		chatsRepository.applyLocalReadUpTo(conversationId, messageId)
-		directMessagesReadCursorStore.setLocalLastReadMessageId(conversationId, messageId)
-		directMessagesReadCursorStore.enqueueReadUpTo(conversationId, messageId)
-	}
+    override suspend fun markReadUpTo(conversationId: Long, messageId: Long): Result<Unit> = runCatching {
+        if (conversationId <= 0L || messageId <= 0L) return@runCatching
+        val accountId = authenticationManager.getSelfUserIdOrNull() ?: return@runCatching
+        progress.enqueue(accountId, conversationId, messageId)
+    }
 
 	override suspend fun setTyping(conversationId: Long, isTyping: Boolean, action: String): Result<Unit> = runCatching {
 		when (chatsRepository.sendTyping(conversationId, isTyping, action)) {
@@ -577,25 +483,16 @@ class AndroidChatThreadRepository(
 		}
 	}
 
-	private suspend fun resolveInitialAnchorMessageId(
-		request: DirectChatInitialRequest,
-		conversationId: Long,
-		conversation: DirectChatConversation,
-		openViewport: me.floow.domain.data.repos.DirectChatViewportSnapshot,
-	): Long? {
-		if (request.openMode == ChatOpenMode.FROM_MESSAGE_LINK) {
-			return request.anchorMessageId?.takeIf { it > 0L }
-		}
-		if (request.openMode == ChatOpenMode.FROM_LAST_SEEN) {
-			return openViewport.anchorMessageId?.takeIf { it > 0L && !openViewport.isBottomPinned }
-		}
-		val localRead = directMessagesReadCursorStore.getLocalLastReadMessageId(conversationId)
-			.takeIf { it > 0L }
-		return openViewport.anchorMessageId
-			?.takeIf { it > 0L && !openViewport.isBottomPinned }
-			?: localRead
-			?: conversation.lastReadMessageId.takeIf { it > 0L }
-	}
+    private fun resolveInitialAnchorMessageId(
+        request: DirectChatInitialRequest,
+        viewport: me.floow.domain.data.repos.DirectChatViewportSnapshot,
+        firstUnread: Long?,
+    ): Long? {
+        if (request.openMode == ChatOpenMode.LATEST) return null
+        if (request.openMode == ChatOpenMode.FROM_MESSAGE_LINK) return request.anchorMessageId?.takeIf { it > 0L }
+        if (!viewport.isBottomPinned) viewport.anchorMessageId?.takeIf { it > 0L }?.let { return it }
+        return firstUnread?.takeIf { it > 0L }
+    }
 
 	private suspend fun loadLatestCachedSnapshot(
 		conversationId: Long,
@@ -604,7 +501,10 @@ class AndroidChatThreadRepository(
 		peerLastReadFallback: Long?,
 		highlightedMessageId: Long?,
 	): ChatThreadSnapshot? {
-		val cachedPage = chatsRepository.observeMessages(conversationId, limit = INITIAL_MESSAGES_LIMIT).first()
+		val page = chatsRepository.observeMessages(conversationId, limit = INITIAL_MESSAGES_LIMIT).first()
+        // Without a saved bound, Room can contain isolated rows cached by pin and quote requests.
+        val newest = page.items.lastOrNull { it.id > 0L }
+        val cachedPage = page.copy(items = listOfNotNull(newest) + page.items.filter { it.id <= 0L })
 		if (cachedPage.items.isEmpty()) return null
 		return buildSnapshotFromMessagesPage(
 			conversationId = conversationId,
@@ -633,9 +533,12 @@ class AndroidChatThreadRepository(
 				header = initialResponse.data.conversation.toHeaderFromConversation(header, selfUserId),
 				selfUserId = selfUserId,
 				page = initialResponse.data.messages,
-				highlightedMessageId = highlightedMessageId,
-			)
-			is GetDataResponse.Error -> when (
+                highlightedMessageId = highlightedMessageId,
+            ).copy(
+                firstUnreadMessageId = initialResponse.data.conversation.firstUnreadId,
+                lastReadMessageId = initialResponse.data.conversation.lastReadMessageId,
+            )
+            is GetDataResponse.Error -> when (
 				val response = chatsRepository.getMessages(
 					conversationId = conversationId,
 					limit = INITIAL_MESSAGES_LIMIT,
@@ -646,7 +549,7 @@ class AndroidChatThreadRepository(
 					conversationId = conversationId,
 					header = header,
 					selfUserId = selfUserId,
-					page = response.data,
+					page = response.data.takeUnless { it.isCached } ?: error("Не удалось загрузить последние сообщения"),
 					highlightedMessageId = highlightedMessageId,
 				)
 				is GetDataResponse.Error -> error("failed to load chat")
@@ -772,6 +675,7 @@ private fun DirectChatAnchoredMessagesWindow.toSnapshot(
 		openAnchorMessageId = openAnchorMessageId,
 		openAnchorOffsetPx = openAnchorOffsetPx,
 		keepOpenAnchorLocked = keepOpenAnchorLocked,
+        hasNewerMessages = hasNewerMessages,
 	)
 }
 

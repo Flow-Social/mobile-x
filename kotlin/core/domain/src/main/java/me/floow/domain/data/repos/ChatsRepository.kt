@@ -71,7 +71,11 @@ interface ChatsRepository {
 		newerLimit: Int = 30
 	): GetDataResponse<DirectChatAnchoredMessagesWindow>
 
-	suspend fun refreshLatestMessagesWindow(
+    suspend fun getVerifiedWindow(conversationId: Long, oldest: Long, newest: Long): List<DirectChatMessage> = emptyList()
+
+    suspend fun getCachedMessageAnchor(conversationId: Long, messageId: Long): DirectChatAnchoredMessagesWindow? = null
+
+    suspend fun refreshLatestMessagesWindow(
 		conversationId: Long,
 		limit: Int = 50
 	): GetDataResponse<DirectChatMessagesPage>

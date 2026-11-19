@@ -1,0 +1,1352 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 37,
+    "identityHash": "9479eb56afc50b27659c433e785f66c3",
+    "entities": [
+      {
+        "tableName": "profiles",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`userId` TEXT NOT NULL, `name` TEXT, `username` TEXT, `description` TEXT, `avatarUrl` TEXT, `avatar_thumb` TEXT, `backgroundUrl` TEXT, `background_thumb` TEXT, `backgroundUpdatedAt` INTEGER, `totalLikesReceived` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`userId`))",
+        "fields": [
+          {
+            "fieldPath": "userId",
+            "columnName": "userId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "username",
+            "columnName": "username",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "avatarUrl",
+            "columnName": "avatarUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "avatarThumb",
+            "columnName": "avatar_thumb",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "backgroundUrl",
+            "columnName": "backgroundUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "backgroundThumb",
+            "columnName": "background_thumb",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "backgroundUpdatedAt",
+            "columnName": "backgroundUpdatedAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "totalLikesReceived",
+            "columnName": "totalLikesReceived",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "userId"
+          ]
+        }
+      },
+      {
+        "tableName": "posts",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`postId` TEXT NOT NULL, `userId` TEXT NOT NULL, `authorId` TEXT NOT NULL, `authorName` TEXT, `authorUsername` TEXT, `authorAvatarUrl` TEXT, `author_avatar_thumb` TEXT, `image_urls` TEXT NOT NULL, `image_variants` TEXT NOT NULL, `commenters_preview` TEXT NOT NULL, `description` TEXT, `category` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `likesCount` INTEGER NOT NULL, `commentsCount` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`postId`, `userId`))",
+        "fields": [
+          {
+            "fieldPath": "postId",
+            "columnName": "postId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "userId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "authorId",
+            "columnName": "authorId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "authorName",
+            "columnName": "authorName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "authorUsername",
+            "columnName": "authorUsername",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "authorAvatarUrl",
+            "columnName": "authorAvatarUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "authorAvatarThumb",
+            "columnName": "author_avatar_thumb",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "imageUrls",
+            "columnName": "image_urls",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "imageVariants",
+            "columnName": "image_variants",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "commentersPreview",
+            "columnName": "commenters_preview",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "category",
+            "columnName": "category",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "likesCount",
+            "columnName": "likesCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "commentsCount",
+            "columnName": "commentsCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "postId",
+            "userId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_posts_userId",
+            "unique": false,
+            "columnNames": [
+              "userId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_posts_userId` ON `${TABLE_NAME}` (`userId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "feed_stack_snapshots",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`userId` TEXT NOT NULL, `snapshotJson` TEXT NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`userId`))",
+        "fields": [
+          {
+            "fieldPath": "userId",
+            "columnName": "userId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "snapshotJson",
+            "columnName": "snapshotJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "userId"
+          ]
+        }
+      },
+      {
+        "tableName": "feed_sync_commands",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `userId` TEXT NOT NULL, `commandType` TEXT NOT NULL, `postId` TEXT NOT NULL, `isLiked` INTEGER, `createdAt` INTEGER NOT NULL, `attempts` INTEGER NOT NULL, `nextAttemptAt` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "userId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "commandType",
+            "columnName": "commandType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "postId",
+            "columnName": "postId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isLiked",
+            "columnName": "isLiked",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attempts",
+            "columnName": "attempts",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nextAttemptAt",
+            "columnName": "nextAttemptAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_feed_sync_commands_userId_id",
+            "unique": false,
+            "columnNames": [
+              "userId",
+              "id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_feed_sync_commands_userId_id` ON `${TABLE_NAME}` (`userId`, `id`)"
+          },
+          {
+            "name": "index_feed_sync_commands_userId_nextAttemptAt_id",
+            "unique": false,
+            "columnNames": [
+              "userId",
+              "nextAttemptAt",
+              "id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_feed_sync_commands_userId_nextAttemptAt_id` ON `${TABLE_NAME}` (`userId`, `nextAttemptAt`, `id`)"
+          }
+        ]
+      },
+      {
+        "tableName": "replies_inbox_notifications",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`seq` INTEGER NOT NULL, `id` TEXT NOT NULL, `type` TEXT NOT NULL, `channel` TEXT NOT NULL, `actor_id` TEXT NOT NULL, `actor_username` TEXT, `actor_name` TEXT, `actor_avatar_url` TEXT, `post_id` TEXT NOT NULL, `comment_id` TEXT NOT NULL, `thread_id` TEXT NOT NULL, `reply_to_comment_id` TEXT, `comment_text` TEXT, `reply_to_comment_text` TEXT, `title` TEXT NOT NULL, `body` TEXT NOT NULL, `is_read` INTEGER NOT NULL, `read_at` INTEGER, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`seq`))",
+        "fields": [
+          {
+            "fieldPath": "seq",
+            "columnName": "seq",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "channel",
+            "columnName": "channel",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "actorId",
+            "columnName": "actor_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "actorUsername",
+            "columnName": "actor_username",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "actorName",
+            "columnName": "actor_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "actorAvatarUrl",
+            "columnName": "actor_avatar_url",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "postId",
+            "columnName": "post_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "commentId",
+            "columnName": "comment_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "threadId",
+            "columnName": "thread_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "replyToCommentId",
+            "columnName": "reply_to_comment_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "commentText",
+            "columnName": "comment_text",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "replyToCommentText",
+            "columnName": "reply_to_comment_text",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "body",
+            "columnName": "body",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isRead",
+            "columnName": "is_read",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "readAt",
+            "columnName": "read_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "seq"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_replies_inbox_notifications_created_at",
+            "unique": false,
+            "columnNames": [
+              "created_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_replies_inbox_notifications_created_at` ON `${TABLE_NAME}` (`created_at`)"
+          },
+          {
+            "name": "index_replies_inbox_notifications_is_read_seq",
+            "unique": false,
+            "columnNames": [
+              "is_read",
+              "seq"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_replies_inbox_notifications_is_read_seq` ON `${TABLE_NAME}` (`is_read`, `seq`)"
+          }
+        ]
+      },
+      {
+        "tableName": "replies_inbox_meta",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`channel` TEXT NOT NULL, `last_read_seq` INTEGER NOT NULL, `unread_count` INTEGER NOT NULL, `first_unread_seq` INTEGER, `max_seq` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`channel`))",
+        "fields": [
+          {
+            "fieldPath": "channel",
+            "columnName": "channel",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastReadSeq",
+            "columnName": "last_read_seq",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "unreadCount",
+            "columnName": "unread_count",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "firstUnreadSeq",
+            "columnName": "first_unread_seq",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "maxSeq",
+            "columnName": "max_seq",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "channel"
+          ]
+        }
+      },
+      {
+        "tableName": "direct_chat_conversations",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `kind` TEXT NOT NULL, `peer_id` TEXT NOT NULL, `peer_username` TEXT, `peer_name` TEXT, `peer_avatar_url` TEXT, `peer_avatar_thumb` TEXT, `last_message_id` INTEGER, `last_message_sender_id` TEXT, `last_message_sender_username` TEXT, `last_message_sender_name` TEXT, `last_message_sender_avatar_url` TEXT, `last_message_text` TEXT, `last_message_content_type` TEXT, `last_message_media_url` TEXT, `last_message_media_object_key` TEXT, `last_message_media_mime_type` TEXT, `last_message_media_size_bytes` INTEGER, `last_message_media_duration_ms` INTEGER, `last_message_media_width` INTEGER, `last_message_media_height` INTEGER, `last_message_media_thumbnail_url` TEXT, `last_message_client_message_id` TEXT, `last_message_delivery_status` TEXT, `last_message_created_at` INTEGER, `last_message_updated_at` INTEGER, `unread_count` INTEGER NOT NULL, `last_read_message_id` INTEGER NOT NULL, `peer_last_read_message_id` INTEGER, `is_pinned` INTEGER NOT NULL DEFAULT 0, `pinned_at` INTEGER, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "peerId",
+            "columnName": "peer_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "peerUsername",
+            "columnName": "peer_username",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "peerName",
+            "columnName": "peer_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "peerAvatarUrl",
+            "columnName": "peer_avatar_url",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "peerAvatarThumb",
+            "columnName": "peer_avatar_thumb",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastMessageId",
+            "columnName": "last_message_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastMessageSenderId",
+            "columnName": "last_message_sender_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastMessageSenderUsername",
+            "columnName": "last_message_sender_username",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastMessageSenderName",
+            "columnName": "last_message_sender_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastMessageSenderAvatarUrl",
+            "columnName": "last_message_sender_avatar_url",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastMessageText",
+            "columnName": "last_message_text",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastMessageContentType",
+            "columnName": "last_message_content_type",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastMessageMediaUrl",
+            "columnName": "last_message_media_url",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastMessageMediaObjectKey",
+            "columnName": "last_message_media_object_key",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastMessageMediaMimeType",
+            "columnName": "last_message_media_mime_type",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastMessageMediaSizeBytes",
+            "columnName": "last_message_media_size_bytes",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastMessageMediaDurationMs",
+            "columnName": "last_message_media_duration_ms",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastMessageMediaWidth",
+            "columnName": "last_message_media_width",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastMessageMediaHeight",
+            "columnName": "last_message_media_height",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastMessageMediaThumbnailUrl",
+            "columnName": "last_message_media_thumbnail_url",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastMessageClientMessageId",
+            "columnName": "last_message_client_message_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastMessageDeliveryStatus",
+            "columnName": "last_message_delivery_status",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastMessageCreatedAt",
+            "columnName": "last_message_created_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastMessageUpdatedAt",
+            "columnName": "last_message_updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "unreadCount",
+            "columnName": "unread_count",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastReadMessageId",
+            "columnName": "last_read_message_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "peerLastReadMessageId",
+            "columnName": "peer_last_read_message_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isPinned",
+            "columnName": "is_pinned",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "pinnedAt",
+            "columnName": "pinned_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "direct_chat_messages",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`local_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `id` INTEGER NOT NULL, `conversation_id` INTEGER NOT NULL, `sender_id` TEXT NOT NULL, `sender_username` TEXT, `sender_name` TEXT, `sender_avatar_url` TEXT, `text` TEXT NOT NULL, `content_type` TEXT, `media_url` TEXT, `media_object_key` TEXT, `media_mime_type` TEXT, `media_size_bytes` INTEGER, `media_duration_ms` INTEGER, `media_local_path` TEXT, `media_width` INTEGER, `media_height` INTEGER, `media_thumbnail_url` TEXT, `media_waveform` TEXT, `group_id` TEXT, `media_position` INTEGER NOT NULL, `client_message_id` TEXT, `reply_to_message_id` INTEGER, `reply_to_message_text` TEXT, `is_pinned` INTEGER NOT NULL, `pinned_at` INTEGER, `pinned_by_user_id` TEXT, `delivery_status` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "localId",
+            "columnName": "local_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "conversationId",
+            "columnName": "conversation_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "senderId",
+            "columnName": "sender_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "senderUsername",
+            "columnName": "sender_username",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "senderName",
+            "columnName": "sender_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "senderAvatarUrl",
+            "columnName": "sender_avatar_url",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "text",
+            "columnName": "text",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contentType",
+            "columnName": "content_type",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "mediaUrl",
+            "columnName": "media_url",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "mediaObjectKey",
+            "columnName": "media_object_key",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "mediaMimeType",
+            "columnName": "media_mime_type",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "mediaSizeBytes",
+            "columnName": "media_size_bytes",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "mediaDurationMs",
+            "columnName": "media_duration_ms",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "mediaLocalPath",
+            "columnName": "media_local_path",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "mediaWidth",
+            "columnName": "media_width",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "mediaHeight",
+            "columnName": "media_height",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "mediaThumbnailUrl",
+            "columnName": "media_thumbnail_url",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "mediaWaveform",
+            "columnName": "media_waveform",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "groupId",
+            "columnName": "group_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "mediaPosition",
+            "columnName": "media_position",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "clientMessageId",
+            "columnName": "client_message_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "replyToMessageId",
+            "columnName": "reply_to_message_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "replyToMessageText",
+            "columnName": "reply_to_message_text",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "isPinned",
+            "columnName": "is_pinned",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pinnedAt",
+            "columnName": "pinned_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "pinnedByUserId",
+            "columnName": "pinned_by_user_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "deliveryStatus",
+            "columnName": "delivery_status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "local_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_direct_chat_messages_conversation_id_id",
+            "unique": false,
+            "columnNames": [
+              "conversation_id",
+              "id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_direct_chat_messages_conversation_id_id` ON `${TABLE_NAME}` (`conversation_id`, `id`)"
+          },
+          {
+            "name": "index_direct_chat_messages_conversation_id_created_at",
+            "unique": false,
+            "columnNames": [
+              "conversation_id",
+              "created_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_direct_chat_messages_conversation_id_created_at` ON `${TABLE_NAME}` (`conversation_id`, `created_at`)"
+          },
+          {
+            "name": "index_direct_chat_messages_conversation_id_client_message_id",
+            "unique": true,
+            "columnNames": [
+              "conversation_id",
+              "client_message_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_direct_chat_messages_conversation_id_client_message_id` ON `${TABLE_NAME}` (`conversation_id`, `client_message_id`)"
+          },
+          {
+            "name": "index_direct_chat_messages_conversation_id_group_id",
+            "unique": false,
+            "columnNames": [
+              "conversation_id",
+              "group_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_direct_chat_messages_conversation_id_group_id` ON `${TABLE_NAME}` (`conversation_id`, `group_id`)"
+          }
+        ]
+      },
+      {
+        "tableName": "direct_chat_outbox_commands",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`client_message_id` TEXT NOT NULL, `conversation_id` INTEGER NOT NULL, `text` TEXT NOT NULL, `content_type` TEXT, `reply_to_message_id` INTEGER, `state` TEXT NOT NULL, `attempt_count` INTEGER NOT NULL, `next_attempt_at` INTEGER NOT NULL, `last_error` TEXT, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, `local_file_path` TEXT, `media_url` TEXT, `media_thumbnail_url` TEXT, `media_mime_type` TEXT, `media_size_bytes` INTEGER NOT NULL, `media_duration_ms` INTEGER NOT NULL, `media_width` INTEGER NOT NULL, `media_height` INTEGER NOT NULL, `media_waveform` TEXT, `group_id` TEXT, `media_position` INTEGER NOT NULL, `upload_stage` TEXT NOT NULL, `idempotency_key` TEXT, PRIMARY KEY(`client_message_id`))",
+        "fields": [
+          {
+            "fieldPath": "clientMessageId",
+            "columnName": "client_message_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "conversationId",
+            "columnName": "conversation_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "text",
+            "columnName": "text",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contentType",
+            "columnName": "content_type",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "replyToMessageId",
+            "columnName": "reply_to_message_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attemptCount",
+            "columnName": "attempt_count",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nextAttemptAt",
+            "columnName": "next_attempt_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastError",
+            "columnName": "last_error",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "localFilePath",
+            "columnName": "local_file_path",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "mediaUrl",
+            "columnName": "media_url",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "mediaThumbnailUrl",
+            "columnName": "media_thumbnail_url",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "mediaMimeType",
+            "columnName": "media_mime_type",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "mediaSizeBytes",
+            "columnName": "media_size_bytes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mediaDurationMs",
+            "columnName": "media_duration_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mediaWidth",
+            "columnName": "media_width",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mediaHeight",
+            "columnName": "media_height",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mediaWaveform",
+            "columnName": "media_waveform",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "groupId",
+            "columnName": "group_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "mediaPosition",
+            "columnName": "media_position",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "uploadStage",
+            "columnName": "upload_stage",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "idempotencyKey",
+            "columnName": "idempotency_key",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "client_message_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_direct_chat_outbox_commands_conversation_id_state_next_attempt_at_created_at",
+            "unique": false,
+            "columnNames": [
+              "conversation_id",
+              "state",
+              "next_attempt_at",
+              "created_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_direct_chat_outbox_commands_conversation_id_state_next_attempt_at_created_at` ON `${TABLE_NAME}` (`conversation_id`, `state`, `next_attempt_at`, `created_at`)"
+          },
+          {
+            "name": "index_direct_chat_outbox_commands_state_next_attempt_at_created_at",
+            "unique": false,
+            "columnNames": [
+              "state",
+              "next_attempt_at",
+              "created_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_direct_chat_outbox_commands_state_next_attempt_at_created_at` ON `${TABLE_NAME}` (`state`, `next_attempt_at`, `created_at`)"
+          },
+          {
+            "name": "index_direct_chat_outbox_commands_upload_stage_next_attempt_at_created_at",
+            "unique": false,
+            "columnNames": [
+              "upload_stage",
+              "next_attempt_at",
+              "created_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_direct_chat_outbox_commands_upload_stage_next_attempt_at_created_at` ON `${TABLE_NAME}` (`upload_stage`, `next_attempt_at`, `created_at`)"
+          }
+        ]
+      },
+      {
+        "tableName": "direct_chat_read_state",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`conversation_id` INTEGER NOT NULL, `last_read_message_id` INTEGER NOT NULL, `unread_count` INTEGER NOT NULL, `first_unread_id` INTEGER, `max_message_id` INTEGER NOT NULL, `read_state_version` INTEGER NOT NULL DEFAULT 0, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`conversation_id`))",
+        "fields": [
+          {
+            "fieldPath": "conversationId",
+            "columnName": "conversation_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastReadMessageId",
+            "columnName": "last_read_message_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "unreadCount",
+            "columnName": "unread_count",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "firstUnreadId",
+            "columnName": "first_unread_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "maxMessageId",
+            "columnName": "max_message_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "readStateVersion",
+            "columnName": "read_state_version",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "conversation_id"
+          ]
+        }
+      },
+      {
+        "tableName": "direct_chat_progress",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`account_id` TEXT NOT NULL, `conversation_id` INTEGER NOT NULL, `anchor_message_id` INTEGER, `anchor_offset_px` INTEGER NOT NULL, `bottom_pinned` INTEGER NOT NULL, `oldest_cached_id` INTEGER, `newest_cached_id` INTEGER, `cache_has_older` INTEGER NOT NULL, `cache_has_newer` INTEGER NOT NULL, `pending_read` INTEGER NOT NULL, PRIMARY KEY(`account_id`, `conversation_id`))",
+        "fields": [
+          {
+            "fieldPath": "accountId",
+            "columnName": "account_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "conversationId",
+            "columnName": "conversation_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "anchorMessageId",
+            "columnName": "anchor_message_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "anchorOffsetPx",
+            "columnName": "anchor_offset_px",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bottomPinned",
+            "columnName": "bottom_pinned",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "oldestCachedId",
+            "columnName": "oldest_cached_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "newestCachedId",
+            "columnName": "newest_cached_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "cacheHasOlder",
+            "columnName": "cache_has_older",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cacheHasNewer",
+            "columnName": "cache_has_newer",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pendingRead",
+            "columnName": "pending_read",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "account_id",
+            "conversation_id"
+          ]
+        }
+      },
+      {
+        "tableName": "pending_post_mutations",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`commandId` TEXT NOT NULL, `type` TEXT NOT NULL, `localPostId` TEXT NOT NULL, `remotePostId` TEXT, `clientMutationId` TEXT NOT NULL, `state` TEXT NOT NULL, `description` TEXT, `category` TEXT, `imagePayloadJson` TEXT NOT NULL, `stagedMediaJson` TEXT NOT NULL, `previousPostSnapshotJson` TEXT, `lastError` TEXT, `retryCount` INTEGER NOT NULL, `nextRetryAt` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`commandId`))",
+        "fields": [
+          {
+            "fieldPath": "commandId",
+            "columnName": "commandId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "localPostId",
+            "columnName": "localPostId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remotePostId",
+            "columnName": "remotePostId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "clientMutationId",
+            "columnName": "clientMutationId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "category",
+            "columnName": "category",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "imagePayloadJson",
+            "columnName": "imagePayloadJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stagedMediaJson",
+            "columnName": "stagedMediaJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "previousPostSnapshotJson",
+            "columnName": "previousPostSnapshotJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastError",
+            "columnName": "lastError",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "retryCount",
+            "columnName": "retryCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nextRetryAt",
+            "columnName": "nextRetryAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "commandId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_pending_post_mutations_state_nextRetryAt_createdAt",
+            "unique": false,
+            "columnNames": [
+              "state",
+              "nextRetryAt",
+              "createdAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_pending_post_mutations_state_nextRetryAt_createdAt` ON `${TABLE_NAME}` (`state`, `nextRetryAt`, `createdAt`)"
+          },
+          {
+            "name": "index_pending_post_mutations_remotePostId",
+            "unique": false,
+            "columnNames": [
+              "remotePostId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_pending_post_mutations_remotePostId` ON `${TABLE_NAME}` (`remotePostId`)"
+          },
+          {
+            "name": "index_pending_post_mutations_localPostId",
+            "unique": false,
+            "columnNames": [
+              "localPostId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_pending_post_mutations_localPostId` ON `${TABLE_NAME}` (`localPostId`)"
+          },
+          {
+            "name": "index_pending_post_mutations_clientMutationId",
+            "unique": true,
+            "columnNames": [
+              "clientMutationId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_pending_post_mutations_clientMutationId` ON `${TABLE_NAME}` (`clientMutationId`)"
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '9479eb56afc50b27659c433e785f66c3')"
+    ]
+  }
+}

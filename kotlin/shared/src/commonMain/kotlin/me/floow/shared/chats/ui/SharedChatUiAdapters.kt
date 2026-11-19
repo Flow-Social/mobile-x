@@ -12,6 +12,7 @@ import me.floow.uikit.chat.model.ChatAnchorRequest
 import me.floow.uikit.chat.model.ChatHighlightRequest
 import me.floow.uikit.chat.model.ChatInitialViewport
 import me.floow.uikit.chat.model.ChatMessage
+import me.floow.uikit.chat.model.ChatQuote
 import me.floow.uikit.chat.model.ChatMessageDeliveryStatus
 import me.floow.uikit.chat.model.ChatScrollRequest
 import me.floow.uikit.chat.model.ChatScreenUiState
@@ -30,11 +31,6 @@ import me.floow.uikit.chat.model.VideoCircleUploadStatus
 import me.floow.uikit.chat.model.VoiceMessage
 import me.floow.uikit.chat.model.chatLocalDayStartMillis
 
-internal data class SharedJumpRequest(
-	val messageId: Long,
-	val requestToken: Long,
-)
-
 internal fun DirectChatScreenState.headerOrNull(): ChatThreadHeaderModel? = when (this) {
 	is DirectChatScreenState.HasData -> header
 	is DirectChatScreenState.NoMessages -> header
@@ -51,7 +47,6 @@ internal fun DirectChatScreenState.inputValue(): String = when (this) {
 
 internal fun DirectChatScreenState.toSharedChatUiState(
 	selectionState: ChatSelectionState,
-	jumpRequest: SharedJumpRequest?,
 ): ChatScreenUiState {
 	return when (this) {
 		DirectChatScreenState.Loading -> ChatScreenUiState.Loading(
@@ -81,7 +76,8 @@ internal fun DirectChatScreenState.toSharedChatUiState(
 		)
 
 		is DirectChatScreenState.HasData -> {
-			val datedMessages = messages.toDatedChatMessages()
+			val visibleWindow = historyUpperBound?.let { bound -> messages.filter { it.id in 1L..bound } } ?: messages
+            val datedMessages = visibleWindow.toDatedChatMessages()
 			val latestServerMessageId = messages.maxOfOrNull { message ->
 				message.id.takeIf { id -> id > 0L } ?: 0L
 			} ?: 0L
@@ -96,9 +92,7 @@ internal fun DirectChatScreenState.toSharedChatUiState(
 				chatInterlocutorAvatarUrl = header.avatarUrl,
 				messageFieldValue = input,
 				chatInterlocutorName = header.title,
-				messageFieldReply = currentReplyMessageId
-					?.let { replyMessageId -> messages.firstOrNull { it.id == replyMessageId } }
-					?.toFieldReply(),
+				messageFieldReply = replyDraft?.let { MessageFieldReply(it.messageId, it.author, it.preview) },
 				peerIsOnline = peerIsOnline,
 				peerLastSeenAtMillis = peerLastSeenAtMillis,
 				timelineSessionToken = conversationId,
@@ -115,23 +109,18 @@ internal fun DirectChatScreenState.toSharedChatUiState(
 						keepAnchored = keepAnchorRequest,
 					)
 				},
-				highlightRequest = jumpRequest?.let { request ->
-					ChatHighlightRequest(
-						messageId = request.messageId,
-						requestToken = request.requestToken,
-					)
-				} ?: highlightedMessageId?.let { messageId ->
-					ChatHighlightRequest(
-						messageId = messageId,
-						requestToken = anchorRequestToken,
-					)
-				},
-				scrollRequest = if (scrollToBottomRequestToken > 0L) {
+				highlightRequest = highlightedMessageId?.let { messageId ->
+                    ChatHighlightRequest(messageId, anchorRequestToken, keepAnchorRequest && messageId == anchorRequestMessageId)
+                },
+                scrollRequest = if (scrollToBottomRequestToken > 0L) {
 					ChatScrollRequest(requestToken = scrollToBottomRequestToken)
 				} else {
 					null
 				},
-				typingUserNames = typingUserNames,
+                unreadBoundaryMessageId = unreadBoundaryMessageId,
+                hasNewerHistory = hasNewerMessages,
+                provisionalHistory = provisionalHistory,
+                typingUserNames = typingUserNames,
 				pinnedMessages = pinnedMessages.map(ChatMessageItemModel::toChatMessage),
 				messageToEditId = editingMessageId,
 				scrollToBottomRequestToken = scrollToBottomRequestToken,
@@ -295,6 +284,7 @@ private fun List<ChatMessage>.groupAlbumMessages(): List<ChatMessage> {
 								messageText = caption,
 								images = allImages,
 								deliveryStatus = aggregateDeliveryStatus,
+                                quote = chunk.firstNotNullOfOrNull { it.quote },
 							)
 						)
 					}
@@ -330,7 +320,8 @@ private fun ChatMessageItemModel.toChatMessage(): ChatMessage {
 		ChatDeliveryState.READ,
 		null -> ChatMessageDeliveryStatus.SENT
 	}
-	val image = content as? ChatMessageContent.Image
+	val quote = replyToMessageId?.let { ChatQuote(it, replyToMessageText.orEmpty()) }
+    val image = content as? ChatMessageContent.Image
 	if (image != null) {
 		return ImageMessage(
 			id = id,
@@ -359,6 +350,7 @@ private fun ChatMessageItemModel.toChatMessage(): ChatMessage {
 				)
 			),
 			groupId = image.groupId,
+            quote = quote,
 		)
 	}
 	val videoCircle = content as? ChatMessageContent.VideoCircle
@@ -381,6 +373,7 @@ private fun ChatMessageItemModel.toChatMessage(): ChatMessage {
 			videoWidth = videoCircle.width,
 			videoHeight = videoCircle.height,
 			uploadStatus = videoCircle.uploadState.toUploadStatus(),
+            quote = quote,
 		)
 	}
 	val voice = content as? ChatMessageContent.Voice
@@ -400,6 +393,7 @@ private fun ChatMessageItemModel.toChatMessage(): ChatMessage {
 			durationMs = voice.durationMs,
 			waveform = voice.waveform,
 			uploadStatus = voice.uploadState.toUploadStatus(),
+            quote = quote,
 		)
 	}
 	val postPreview = content as? ChatMessageContent.PostPreview
@@ -422,6 +416,7 @@ private fun ChatMessageItemModel.toChatMessage(): ChatMessage {
 			isPinned = isPinned,
 			authorName = senderDisplayName,
 			deliveryStatus = deliveryStatus,
+            quote = quote,
 		)
 	}
 	return when {
@@ -569,12 +564,4 @@ private fun VideoUploadState.toUploadStatus(): VideoCircleUploadStatus = when (t
 	VideoUploadState.Uploading -> VideoCircleUploadStatus.Uploading
 	VideoUploadState.Uploaded -> VideoCircleUploadStatus.Uploaded
 	VideoUploadState.Failed -> VideoCircleUploadStatus.Failed
-}
-
-private fun ChatMessageItemModel.toFieldReply(): MessageFieldReply {
-	return MessageFieldReply(
-		replyId = id,
-		replyAuthorName = senderDisplayName.orEmpty().ifBlank { if (isOutgoing) "Ты" else "Пользователь" },
-		replyMessageText = text,
-	)
 }

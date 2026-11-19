@@ -162,13 +162,15 @@ fun ChatBubble(
 			)
 		}
 
-		if (showReplyPreview && chatMessage is ChatReplyMessage) {
-			val replyTitle = chatMessage.replyMessageText.trim().ifBlank { "Сообщение" }
+		val quote = chatMessage.quote
+        if (showReplyPreview && quote != null) {
+            val replyTitle = quote.preview.trim().ifBlank { "Сообщение недоступно" }
 			ReplyPill(
 				replyText = replyTitle,
 				isDark = isDark,
 				isOut = isOut,
 				onClick = { onReplyClick(chatMessage) },
+                enabled = quote.isAvailable,
 				modifier = Modifier
 					.widthIn(max = 263.dp)
 					.layout { measurable, constraints ->
@@ -276,6 +278,7 @@ fun ReplyPill(
 	isOut: Boolean,
 	onClick: () -> Unit,
 	modifier: Modifier = Modifier,
+    enabled: Boolean = true,
 ) {
 	val haptic = LocalHapticFeedback.current
 	val textColor = if (isDark) Color.White.copy(alpha = 0.85f) else Color(0xFF121213).copy(alpha = 0.85f)
@@ -323,7 +326,7 @@ fun ReplyPill(
 				brush = Brush.verticalGradient(borderGradient),
 				shape = RoundedCornerShape(9999.dp)
 			)
-			.clickable {
+			.clickable(enabled = enabled) {
 				haptic.performHapticFeedback(HapticFeedbackType.LongPress)
 				onClick()
 			}

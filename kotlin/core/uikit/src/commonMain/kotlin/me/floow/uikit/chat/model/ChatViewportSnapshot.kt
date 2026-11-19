@@ -12,6 +12,7 @@ data class ChatViewportSnapshot(
 	val visibleReadCandidateId: Long?,
 	val isAtBottom: Boolean,
 	val visibleItems: List<ChatVisibleItemSnapshot> = emptyList(),
+	val readableIncomingIds: Set<Long> = setOfNotNull(visibleReadCandidateId),
 )
 
 @Immutable

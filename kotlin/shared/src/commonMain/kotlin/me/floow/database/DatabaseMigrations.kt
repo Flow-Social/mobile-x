@@ -1117,6 +1117,21 @@ object DatabaseMigrations {
         }
     }
 
+    val MIGRATION_36_37 = object : Migration(36, 37) {
+        override fun migrate(connection: SQLiteConnection) {
+            connection.execSQL("""
+                CREATE TABLE direct_chat_progress (
+                    account_id TEXT NOT NULL, conversation_id INTEGER NOT NULL,
+                    anchor_message_id INTEGER, anchor_offset_px INTEGER NOT NULL,
+                    bottom_pinned INTEGER NOT NULL, pending_read INTEGER NOT NULL,
+                    oldest_cached_id INTEGER, newest_cached_id INTEGER,
+                    cache_has_older INTEGER NOT NULL, cache_has_newer INTEGER NOT NULL,
+                    PRIMARY KEY(account_id, conversation_id)
+                )
+            """.trimIndent())
+        }
+    }
+
     val ALL_MIGRATIONS = arrayOf(
         MIGRATION_1_2,
         MIGRATION_2_3,
@@ -1153,5 +1168,6 @@ object DatabaseMigrations {
         MIGRATION_33_34,
         MIGRATION_34_35,
         MIGRATION_35_36,
+        MIGRATION_36_37,
     )
 }

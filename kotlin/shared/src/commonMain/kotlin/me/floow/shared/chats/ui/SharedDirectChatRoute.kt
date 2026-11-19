@@ -177,7 +177,6 @@ fun SharedDirectChatRoute(
 	val effectiveBubbleBoundsByMessageKey = remember(stateHolder) {
 		bubbleBoundsByMessageKey
 	}
-	var jumpRequest by remember(stateHolder) { mutableStateOf<SharedJumpRequest?>(null) }
 	var activeContextMenuMessageId by remember(stateHolder) { mutableStateOf<Long?>(null) }
 	var contextMenuFallbackAnchorRect by remember(stateHolder) { mutableStateOf<Rect?>(null) }
 	var contextMenuFallbackHighlightRect by remember(stateHolder) { mutableStateOf<Rect?>(null) }
@@ -262,7 +261,10 @@ fun SharedDirectChatRoute(
 					)
 				}
 				val groupId = if (initialDrafts.size > 1) "album_${currentChatEpochMillis()}_${(1000..9999).random()}" else null
-				val clientMessageIds = stateHolder.addLocalImages(items = initialDrafts, groupId = groupId, enqueueOutbox = false)
+				val replyId = (stateHolder.state.value as? DirectChatScreenState.HasData)?.replyDraft?.messageId
+                val clientMessageIds = stateHolder.addLocalImages(
+                    items = initialDrafts, groupId = groupId, replyToMessageId = replyId, enqueueOutbox = false,
+                )
 
 				// 2. Prepare media in parallel in background and enqueue to outbox as each finishes
 				scope.launch(Dispatchers.Default) {
@@ -298,6 +300,7 @@ fun SharedDirectChatRoute(
 								caption = if (index == 0) caption else null,
 								groupId = groupId,
 								position = index,
+                                replyToMessageId = replyId,
 								thumbnailUrl = microThumb,
 							)
 						}
@@ -480,13 +483,7 @@ fun SharedDirectChatRoute(
 				is DirectChatStateHolder.Event.ShowMessage -> {
 					snackbarHostState.showSnackbar(event.message)
 				}
-				is DirectChatStateHolder.Event.JumpToMessage -> {
-					val nextToken = (jumpRequest?.requestToken ?: 0L) + 1L
-					jumpRequest = SharedJumpRequest(
-						messageId = event.messageId,
-						requestToken = nextToken,
-					)
-				}
+
 			}
 		}
 	}
@@ -1083,7 +1080,6 @@ fun SharedDirectChatRoute(
 		resolveContextMenuActions = { messageId ->
 			messagesById[messageId]?.let { resolveContextMenuActions(it, canEdit = editTarget(it) != null) }.orEmpty()
 		},
-		jumpRequest = jumpRequest,
 		onBackClick = onBackClick,
 		onHeaderClick = onHeaderClick,
 		onInputChange = stateHolder::updateInput,

@@ -236,7 +236,7 @@ private fun projectRepliesPresentation(
 }
 
 private fun ChatOpenMode.toTimelineReadOpenMode(): TimelineReadOpenMode = when (this) {
-	ChatOpenMode.FROM_UNREAD -> TimelineReadOpenMode.FROM_UNREAD
+	ChatOpenMode.LATEST, ChatOpenMode.FROM_UNREAD -> TimelineReadOpenMode.FROM_UNREAD
 	ChatOpenMode.FROM_LAST_SEEN -> TimelineReadOpenMode.FROM_LAST_SEEN
 	ChatOpenMode.FROM_MESSAGE_LINK -> TimelineReadOpenMode.FROM_MESSAGE_LINK
 }

@@ -317,6 +317,7 @@ class ChatMediaController(
 	fun addLocalVideoCircle(clip: RecordedClip, enqueueOutbox: Boolean = true): String {
 		val videoPath = clip.path
 		val current = stateFlow.value
+        val draft = (current as? DirectChatScreenState.HasData)?.replyDraft
 		val header = when (current) {
 			is DirectChatScreenState.HasData -> current.header
 			is DirectChatScreenState.NoMessages -> current.header
@@ -340,7 +341,9 @@ class ChatMediaController(
 			createdAtMillis = timelineReducer.nextOutgoingCreatedAtMillis(currentMessages),
 			isOutgoing = true,
 			deliveryState = ChatDeliveryState.SENDING,
-			content = ChatMessageContent.VideoCircle(
+			replyToMessageId = draft?.messageId,
+            replyToMessageText = draft?.preview,
+            content = ChatMessageContent.VideoCircle(
 				localPath = videoPath,
 				durationMs = clip.durationMs.coerceAtLeast(500L),
 				thumbnailPath = clip.thumbnailPath,
@@ -366,6 +369,7 @@ class ChatMediaController(
 					width = if (clip.width > 0) clip.width else 480,
 					height = if (clip.height > 0) clip.height else 480,
 					thumbnailUrl = clip.thumbnailPath,
+                    replyToMessageId = message.replyToMessageId,
 				)
 			}
 		}
@@ -373,6 +377,7 @@ class ChatMediaController(
 			when (state) {
 				is DirectChatScreenState.HasData -> state.copy(
 					messages = timelineReducer.upsertMessage(state.messages, message),
+                    replyDraft = if (state.replyDraft == draft) null else state.replyDraft,
 					scrollToBottomRequestToken = nextScrollRequestToken(),
 				)
 				is DirectChatScreenState.NoMessages -> {
@@ -439,6 +444,7 @@ class ChatMediaController(
 					durationMs = clip.durationMs.coerceAtLeast(500L),
 					width = if (clip.width > 0) clip.width else 480,
 					height = if (clip.height > 0) clip.height else 480,
+                    replyToMessageId = updatedMsg?.replyToMessageId,
 				)
 			}
 		}
@@ -522,6 +528,7 @@ class ChatMediaController(
 						durationMs = content.durationMs.coerceAtLeast(500L),
 						width = if (content.width > 0) content.width else 480,
 						height = if (content.height > 0) content.height else 480,
+                        replyToMessageId = message.replyToMessageId,
 					)
 				}
 			}
@@ -577,6 +584,7 @@ class ChatMediaController(
 	fun addLocalVoice(clip: RecordedVoiceClip): String {
 		val voicePath = clip.filePath
 		val current = stateFlow.value
+        val draft = (current as? DirectChatScreenState.HasData)?.replyDraft
 		val header = when (current) {
 			is DirectChatScreenState.HasData -> current.header
 			is DirectChatScreenState.NoMessages -> current.header
@@ -600,7 +608,9 @@ class ChatMediaController(
 			createdAtMillis = timelineReducer.nextOutgoingCreatedAtMillis(currentMessages),
 			isOutgoing = true,
 			deliveryState = ChatDeliveryState.SENDING,
-			content = ChatMessageContent.Voice(
+			replyToMessageId = draft?.messageId,
+            replyToMessageText = draft?.preview,
+            content = ChatMessageContent.Voice(
 				localPath = voicePath,
 				durationMs = clip.durationMs,
 				waveform = clip.waveform,
@@ -619,12 +629,14 @@ class ChatMediaController(
 				mimeType = "audio/m4a",
 				durationMs = clip.durationMs,
 				waveform = clip.waveform,
+                replyToMessageId = message.replyToMessageId,
 			)
 		}
 		stateFlow.update { state ->
 			when (state) {
 				is DirectChatScreenState.HasData -> state.copy(
 					messages = timelineReducer.upsertMessage(state.messages, message),
+                    replyDraft = if (state.replyDraft == draft) null else state.replyDraft,
 					scrollToBottomRequestToken = nextScrollRequestToken(),
 				)
 				is DirectChatScreenState.NoMessages -> {
@@ -653,6 +665,8 @@ class ChatMediaController(
 	): List<String> {
 		if (items.isEmpty()) return emptyList()
 		val current = stateFlow.value
+        val draft = (current as? DirectChatScreenState.HasData)?.replyDraft
+        val targetId = replyToMessageId ?: draft?.messageId
 		val header = when (current) {
 			is DirectChatScreenState.HasData -> current.header
 			is DirectChatScreenState.NoMessages -> current.header
@@ -683,7 +697,8 @@ class ChatMediaController(
 				text = item.caption.orEmpty(),
 				createdAtMillis = baseCreatedAt + index,
 				isOutgoing = true,
-				replyToMessageId = replyToMessageId,
+				replyToMessageId = targetId,
+                replyToMessageText = draft?.takeIf { it.messageId == targetId }?.preview,
 				deliveryState = ChatDeliveryState.SENDING,
 				content = ChatMessageContent.Image(
 					localPath = item.localPath,
@@ -714,7 +729,7 @@ class ChatMediaController(
 						caption = item.caption,
 						groupId = groupId,
 						position = index,
-						replyToMessageId = replyToMessageId,
+						replyToMessageId = targetId,
 						thumbnailUrl = item.thumbnailUrl,
 					)
 				}
@@ -730,6 +745,7 @@ class ChatMediaController(
 					}
 					state.copy(
 						messages = updatedMessages,
+                        replyDraft = if (state.replyDraft == draft) null else state.replyDraft,
 						scrollToBottomRequestToken = nextScrollRequestToken(),
 					)
 				}

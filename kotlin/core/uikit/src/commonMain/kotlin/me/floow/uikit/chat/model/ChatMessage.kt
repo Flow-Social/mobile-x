@@ -35,7 +35,13 @@ fun ChatPostImageVariant.hasVisibleUrl(): Boolean {
 }
 
 @Immutable
+data class ChatQuote(val messageId: Long, val preview: String) {
+    val isAvailable: Boolean get() = preview.isNotBlank()
+}
+
+@Immutable
 sealed interface ChatMessage {
+    val quote: ChatQuote? get() = null
 	val uiKey: String
 	val id: Long
 	val clientMessageId: String?
@@ -53,6 +59,7 @@ sealed interface ChatMessage {
 sealed interface ChatReplyMessage : ChatMessage {
 	val replyMessageId: Long
 	val replyMessageText: String
+    override val quote: ChatQuote get() = ChatQuote(replyMessageId, replyMessageText)
 }
 
 @Immutable
@@ -148,6 +155,7 @@ data class VideoCircleOutMessage(
 	val videoWidth: Int = 0,
 	val videoHeight: Int = 0,
 	val uploadStatus: VideoCircleUploadStatus = VideoCircleUploadStatus.Pending,
+    override val quote: ChatQuote? = null,
 ) : ChatMessage {
 	/** Returns the best available playable source (remote preferred, falls back to local). */
 	val playableSource: String? get() = remoteVideoUrl?.takeIf(String::isNotBlank) ?: localVideoPath
@@ -171,6 +179,7 @@ data class VoiceMessage(
 	val durationMs: Long = 0L,
 	val waveform: List<Int> = emptyList(),
 	val uploadStatus: VideoCircleUploadStatus = VideoCircleUploadStatus.Uploaded,
+    override val quote: ChatQuote? = null,
 ) : ChatMessage {
 	val playableSource: String? get() = remoteAudioUrl ?: localAudioPath
 }
@@ -189,7 +198,8 @@ data class PostPreviewMessage(
 	override val isPinned: Boolean = false,
 	override val authorName: String? = null,
 	override val authorUsername: String? = null,
-	override val deliveryStatus: ChatMessageDeliveryStatus = ChatMessageDeliveryStatus.SENT
+	override val deliveryStatus: ChatMessageDeliveryStatus = ChatMessageDeliveryStatus.SENT,
+    override val quote: ChatQuote? = null,
 ) : ChatMessage
 
 @Immutable
@@ -230,4 +240,5 @@ data class ImageMessage(
 	override val deliveryStatus: ChatMessageDeliveryStatus = ChatMessageDeliveryStatus.SENT,
 	val images: List<ChatImageItem> = emptyList(),
 	val groupId: String? = null,
+    override val quote: ChatQuote? = null,
 ) : ChatMessage

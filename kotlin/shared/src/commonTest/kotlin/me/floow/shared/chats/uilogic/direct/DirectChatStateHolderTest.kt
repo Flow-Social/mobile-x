@@ -708,7 +708,7 @@ class DirectChatStateHolderTest {
 	}
 
 	@Test
-	fun `load marks latest incoming message as read on initial open`() = runTest {
+	fun `only a visible unread prefix advances the read cursor`() = runTest {
 		val markReadCalls = mutableListOf<Pair<Long, Long>>()
 		val holder = DirectChatStateHolder(
 			repository = object : ChatThreadRepository {
@@ -771,7 +771,22 @@ class DirectChatStateHolderTest {
 		)
 		advanceUntilIdle()
 
-		assertEquals(listOf(42L to 11L), markReadCalls)
+		assertTrue(markReadCalls.isEmpty())
+        holder.requestScrollToBottom()
+        advanceUntilIdle()
+        assertTrue(markReadCalls.isEmpty())
+
+        fun viewport(vararg ids: Long) = ChatViewportSnapshot(
+            visibleMessageIds = ids.toSet(), firstVisibleMessageId = ids.firstOrNull(),
+            firstVisibleOffsetPx = 0, firstVisibleItemIndex = 0, firstVisibleItemScrollOffsetPx = 0,
+            visibleReadCandidateId = ids.maxOrNull(), isAtBottom = true, readableIncomingIds = ids.toSet(),
+        )
+        holder.onViewportSnapshotChanged(viewport(11L))
+        advanceUntilIdle()
+        assertTrue(markReadCalls.isEmpty(), "Reading must not cross a skipped incoming message")
+        holder.onViewportSnapshotChanged(viewport(10L, 11L))
+        advanceUntilIdle()
+        assertEquals(listOf(42L to 11L), markReadCalls)
 	}
 
 	@Test
@@ -1280,6 +1295,8 @@ class DirectChatStateHolderTest {
 								)
 							),
 							canLoadMore = false,
+                            openAnchorMessageId = 1L,
+                            keepOpenAnchorLocked = true,
 						)
 					)
 

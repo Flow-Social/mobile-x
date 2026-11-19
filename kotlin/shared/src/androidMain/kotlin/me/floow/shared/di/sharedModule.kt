@@ -60,7 +60,7 @@ val sharedModule = module {
 			activityStore = getOrNull() ?: ConversationActivityStore(),
 		)
 	}
-	single<ChatThreadRepository> { AndroidChatThreadRepository(get(), get(), get(), get()) }
+	single<ChatThreadRepository> { AndroidChatThreadRepository(get(), get(), get(), get(), get(), get()) }
 	single<ChatRealtimeContract> { AndroidChatRealtimeContract(get(), get(), get()) }
 	single<ChatPresenceContract> { AndroidChatPresenceContract(get()) }
 	single<RepliesRepository> { AndroidRepliesRepository(get(), get(), get()) }

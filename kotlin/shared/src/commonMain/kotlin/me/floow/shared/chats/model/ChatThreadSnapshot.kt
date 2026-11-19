@@ -11,5 +11,9 @@ data class ChatThreadSnapshot(
 	val highlightedMessageId: Long? = null,
 	val openAnchorMessageId: Long? = null,
 	val openAnchorOffsetPx: Int = 0,
-	val keepOpenAnchorLocked: Boolean = false,
+    val keepOpenAnchorLocked: Boolean = false,
+    val hasNewerMessages: Boolean = false,
+    val provisionalHistory: Boolean = false,
+    val firstUnreadMessageId: Long? = null,
+    val lastReadMessageId: Long = 0L,
 )
